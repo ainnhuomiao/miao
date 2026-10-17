@@ -33,7 +33,10 @@ func TestPaletteSlashShowsAll(t *testing.T) {
 		t.Fatalf("匹配 %d 条，想要全部 %d 条", got, len(m.paletteCommands()))
 	}
 	view := ansi.Strip(m.View())
-	for _, c := range m.paletteCommands() {
+	for i, c := range m.paletteCommands() {
+		if i >= paletteMaxRows { // 超出 8 行的部分靠滚动显示
+			break
+		}
 		if !strings.Contains(view, c.name) {
 			t.Fatalf("渲染中缺少 %s", c.name)
 		}

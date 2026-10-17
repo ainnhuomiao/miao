@@ -38,6 +38,7 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/sessions", desc: "列出已保存会话"},
 		{name: "/load", desc: "加载会话 <id>", needArg: true},
 		{name: "/clear", desc: "清空对话并换新会话"},
+		{name: "/compact", desc: "压缩上下文：把早期对话总结成摘要"},
 		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
 		{name: "/reasoning", desc: "思考过程：展开/收起（当前：" + reasoning + "）"},
 		{name: "/exit", desc: "退出"},

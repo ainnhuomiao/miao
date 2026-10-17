@@ -97,9 +97,10 @@ type Model struct {
 
 	messages []chatMessage
 
-	streaming bool
-	cancel    context.CancelFunc
-	events    chan streamEventMsg
+	streaming  bool
+	compacting bool // 正在压缩上下文（streaming 同时为 true）
+	cancel     context.CancelFunc
+	events     chan streamEventMsg
 
 	showReasoning bool
 	streamStart   time.Time
@@ -239,6 +240,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case modelsMsg:
 		m.handleModelsMsg(msg)
 		return m, nil
+
+	case compactDoneMsg:
+		return m.handleCompactDone(msg)
 
 	case approvalClearMsg:
 		m.clearApproval(false)
@@ -473,6 +477,9 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 
 		m.refreshViewport(false)
 		m.refreshDrawer()
+		if msg.err == nil && m.needAutoCompact() {
+			return m, m.startCompact(true)
+		}
 		return m, nil
 	}
 
@@ -599,6 +606,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 			return m.fetchModelsCmd()
 		}
 		m.switchModel(fields[1])
+
+	case "/compact":
+		return m.startCompact(false)
 
 	case "/help":
 		m.messages = append(m.messages, chatMessage{

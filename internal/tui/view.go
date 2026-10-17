@@ -64,6 +64,7 @@ const helpText = `命令:
   /sessions   列出已保存会话
   /load <id>  加载会话
   /clear      清空对话并换新会话
+  /compact    压缩上下文（用量到 80% 时自动触发）
   /model      切换模型（/model <名字>）
   /reasoning  展开或收起思考过程
   /exit       退出
@@ -734,6 +735,9 @@ func (m *Model) thinkingView() string {
 	el := time.Since(m.streamStart)
 	glyph := thinkingGlyphs[int(el/(120*time.Millisecond))%len(thinkingGlyphs)]
 	verb := thinkingVerbs[int(el/(3*time.Second))%len(thinkingVerbs)]
+	if m.compacting {
+		verb = "压缩上下文"
+	}
 	dots := strings.Repeat(".", int(el/(400*time.Millisecond))%3+1)
 	return lipgloss.NewStyle().Foreground(accentColor).Render(glyph+" ") +
 		gradientText(verb) + mutedStyle.Render(fmt.Sprintf("%-3s %.1fs · esc 中断", dots, el.Seconds()))
