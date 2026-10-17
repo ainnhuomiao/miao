@@ -166,6 +166,9 @@ func New(ag *agent.Agent, modelName string) *Model {
 			done:    true,
 		}},
 	}
+	if ag.AgentsMDLoaded() {
+		m.messages = append(m.messages, chatMessage{role: roleNotice, content: "已加载 AGENTS.md", done: true})
+	}
 	m.initSessionStore()
 	return m
 }

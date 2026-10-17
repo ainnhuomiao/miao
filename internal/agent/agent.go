@@ -55,6 +55,8 @@ type Agent struct {
 	system  string
 	tools   *tools.Registry
 	history []llm.Message
+
+	agentsMD bool // 启动时是否加载了 AGENTS.md
 }
 
 // New 创建 Agent。registry 可为 nil（无工具）。

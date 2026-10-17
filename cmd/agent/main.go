@@ -41,7 +41,13 @@ func run() error {
 	system := fmt.Sprintf(
 		"%s\n\n当前调用的模型标识是 %q。工作区根目录是 %q（工具只能访问此目录内的相对路径）。",
 		agent.DefaultSystemPrompt, cfg.Model, cfg.Workspace)
+	md, truncated, err := agent.LoadAgentsMD(cfg.Workspace)
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "读取 %s 失败：%v\n", agent.AgentsMDName, err)
+	}
+	system = agent.WithAgentsMD(system, md, truncated)
 	ag := agent.New(client, system, reg)
+	ag.SetAgentsMDLoaded(md != "")
 
 	if *plain || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 		return repl.New(ag, cfg.Model).Run(context.Background())
