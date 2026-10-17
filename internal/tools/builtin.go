@@ -111,4 +111,3 @@ func toolDef(name, desc string, params map[string]any) llm.ToolDef {
 		},
 	}
 }
-

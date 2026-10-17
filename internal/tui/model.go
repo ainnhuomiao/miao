@@ -210,10 +210,36 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	// 审批叠层优先吃键。
 	if m.approval != nil {
 		switch msg.String() {
+		case "tab":
+			m.drawerOpen = !m.drawerOpen
+			m.drawerFocus = m.drawerOpen
+			m.layout()
+			m.refreshViewport(false)
+			m.refreshDrawer()
+			return m, nil
+		case "pgup", "pgdown":
+			if m.drawerOpen {
+				if msg.String() == "pgup" {
+					m.drawerViewport.PageUp()
+				} else {
+					m.drawerViewport.PageDown()
+				}
+			}
+			return m, nil
 		case "y", "Y":
 			m.resolveApproval(true)
 			return m, nil
-		case "n", "N", "esc":
+		case "esc":
+			if m.drawerOpen { // Esc 顺序：先关抽屉，再拒绝
+				m.drawerOpen = false
+				m.drawerFocus = false
+				m.layout()
+				m.refreshViewport(false)
+				return m, nil
+			}
+			m.resolveApproval(false)
+			return m, nil
+		case "n", "N":
 			m.resolveApproval(false)
 			return m, nil
 		case "ctrl+c":
@@ -607,6 +633,15 @@ func (m *Model) refreshDrawer() {
 func (m *Model) renderDrawer() string {
 	width := max(8, m.drawerViewport.Width-2)
 	var b strings.Builder
+	if m.approval != nil {
+		b.WriteString(titleStyle.Render("待确认 · " + m.approval.title()))
+		b.WriteString("\n")
+		for _, l := range m.approval.body() {
+			b.WriteString(diffLineStyle(l).Render(truncateWidth(l, width)))
+			b.WriteString("\n")
+		}
+		b.WriteString("\n")
+	}
 	b.WriteString(titleStyle.Render("工具"))
 	b.WriteString("\n")
 	b.WriteString(mutedStyle.Render(strings.Repeat("─", max(0, width))))
@@ -664,11 +699,34 @@ func compact(s string, maxRunes int) string {
 	return string([]rune(s)[:maxRunes]) + "…"
 }
 
-// displayLines 把审批内容切成行，最多 approvalMaxLines 行。
+// title 是审批卡标题。
+func (a *approvalState) title() string {
+	if a.toolName == "write_file" {
+		head, _, _ := strings.Cut(a.display, "\n")
+		return "确认写入 " + head
+	}
+	return "确认执行 " + a.toolName
+}
+
+// body 是标题之下的全部内容行。
+func (a *approvalState) body() []string {
+	if a.toolName == "write_file" {
+		_, rest, _ := strings.Cut(a.display, "\n")
+		if rest == "" {
+			return nil
+		}
+		return strings.Split(rest, "\n")
+	}
+	return strings.Split(strings.TrimRight(a.display, "\n"), "\n")
+}
+
+// displayLines 是卡片里显示的行：最多 approvalMaxLines 行，超出提示去抽屉看。
 func (a *approvalState) displayLines() []string {
-	lines := strings.Split(strings.TrimRight(a.display, "\n"), "\n")
+	lines := a.body()
 	if len(lines) > approvalMaxLines {
-		lines = append(lines[:approvalMaxLines-1], "…")
+		more := len(lines) - (approvalMaxLines - 1)
+		lines = append(append([]string{}, lines[:approvalMaxLines-1]...),
+			fmt.Sprintf("…还有 %d 行，Tab 在抽屉里看全部", more))
 	}
 	return lines
 }

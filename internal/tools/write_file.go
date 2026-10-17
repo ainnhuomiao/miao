@@ -10,7 +10,9 @@ import (
 	"unicode/utf8"
 )
 
-const maxWriteBytes = 1 << 20 // 1 MiB
+const maxWriteBytes = 64 << 10 // 64 KiB，与 run_command 输出上限一致
+
+const maxDiffLines = 2000
 
 // registerWriteFile 注册 write_file：写工作区内文件，每次都需 Approver 确认。
 func registerWriteFile(r *Registry) {
@@ -32,7 +34,7 @@ func registerWriteFile(r *Registry) {
 				return Result{Content: "参数解析失败: " + err.Error(), IsError: true}
 			}
 			if len(in.Content) > maxWriteBytes {
-				return Result{Content: "内容超过 1MiB 上限", IsError: true}
+				return Result{Content: "内容超过 64KiB 上限", IsError: true}
 			}
 			if !utf8.ValidString(in.Content) {
 				return Result{Content: "只支持 UTF-8 文本", IsError: true}
@@ -50,14 +52,34 @@ func registerWriteFile(r *Registry) {
 			}
 
 			action := "新建"
+			var diff []string
+			header := ""
 			if info, err := os.Stat(full); err == nil {
 				if info.IsDir() {
 					return Result{Content: "目标是目录", IsError: true}
 				}
 				action = "覆盖"
+				oldData, err := os.ReadFile(full)
+				if err != nil {
+					return Result{Content: "读取原文件失败: " + err.Error(), IsError: true}
+				}
+				if string(oldData) == in.Content {
+					return Result{Content: rel + " 内容未变化，无需写入"}
+				}
+				var add, del int
+				diff, add, del = lineDiff(string(oldData), in.Content)
+				header = fmt.Sprintf("%s · +%d -%d", rel, add, del)
+			} else {
+				for _, l := range splitLines(in.Content) {
+					diff = append(diff, "+ "+l)
+				}
+				header = "新建 " + rel
 			}
-			display := fmt.Sprintf("%s %s（%d 行，%d 字节）\n%s", action, rel,
-				lineCount(in.Content), len(in.Content), preview(in.Content, 6))
+			if len(diff) > maxDiffLines {
+				diff = append(diff[:maxDiffLines], fmt.Sprintf("…（另有 %d 行未显示）", len(diff)-maxDiffLines))
+			}
+			// 约定：第一行是标题，其余是 diff 行（"+ "/"- " 前缀），TUI 据此上色。
+			display := header + "\n" + strings.Join(diff, "\n")
 
 			approver := r.Approver()
 			if approver == nil {
@@ -127,28 +149,4 @@ func isSensitive(rel string) bool {
 	}
 	first := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
 	return first == ".git"
-}
-
-func lineCount(s string) int {
-	if s == "" {
-		return 0
-	}
-	n := strings.Count(s, "\n")
-	if !strings.HasSuffix(s, "\n") {
-		n++
-	}
-	return n
-}
-
-func preview(s string, n int) string {
-	lines := strings.Split(strings.TrimRight(s, "\n"), "\n")
-	more := len(lines) > n
-	if more {
-		lines = lines[:n]
-	}
-	out := strings.Join(lines, "\n")
-	if more {
-		out += "\n…"
-	}
-	return out
 }

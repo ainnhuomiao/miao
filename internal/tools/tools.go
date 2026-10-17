@@ -19,8 +19,8 @@ type Result struct {
 
 // Tool 是一个可注册的工具。
 type Tool struct {
-	Def  llm.ToolDef
-	Run  func(ctx context.Context, args json.RawMessage) Result
+	Def llm.ToolDef
+	Run func(ctx context.Context, args json.RawMessage) Result
 }
 
 // Approver 在执行需确认的工具前询问用户。

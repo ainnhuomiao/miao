@@ -62,3 +62,31 @@ func TestWriteFileNoApprover(t *testing.T) {
 		t.Fatal("expected reject without approver")
 	}
 }
+
+func TestWriteFileDiffPreview(t *testing.T) {
+	dir := t.TempDir()
+	os.WriteFile(filepath.Join(dir, "m.go"), []byte("a\nb\nc\n"), 0o644)
+	r, _ := NewRegistry(dir)
+	RegisterBuiltins(r)
+	var got string
+	r.SetApprover(func(ctx context.Context, n, d string, a json.RawMessage) (bool, error) { got = d; return true, nil })
+	if res := r.Call(context.Background(), "write_file", `{"path":"m.go","content":"a\nB\nc\nd\n"}`); res.IsError {
+		t.Fatal(res.Content)
+	}
+	want := "m.go · +2 -1\n- b\n+ B\n+ d"
+	if got != want {
+		t.Fatalf("display=%q want %q", got, want)
+	}
+}
+
+func TestWriteFileTooLarge(t *testing.T) {
+	r, _ := newWriteReg(t, true)
+	big := make([]byte, 65<<10)
+	for i := range big {
+		big[i] = 'x'
+	}
+	args, _ := json.Marshal(map[string]string{"path": "big.txt", "content": string(big)})
+	if res := r.Call(context.Background(), "write_file", string(args)); !res.IsError {
+		t.Fatal("expected size reject")
+	}
+}

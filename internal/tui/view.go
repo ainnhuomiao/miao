@@ -17,7 +17,7 @@ const (
 	inputFrameHeight = 2
 	hintHeight       = 1
 	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数
-	approvalMaxLines = 8
+	approvalMaxLines = 6
 )
 
 var (
@@ -138,16 +138,20 @@ func (m *Model) approvalView() string {
 		return ""
 	}
 	innerW := max(20, m.width-6)
-	title := "确认执行 " + m.approval.toolName
-	if m.approval.toolName == "write_file" {
-		title = "确认写入文件"
-	}
+	title := truncateWidth(m.approval.title(), innerW)
 	var lines []string
 	for _, l := range m.approval.displayLines() {
-		lines = append(lines, truncateWidth(l, innerW))
+		style := lipgloss.NewStyle()
+		if m.approval.toolName == "write_file" {
+			style = diffLineStyle(l)
+		}
+		lines = append(lines, style.Render(truncateWidth(l, innerW)))
 	}
 	cmd := strings.Join(lines, "\n")
-	hint := "Y 允许 · N 拒绝 · Esc 取消"
+	hint := "Y 允许 · N 拒绝 · Esc 取消 · Tab 详情"
+	if m.approval.toolName == "write_file" {
+		hint = "Y 写入 · N 拒绝 · Esc 取消 · Tab 全部改动"
+	}
 	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
 }
@@ -359,4 +363,21 @@ func truncateWidth(s string, width int) string {
 	}
 	b.WriteString("…")
 	return b.String()
+}
+
+var (
+	diffAddStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
+	diffDelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+)
+
+// diffLineStyle 按 "+ "/"- " 前缀给 diff 行上色，其余行用弱化色。
+func diffLineStyle(l string) lipgloss.Style {
+	switch {
+	case strings.HasPrefix(l, "+ "):
+		return diffAddStyle
+	case strings.HasPrefix(l, "- "):
+		return diffDelStyle
+	default:
+		return mutedStyle
+	}
 }
