@@ -34,6 +34,8 @@ const helpText = `命令:
   /clear      清空对话并换新会话
   /undo       撤销最近一次文件修改（可连续撤销）
   /compact    压缩上下文（用量到 80% 时自动触发）
+  /diff       查看本次会话改过的文件和 diff
+  /commit     模型写提交信息，确认后只提交本会话改过的文件
   /model      切换模型（/model <名字>）
   /theme      切换主题（/theme <名字>，↑↓ 实时预览）
   /mcp        查看 MCP 服务器状态与工具数
@@ -508,6 +510,9 @@ func (m *Model) renderMessage(msg chatMessage) string {
 			body.WriteString("\n" + bar + " " + ln)
 		}
 		return pad.Render(body.String()) + "\n\n"
+
+	case roleDiff:
+		return pad.Render(diffBubble(msg.content, width)) + "\n\n"
 
 	case roleNotice:
 		body := "· " + strings.ReplaceAll(msg.content, "\n", "\n  ")

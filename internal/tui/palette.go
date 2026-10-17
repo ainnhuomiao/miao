@@ -41,6 +41,8 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/clear", desc: "清空对话并换新会话"},
 		{name: "/undo", desc: "撤销最近一次文件修改"},
 		{name: "/compact", desc: "压缩上下文：把早期对话总结成摘要"},
+		{name: "/diff", desc: "查看本次会话改过的文件和 diff"},
+		{name: "/commit", desc: "让模型写提交信息，确认后提交本会话改过的文件"},
 		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
 		{name: "/theme", desc: "切换主题（当前：" + m.savedTheme() + "）", needArg: true},
 		{name: "/mcp", desc: "查看 MCP 服务器状态与工具"},

@@ -87,6 +87,7 @@ type approvalState struct {
 // Model 是 TUI 的全部状态。
 type Model struct {
 	side      sidebarState // 左侧会话侧栏
+	git       gitState     // /commit 进行中
 	ag        *agent.Agent
 	modelName string
 
@@ -212,6 +213,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.refreshViewport(true)
 		m.refreshDrawer()
 		return m, nil
+
+	case gitMsg:
+		return m.handleGitMsg(msg)
 
 	case tea.KeyMsg:
 		if m.approval == nil {
@@ -653,6 +657,12 @@ func (m *Model) runCommand(text string) tea.Cmd {
 
 	case "/compact":
 		return m.startCompact(false)
+
+	case "/diff":
+		m.showDiff()
+
+	case "/commit":
+		return m.startCommit()
 
 	case "/help":
 		m.messages = append(m.messages, chatMessage{
