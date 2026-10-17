@@ -719,5 +719,5 @@ func (m *Model) thinkingView() string {
 	verb := thinkingVerbs[int(el/(3*time.Second))%len(thinkingVerbs)]
 	dots := strings.Repeat(".", int(el/(400*time.Millisecond))%3+1)
 	return lipgloss.NewStyle().Foreground(accentColor).Render(glyph+" ") +
-		gradientText(verb) + mutedStyle.Render(fmt.Sprintf("%-3s %.1fs", dots, el.Seconds()))
+		gradientText(verb) + mutedStyle.Render(fmt.Sprintf("%-3s %.1fs · esc 中断", dots, el.Seconds()))
 }
