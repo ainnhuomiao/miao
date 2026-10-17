@@ -82,7 +82,7 @@ func (m *Model) view() string {
 	main := m.viewport.View()
 
 	parts := []string{m.headerView(), main}
-	// 工具状态条常驻占一行，空闲时为空行，输入框不会上下跳
+	// 工具状态条常驻占一行（空闲显示待命文案），输入框不会上下跳
 	parts = append(parts, m.activityView())
 	if m.approval != nil {
 		parts = append(parts, m.approvalView())
@@ -430,9 +430,10 @@ func (m *Model) renderTranscript() string {
 
 	if !m.hasUserMessage() && m.viewport.Height >= 6 {
 		logo := gradientLogo()
-		sub := mutedStyle.Render("你的 Go 终端 agent · /help 查看命令")
+		sub := gradientText("你的 Go 终端 agent")
+		hint := mutedStyle.Render("Enter 开始对话 · /help 查看命令")
 		b.WriteString(lipgloss.PlaceHorizontal(max(width, lipgloss.Width(logo)), lipgloss.Center,
-			logo+"\n\n"+sub) + "\n\n")
+			logo+"\n\n"+sub+"\n"+hint) + "\n\n")
 	}
 
 	for idx := range m.messages {
@@ -541,9 +542,15 @@ func (m *Model) renderMessage(msg chatMessage) string {
 
 	switch msg.role {
 	case roleUser:
-		body := userTagStyle.Render("你") + "\n" +
-			lipgloss.NewStyle().Width(width).Render(wrapText(msg.content, width))
-		return pad.Render(body) + "\n\n"
+		bodyW := max(1, width-2)
+		bodyLines := strings.Split(wrapText(msg.content, bodyW), "\n")
+		bar := lipgloss.NewStyle().Foreground(userColor).Render("▏")
+		var body strings.Builder
+		body.WriteString(userTagStyle.Render("你"))
+		for _, ln := range bodyLines {
+			body.WriteString("\n" + bar + " " + ln)
+		}
+		return pad.Render(body.String()) + "\n\n"
 
 	case roleNotice:
 		body := "· " + strings.ReplaceAll(msg.content, "\n", "\n  ")
@@ -677,7 +684,7 @@ func (m *Model) activityRows() []chatMessage {
 	return rows
 }
 
-// activityView 渲染输入框上方的常驻工具状态条；没有工具调用时为空。
+// activityView 渲染输入框上方的常驻工具状态条：surface0 底 + peach 竖线；空闲显示「┈ 工具待命」。
 func (m *Model) toolCount() int {
 	n := 0
 	for _, msg := range m.messages {
@@ -689,47 +696,50 @@ func (m *Model) toolCount() int {
 }
 
 func (m *Model) activityView() string {
+	w := max(10, m.columnWidth())
+	bg := lipgloss.NewStyle().Background(surface0Color)
+	bar := bg.Foreground(toolColor).Render("▏")
+	padL := lipgloss.NewStyle().MarginLeft(m.columnMargin())
+
 	rows := m.activityRows()
 	if len(rows) == 0 {
-		return ""
+		line := bar + bg.Foreground(mutedColor).Render("┈ 工具待命")
+		fill := max(0, w-lipgloss.Width(line))
+		return padL.Render(line + bg.Render(strings.Repeat(" ", fill)))
 	}
-	w := max(10, m.columnWidth()-4)
-	bar := lipgloss.NewStyle().Foreground(toolColor).Render("▏")
-	var out []string
-	for _, t := range rows {
-		var icon string
-		iconStyle := agentLabelStyle
-		dur := ""
-		switch {
-		case !t.done:
-			sp := m.spinner
-			sp.Style = lipgloss.NewStyle().Foreground(toolColor)
-			icon = sp.View()
-			iconStyle = lipgloss.NewStyle()
-		case t.toolError:
-			icon, iconStyle = "✗", errorStyle
-		default:
-			icon = "✓"
-		}
-		if t.done {
-			dur = t.toolDur.Round(time.Millisecond).String() + "  "
-		}
-		dur += fmt.Sprintf("工具 %d", m.toolCount())
-		detail := formatArgs(t.toolName, t.toolArgs)
-		if t.done {
-			if t.toolError {
-				detail += " · " + firstLine(t.toolResult)
-			} else if s := toolSummary(t.toolName, t.toolResult); s != "" && t.toolName != "run_command" {
-				detail += " · " + s
-			}
-		}
-		name := toolLabelStyle.Render(t.toolName)
-		room := w - lipgloss.Width(icon) - lipgloss.Width(t.toolName) - lipgloss.Width(dur) - 4
-		detail = truncateWidth(strings.TrimPrefix(detail, " · "), max(1, room))
-		gap := max(1, room-lipgloss.Width(detail)+1)
-		line := bar + iconStyle.Render(icon) + " " + name + " " + mutedStyle.Render(detail) +
-			strings.Repeat(" ", gap) + mutedStyle.Render(dur)
-		out = append(out, " "+line)
+	t := rows[0]
+	var icon string
+	iconStyle := bg.Foreground(agentColor)
+	dur := ""
+	switch {
+	case !t.done:
+		sp := m.spinner
+		sp.Style = bg.Foreground(toolColor)
+		icon = sp.View()
+		iconStyle = bg
+	case t.toolError:
+		icon, iconStyle = "✗", bg.Foreground(errorColor)
+	default:
+		icon = "✓"
 	}
-	return lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(strings.Join(out, "\n"))
+	if t.done {
+		dur = t.toolDur.Round(time.Millisecond).String() + "  "
+	}
+	dur += fmt.Sprintf("工具 %d", m.toolCount())
+	detail := formatArgs(t.toolName, t.toolArgs)
+	if t.done {
+		if t.toolError {
+			detail += " · " + firstLine(t.toolResult)
+		} else if s := toolSummary(t.toolName, t.toolResult); s != "" && t.toolName != "run_command" {
+			detail += " · " + s
+		}
+	}
+	name := bg.Foreground(toolColor).Bold(true).Render(t.toolName)
+	left := bar + iconStyle.Render(icon) + bg.Render(" ") + name + bg.Render(" ")
+	right := bg.Foreground(mutedColor).Render(dur)
+	room := w - lipgloss.Width(left) - lipgloss.Width(right) - 1
+	detail = truncateWidth(strings.TrimPrefix(detail, " · "), max(1, room))
+	gap := max(0, room-lipgloss.Width(detail))
+	line := left + bg.Foreground(mutedColor).Render(detail) + bg.Render(strings.Repeat(" ", gap+1)) + right
+	return padL.Render(line)
 }

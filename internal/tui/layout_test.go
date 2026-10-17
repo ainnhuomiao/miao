@@ -96,8 +96,8 @@ func TestColumnWidthAndCentering(t *testing.T) {
 
 func TestActivityBarAboveInput(t *testing.T) {
 	m := newTestModel(t, 120, 30, "ok")
-	if m.activityView() != "" {
-		t.Fatal("没有工具调用时状态条应隐藏")
+	if !strings.Contains(m.activityView(), "工具待命") {
+		t.Fatalf("没有工具调用时应显示待命占位，得到 %q", m.activityView())
 	}
 	for i := 0; i < 5; i++ {
 		m.messages = append(m.messages, chatMessage{role: roleTool, toolName: fmt.Sprintf("t%d", i),

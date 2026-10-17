@@ -61,6 +61,26 @@ func gradientLogo() string {
 	return b.String()
 }
 
+// gradientText 把 s 按字符从 mauve 渐变到 blue。
+func gradientText(s string) string {
+	from, to := catppuccin.Mocha.Mauve().RGB, catppuccin.Mocha.Blue().RGB
+	if !mdDark {
+		from, to = catppuccin.Latte.Mauve().RGB, catppuccin.Latte.Blue().RGB
+	}
+	runes := []rune(s)
+	n := len(runes)
+	var b strings.Builder
+	for i, r := range runes {
+		t := 0.0
+		if n > 1 {
+			t = float64(i) / float64(n-1)
+		}
+		c := lipgloss.Color(lerpHex(from, to, t))
+		b.WriteString(lipgloss.NewStyle().Foreground(c).Render(string(r)))
+	}
+	return b.String()
+}
+
 func lerpHex(a, b [3]uint8, t float64) string {
 	const hex = "0123456789ABCDEF"
 	out := []byte{'#'}

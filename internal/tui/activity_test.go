@@ -13,10 +13,11 @@ func toolMsg(name, args, result string, done, isErr bool) chatMessage {
 		done: done, toolError: isErr, toolDur: 8 * time.Millisecond}
 }
 
-func TestActivityHiddenWithoutTools(t *testing.T) {
+func TestActivityIdlePlaceholder(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
-	if v := m.activityView(); v != "" {
-		t.Fatalf("没有工具调用时状态条应为空，得到 %q", v)
+	v := m.activityView()
+	if !strings.Contains(v, "工具待命") {
+		t.Fatalf("空闲时应显示「工具待命」，得到 %q", v)
 	}
 	before := len(strings.Split(m.View(), "\n"))
 	if before != 30 {
@@ -26,6 +27,9 @@ func TestActivityHiddenWithoutTools(t *testing.T) {
 	m.layout()
 	if after := len(strings.Split(m.View(), "\n")); after != before {
 		t.Fatalf("出现工具调用后行数从 %d 变成 %d，输入框会跳", before, after)
+	}
+	if !strings.Contains(m.activityView(), "list_dir") {
+		t.Fatalf("有工具后应显示调用内容：%q", m.activityView())
 	}
 }
 
