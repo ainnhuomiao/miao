@@ -82,7 +82,7 @@ func (m *Model) sessionPickerKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	list := m.pickerMatches()
 	if m.picker.confirmDel {
 		m.picker.confirmDel = false
-		if (k == "d" || k == "y" || k == "Y") && m.picker.sel < len(list) {
+		if k == "ctrl+d" && m.picker.sel < len(list) {
 			m.side.list = []session.Meta{list[m.picker.sel]}
 			m.side.sel = 0
 			m.deleteSelectedSession()
@@ -134,14 +134,10 @@ func (m *Model) sessionPickerKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			m.picker.query = string(r[:len(r)-1])
 			m.picker.sel, m.picker.top = 0, 0
 		}
-	case "d":
-		if m.picker.query == "" {
-			if len(list) > 0 {
-				m.picker.confirmDel = true
-			}
-			return true, nil
+	case "ctrl+d":
+		if len(list) > 0 {
+			m.picker.confirmDel = true
 		}
-		fallthrough
 	default:
 		if msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace {
 			m.picker.query += string(msg.Runes)
@@ -177,10 +173,10 @@ func (m *Model) sessionPickerView() string {
 	dot := lipgloss.NewStyle().Foreground(accentColor)
 	list := m.pickerMatches()
 
-	head := "切换会话 · ↑↓ 选择 · Enter 切换 · 打字筛选 · d 删除 · Esc 关闭"
+	head := "切换会话 · ↑↓ 选择 · Enter 切换 · 打字筛选 · Ctrl+D 删除 · Esc 关闭"
 	switch {
 	case m.picker.confirmDel:
-		head = "再按一次 d 删除这个会话，其他键取消"
+		head = "再按一次 Ctrl+D 删除这个会话，其他键取消"
 	case m.picker.confirmInt:
 		head = "当前回复会中断，再按 Enter 确认"
 	case m.picker.query != "":
@@ -222,6 +218,7 @@ func (m *Model) sessionPickerView() string {
 		}
 		lines = append(lines, line)
 	}
+	lines = append(lines, " "+mutedStyle.Render("Ctrl+B 侧栏"))
 	return pad.Render(strings.Join(lines, "\n"))
 }
 
@@ -230,5 +227,9 @@ func (m *Model) pickerHeight() int {
 	if !m.picker.open {
 		return 0
 	}
-	return 1 + max(1, min(pickerMaxRows, len(m.pickerMatches())))
+	n := len(m.pickerMatches())
+	if n == 0 {
+		return 2
+	}
+	return 2 + min(pickerMaxRows, n) // 标题行 + 列表 + 底部提示
 }

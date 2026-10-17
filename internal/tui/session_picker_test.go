@@ -34,3 +34,16 @@ func TestSessionPickerFilterAndRelTime(t *testing.T) {
 		t.Fatal("help not updated")
 	}
 }
+
+func TestSessionPickerDLetterFilters(t *testing.T) {
+	m := newTestModel(t, 120, 40, "ok")
+	m.picker = pickerState{open: true, all: []session.Meta{{ID: "a", Title: "debug"}, {ID: "b", Title: "nix"}}}
+	m.sessionPickerKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	if m.picker.confirmDel || m.picker.query != "d" || len(m.pickerMatches()) != 1 {
+		t.Fatalf("d should filter: %+v", m.picker)
+	}
+	m.sessionPickerKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	if !m.picker.confirmDel {
+		t.Fatal("ctrl+d should ask to confirm")
+	}
+}

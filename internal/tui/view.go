@@ -29,7 +29,7 @@ const (
 const helpText = `命令:
   /help       显示帮助
   /new        新建会话
-  /sessions   切换会话（↑↓ 选择 · Enter 切换 · 打字筛选 · d 删除）
+  /sessions   切换会话（↑↓ 选择 · Enter 切换 · 打字筛选 · Ctrl+D 删除）
   /load <id>  按 id 加载会话
   /clear      清空对话并换新会话
   /undo       撤销最近一次文件修改（可连续撤销）
