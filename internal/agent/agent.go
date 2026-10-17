@@ -7,9 +7,9 @@ import (
 	"strings"
 	"time"
 
-	"miao/internal/hooks"
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/hooks"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 const maxToolRounds = 8

@@ -8,7 +8,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/agent"
 )
 
 // compactKeepTurns 是压缩时保留原文的最近轮数。

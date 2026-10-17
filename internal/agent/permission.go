@@ -7,8 +7,8 @@ import (
 	"strings"
 	"sync"
 
-	"miao/internal/config"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/config"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // PermissionMode 是审批策略，Shift+Tab 在三种模式间循环切换。

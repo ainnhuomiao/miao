@@ -15,8 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"miao/internal/agent"
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 const (

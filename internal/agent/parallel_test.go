@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 func mkCall(id, name string) llm.ToolCall {

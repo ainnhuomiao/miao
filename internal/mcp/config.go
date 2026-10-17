@@ -11,7 +11,7 @@ import (
 	"sort"
 	"strings"
 
-	"miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 // ServerConfig 是 mcp.json 中一个服务器的配置（兼容 Claude Desktop / Cursor 格式）。

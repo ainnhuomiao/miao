@@ -12,7 +12,7 @@ import (
 	"sort"
 	"strings"
 
-	"miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 // Command 是一条自定义命令。

@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"miao/internal/subagent"
+	"github.com/ainnhuomiao/miao/internal/subagent"
 )
 
 func doneTask(desc, result string, isErr bool, d time.Duration) chatMessage {

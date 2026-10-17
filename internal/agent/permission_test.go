@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 func TestPermissionDecisions(t *testing.T) {

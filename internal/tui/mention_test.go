@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"miao/internal/agent"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 func newMentionModel(t *testing.T) *Model {

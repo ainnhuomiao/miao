@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 type captureClient struct {

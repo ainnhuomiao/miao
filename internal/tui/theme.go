@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"miao/internal/config"
+	"github.com/ainnhuomiao/miao/internal/config"
 )
 
 var (

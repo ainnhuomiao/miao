@@ -15,7 +15,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 const (

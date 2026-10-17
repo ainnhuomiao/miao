@@ -1,6 +1,6 @@
 package tui
 
-import "miao/internal/subagent"
+import "github.com/ainnhuomiao/miao/internal/subagent"
 
 // subWebRow 是 /subagents 菜单里的「允许联网」开关行。
 func subWebRow(cfg subagent.Config) paletteCmd {

@@ -6,7 +6,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"miao/internal/usercmd"
+	"github.com/ainnhuomiao/miao/internal/usercmd"
 )
 
 // userCmdState 缓存自定义命令，几秒内不重复读目录。

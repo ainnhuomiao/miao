@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // ToolName 是暴露给主代理的工具名。

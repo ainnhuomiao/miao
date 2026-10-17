@@ -8,8 +8,8 @@ import (
 	"strings"
 	"testing"
 
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 type fakeClient struct {

@@ -11,8 +11,8 @@ import (
 	"testing"
 	"time"
 
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 func tempXDG(t *testing.T) string {

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"miao/internal/hooks"
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/hooks"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 func hookAgent(t *testing.T, userHooks string, scripts []llm.ChatResult) (*Agent, *scriptClient, string) {

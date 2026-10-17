@@ -9,8 +9,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"miao/internal/agent"
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 func newOpenAIModel(t *testing.T, srvURL, model string) (*Model, *llm.OpenAIClient) {

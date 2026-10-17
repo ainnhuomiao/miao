@@ -11,7 +11,7 @@ import (
 	catppuccin "github.com/catppuccin/go"
 	"github.com/charmbracelet/lipgloss"
 
-	"miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 // theme 是一套主题：界面代码只引用这些配色槽，不直接写颜色名。

@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"strings"
 
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 const commitPrompt = `你是提交信息助手。根据给出的 git diff 写一条提交信息：

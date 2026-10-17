@@ -7,7 +7,7 @@ import (
 	"net/http"
 	"strings"
 
-	"miao/internal/config"
+	"github.com/ainnhuomiao/miao/internal/config"
 )
 
 // 图片限制：单张 5 MiB，每条消息最多 5 张。

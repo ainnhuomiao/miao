@@ -7,7 +7,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"miao/internal/subagent"
+	"github.com/ainnhuomiao/miao/internal/subagent"
 )
 
 // isTaskTool 判断是否为子代理 task 调用。

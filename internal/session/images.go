@@ -9,8 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"miao/internal/appdir"
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 // 会话里的图片不把 base64 写进 JSON，而是存成会话目录下的 images/<sha256>.<ext>，

@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // mentionMarker 之后是 @ 引用附上的文件内容，不算用户亲手输入，不从中提取域名。

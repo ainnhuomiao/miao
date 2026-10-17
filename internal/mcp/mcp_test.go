@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"miao/internal/agent"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 const fakeEnv = "MCP_FAKE_SERVER"

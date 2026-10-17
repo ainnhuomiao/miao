@@ -6,10 +6,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"miao/internal/agent"
-	"miao/internal/llm"
-	"miao/internal/subagent"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/subagent"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 func setupSubMgr(t *testing.T, cfg subagent.Config) (*subagent.Manager, *tools.Registry) {

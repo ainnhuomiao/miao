@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/agent"
 )
 
 func TestCompactDoneNotice(t *testing.T) {

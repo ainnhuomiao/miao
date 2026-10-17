@@ -32,7 +32,7 @@ import (
 	"syscall"
 	"time"
 
-	"miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 const (

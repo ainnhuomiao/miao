@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"miao/internal/agent"
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // scriptClient 第一次返回预设的工具调用，之后返回文本。

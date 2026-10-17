@@ -34,14 +34,20 @@
 用 Nix（详见 [docs/nix.md](docs/nix.md)）：
 
 ```bash
-nix run github:<用户名>/miao     # 直接运行
-nix run .                         # 在克隆下来的仓库里运行
+nix run github:ainnhuomiao/miao   # 直接运行
+nix run .                        # 在克隆下来的仓库里运行
 ```
 
 用 Go（1.24.2 及以上）：
 
 ```bash
-git clone https://github.com/<用户名>/miao.git
+go install github.com/ainnhuomiao/miao/cmd/miao@latest
+```
+
+或者从源码构建：
+
+```bash
+git clone https://github.com/ainnhuomiao/miao.git
 cd miao
 go build ./cmd/miao     # 或 make build，产物在 bin/miao
 ```

@@ -1,4 +1,4 @@
-module miao
+module github.com/ainnhuomiao/miao
 
 go 1.24.2
 

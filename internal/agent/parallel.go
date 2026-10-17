@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"miao/internal/llm"
-	"miao/internal/subagent"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/subagent"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // maxParallelTools 是同一批只读工具的最大并发数。

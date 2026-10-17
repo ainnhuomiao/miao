@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/agent"
 )
 
 // MaxStdinBytes 是从管道读入的附加内容上限。

@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"miao/internal/llm"
-	"miao/internal/subagent"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/subagent"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // toggleClient 记录每次请求的工具名，第一轮后开启子代理。

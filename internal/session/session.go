@@ -13,8 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"miao/internal/appdir"
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 // ErrNotFound 表示会话不存在。

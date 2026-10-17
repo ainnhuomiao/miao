@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"miao/internal/hooks"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/hooks"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // maxStopHookRetries 是回合结束 hook 失败后让模型继续修的最多次数，防止来回死循环。

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 const maxReadBytes = 256 << 10 // 256 KiB

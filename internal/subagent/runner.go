@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // AllowedTools 是子代理默认可用的本地只读工具白名单。

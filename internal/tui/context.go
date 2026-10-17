@@ -8,7 +8,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"miao/internal/config"
+	"github.com/ainnhuomiao/miao/internal/config"
 )
 
 // contextWindows 是常见模型的上下文窗口（token），按模型名包含关系匹配，越具体越靠前。

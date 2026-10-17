@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 func TestSessionEditedFiles(t *testing.T) {

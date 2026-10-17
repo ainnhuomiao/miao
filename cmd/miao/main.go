@@ -10,17 +10,17 @@ import (
 	"os/signal"
 	"syscall"
 
-	"miao/internal/agent"
-	"miao/internal/appdir"
-	"miao/internal/config"
-	"miao/internal/headless"
-	"miao/internal/hooks"
-	"miao/internal/llm"
-	"miao/internal/mcp"
-	"miao/internal/repl"
-	"miao/internal/subagent"
-	"miao/internal/tools"
-	"miao/internal/tui"
+	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/config"
+	"github.com/ainnhuomiao/miao/internal/headless"
+	"github.com/ainnhuomiao/miao/internal/hooks"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/mcp"
+	"github.com/ainnhuomiao/miao/internal/repl"
+	"github.com/ainnhuomiao/miao/internal/subagent"
+	"github.com/ainnhuomiao/miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/tui"
 )
 
 func main() {

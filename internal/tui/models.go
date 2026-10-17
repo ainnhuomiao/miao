@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"miao/internal/config"
+	"github.com/ainnhuomiao/miao/internal/config"
 )
 
 // modelsFetchTimeout 是 GET /models 的超时。

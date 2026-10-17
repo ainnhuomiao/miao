@@ -15,7 +15,7 @@ import (
 	"syscall"
 	"time"
 
-	"miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 // ProtocolVersion 是 initialize 时声明的 MCP 协议版本。

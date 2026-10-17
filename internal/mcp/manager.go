@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"miao/internal/llm"
-	"miao/internal/tools"
+	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 // 默认超时。

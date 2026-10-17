@@ -9,7 +9,7 @@ import (
 	"strings"
 	"sync"
 
-	"miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 // Result 是工具执行结果。

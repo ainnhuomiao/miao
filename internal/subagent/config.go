@@ -6,7 +6,7 @@ import (
 	"os"
 	"path/filepath"
 
-	"miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 // 并发上限的默认值与范围。

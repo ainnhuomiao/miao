@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"miao/internal/session"
+	"github.com/ainnhuomiao/miao/internal/session"
 )
 
 func TestSessionPickerFilterAndRelTime(t *testing.T) {
