@@ -26,38 +26,6 @@ const (
 	approvalMaxLines = 12
 )
 
-var (
-	titleStyle      = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
-	userLabelStyle  = lipgloss.NewStyle().Bold(true).Foreground(userColor)
-	agentLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(agentColor)
-	toolLabelStyle  = lipgloss.NewStyle().Bold(true).Foreground(toolColor)
-	mutedStyle      = lipgloss.NewStyle().Foreground(mutedColor)
-	errorStyle      = lipgloss.NewStyle().Foreground(errorColor)
-	promptStyle     = lipgloss.NewStyle().Foreground(accentColor)
-
-	inputBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(accentColor).
-			Padding(0, 1)
-
-	drawerBorderStyle = lipgloss.NewStyle().Foreground(toolColor)
-	drawerBoxStyle    = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(toolColor).
-				Padding(0, 1)
-
-	userTagStyle  = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(userColor).Background(surface0Color)
-	agentTagStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(agentColor).Background(surface0Color)
-
-	segAccentStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(crustColor).Background(accentColor)
-	segStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(textColor).Background(surface0Color)
-
-	approvalBoxStyle = lipgloss.NewStyle().
-				Border(lipgloss.RoundedBorder()).
-				BorderForeground(accentColor).
-				Padding(0, 1)
-)
-
 const helpText = `命令:
   /help       显示帮助
   /new        新建会话
@@ -67,6 +35,7 @@ const helpText = `命令:
   /undo       撤销最近一次文件修改（可连续撤销）
   /compact    压缩上下文（用量到 80% 时自动触发）
   /model      切换模型（/model <名字>）
+  /theme      切换主题（/theme <名字>，↑↓ 实时预览）
   /mcp        查看 MCP 服务器状态与工具数
   /reasoning  展开或收起思考过程
   /exit       退出
@@ -634,11 +603,6 @@ func truncateWidth(s string, width int) string {
 	b.WriteString("…")
 	return b.String()
 }
-
-var (
-	diffAddStyle = lipgloss.NewStyle().Foreground(agentColor)
-	diffDelStyle = lipgloss.NewStyle().Foreground(errorColor)
-)
 
 // diffLineStyle 按 "+ "/"- " 前缀给 diff 行上色，其余行用弱化色。
 func diffLineStyle(l string) lipgloss.Style {

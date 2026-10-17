@@ -5,29 +5,10 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	catppuccin "github.com/catppuccin/go"
 	"github.com/charmbracelet/lipgloss"
 )
 
-// ctp 取 Catppuccin 色：深色终端用 Mocha，浅色终端用 Latte。
-func ctp(pick func(catppuccin.Flavor) catppuccin.Color) lipgloss.AdaptiveColor {
-	return lipgloss.AdaptiveColor{Light: pick(catppuccin.Latte).Hex, Dark: pick(catppuccin.Mocha).Hex}
-}
-
 var (
-	accentColor   = ctp(catppuccin.Flavor.Mauve)
-	userColor     = ctp(catppuccin.Flavor.Blue)
-	agentColor    = ctp(catppuccin.Flavor.Green)
-	toolColor     = ctp(catppuccin.Flavor.Peach)
-	errorColor    = ctp(catppuccin.Flavor.Red)
-	textColor     = ctp(catppuccin.Flavor.Text)
-	mutedColor    = ctp(catppuccin.Flavor.Overlay0)
-	surface0Color = ctp(catppuccin.Flavor.Surface0)
-	crustColor    = ctp(catppuccin.Flavor.Crust)
-	mantleColor   = ctp(catppuccin.Flavor.Mantle)
-	surface1Color = ctp(catppuccin.Flavor.Surface1)
-	subtext0Color = ctp(catppuccin.Flavor.Subtext0)
-
 	// nerdFont 为真时底栏用 powerline 箭头分段；设置 AGNET_NERD_FONT=1 开启。
 	nerdFont = os.Getenv("AGNET_NERD_FONT") == "1"
 )
@@ -36,10 +17,7 @@ const logoArt = "▄▀█ █▀▀ █▄ █ █▀▀ ▀█▀\n█▀█ �
 
 // gradientLogo 把 logo 按列从 mauve 渐变到 blue。
 func gradientLogo() string {
-	from, to := catppuccin.Mocha.Mauve().RGB, catppuccin.Mocha.Blue().RGB
-	if !mdDark {
-		from, to = catppuccin.Latte.Mauve().RGB, catppuccin.Latte.Blue().RGB
-	}
+	from, to := gradientEnds()
 	lines := strings.Split(logoArt, "\n")
 	w := 0
 	for _, l := range lines {
@@ -64,10 +42,7 @@ func gradientLogo() string {
 
 // gradientText 把 s 按字符从 mauve 渐变到 blue。
 func gradientText(s string) string {
-	from, to := catppuccin.Mocha.Mauve().RGB, catppuccin.Mocha.Blue().RGB
-	if !mdDark {
-		from, to = catppuccin.Latte.Mauve().RGB, catppuccin.Latte.Blue().RGB
-	}
+	from, to := gradientEnds()
 	runes := []rune(s)
 	n := len(runes)
 	var b strings.Builder
@@ -91,6 +66,3 @@ func lerpHex(a, b [3]uint8, t float64) string {
 	}
 	return string(out)
 }
-
-// pacYellowColor 是吃豆人的 Catppuccin yellow。
-var pacYellowColor = lipgloss.AdaptiveColor{Light: "#df8e1d", Dark: "#f9e2af"}

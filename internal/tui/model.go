@@ -113,10 +113,11 @@ type Model struct {
 	// 左侧会话侧栏：一期接口预留，按 [ ] 暂为 noop
 	sidebarReserved bool
 
-	approval *approvalState
-	mention  mentionState // @ 引用文件补全缓存
-	palette  paletteState
-	models   modelListState
+	approval  *approvalState
+	mention   mentionState // @ 引用文件补全缓存
+	themeOrig string       // /theme 预览前的主题，空表示没在预览
+	palette   paletteState
+	models    modelListState
 
 	todoPanel bool // Ctrl+T 展开任务清单
 
@@ -658,6 +659,13 @@ func (m *Model) runCommand(text string) tea.Cmd {
 			role: roleNotice, content: helpText, done: true,
 		})
 		m.refreshViewport(true)
+
+	case "/theme":
+		if len(fields) < 2 {
+			m.notice("当前主题：" + m.savedTheme() + "。输入 /theme 加空格选择，或 /theme <名字>")
+		} else {
+			m.applyTheme(fields[1])
+		}
 
 	case "/mcp":
 		m.notice(mcpSummary())

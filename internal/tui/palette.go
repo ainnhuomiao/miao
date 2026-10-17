@@ -14,7 +14,8 @@ const paletteMaxRows = 8
 type paletteCmd struct {
 	name    string
 	desc    string
-	needArg bool // 需要参数：Enter 等同补全
+	needArg bool   // 需要参数：Enter 等同补全
+	swatch  string // 名字后的色块（/theme 菜单）
 }
 
 // paletteState 是斜杠命令菜单状态。
@@ -41,6 +42,7 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/undo", desc: "撤销最近一次文件修改"},
 		{name: "/compact", desc: "压缩上下文：把早期对话总结成摘要"},
 		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
+		{name: "/theme", desc: "切换主题（当前：" + m.savedTheme() + "）", needArg: true},
 		{name: "/mcp", desc: "查看 MCP 服务器状态与工具"},
 		{name: "/reasoning", desc: "思考过程：展开/收起（当前：" + reasoning + "）"},
 		{name: "/exit", desc: "退出"},
@@ -54,6 +56,9 @@ func (m *Model) paletteOpen() bool {
 	}
 	v := m.input.Value()
 	if _, ok := m.atMode(); ok {
+		return !(m.palette.esc && v == m.palette.hidden)
+	}
+	if _, ok := m.themeMode(); ok {
 		return !(m.palette.esc && v == m.palette.hidden)
 	}
 	if _, ok := m.modelMode(); !ok && (!strings.HasPrefix(v, "/") || strings.ContainsAny(v, " \t\n")) {
@@ -72,6 +77,9 @@ func (m *Model) paletteMatches() []paletteCmd {
 	}
 	if q, ok := m.modelMode(); ok {
 		return m.modelMatches(q)
+	}
+	if q, ok := m.themeMode(); ok {
+		return m.themeMatches(q)
 	}
 	q := strings.ToLower(strings.TrimPrefix(m.input.Value(), "/"))
 	var prefix, fuzzy []paletteCmd
@@ -118,6 +126,9 @@ func (m *Model) paletteWindow() int {
 // syncPalette 在输入变化后更新选中项，并在菜单行数变化时重新布局。
 func (m *Model) syncPalette() {
 	v := m.input.Value()
+	if _, ok := m.themeMode(); !ok && m.themeOrig != "" {
+		m.cancelThemePreview()
+	}
 	if m.palette.esc && v != m.palette.hidden {
 		m.palette.esc = false
 	}
@@ -163,8 +174,14 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		}
 		m.palette.sel = (m.palette.sel + d + len(matches)) % len(matches)
 		m.paletteScroll()
+		if _, ok := m.themeMode(); ok {
+			m.previewTheme(matches[m.palette.sel].name)
+		}
 		return true, nil
 	case "esc":
+		if _, ok := m.themeMode(); ok {
+			m.cancelThemePreview()
+		}
 		m.palette.esc = true
 		m.palette.hidden = m.input.Value()
 		m.syncPalette()
@@ -193,6 +210,14 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	case "enter":
 		if len(matches) == 0 {
 			return false, nil // 交给原逻辑（提示未知命令）
+		}
+		if _, ok := m.themeMode(); ok {
+			name := matches[m.palette.sel].name
+			m.input.Reset()
+			m.fitInput()
+			m.applyTheme(name)
+			m.syncPalette()
+			return true, nil
 		}
 		_, inModel := m.modelMode()
 		if m.streaming {
@@ -226,6 +251,14 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 func (m *Model) paletteComplete(c paletteCmd) {
+	if _, ok := m.themeMode(); ok {
+		m.input.SetValue("/theme " + c.name)
+		m.input.CursorEnd()
+		m.fitInput()
+		m.syncPalette()
+		m.previewTheme(c.name)
+		return
+	}
 	if _, ok := m.modelMode(); ok {
 		m.input.SetValue("/model " + c.name)
 		m.input.CursorEnd()
@@ -257,6 +290,8 @@ func (m *Model) paletteView() string {
 	all := m.paletteCommands()
 	if _, ok := m.modelMode(); ok {
 		all = matches
+	} else if _, ok := m.themeMode(); ok {
+		all = matches
 	} else if _, ok := m.atMode(); ok {
 		all = matches[m.palette.top:min(len(matches), m.palette.top+m.paletteWindow())]
 	}
@@ -273,6 +308,10 @@ func (m *Model) paletteView() string {
 		name := c.name + strings.Repeat(" ", nameW-lipgloss.Width(c.name))
 		descW := max(0, w-2-nameW-2)
 		desc := mutedStyle.Render(truncateWidth(c.desc, descW))
+		if c.swatch != "" {
+			sw := lipgloss.Width(c.swatch) + 1
+			desc = c.swatch + " " + mutedStyle.Render(truncateWidth(c.desc, max(0, descW-sw)))
+		}
 		var line string
 		if i == m.palette.sel {
 			line = selStyle.Render("› ") + selStyle.Render(name)

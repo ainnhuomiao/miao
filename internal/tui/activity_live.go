@@ -7,9 +7,6 @@ import (
 	"github.com/charmbracelet/lipgloss"
 )
 
-// liveBarColor 是 Catppuccin Mocha peach。
-var liveBarColor = lipgloss.Color("#fab387")
-
 // activityRight 是工具行右侧固定区：思考动画（含 esc 中断）· 工具 N；宽度不够时只留工具 N。
 func (m *Model) activityRight(w, leftMin int) string {
 	right := mutedStyle.Render(fmt.Sprintf("工具 %d", m.toolCount()))
@@ -43,7 +40,7 @@ func (m *Model) liveActivityView(w int) (string, bool) {
 		return "", false
 	}
 	live := strings.TrimSpace(firstLine(strings.ReplaceAll(rows[0].toolLive, "\t", " ")))
-	prefix := lipgloss.NewStyle().Foreground(liveBarColor).Render("▎") + " "
+	prefix := lipgloss.NewStyle().Foreground(toolColor).Render("▎") + " "
 	right := m.activityRight(w, lipgloss.Width(prefix)+8)
 	return joinActivity(w, prefix, live, lipgloss.NewStyle().Foreground(textColor), right), true
 }
