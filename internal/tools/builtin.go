@@ -102,6 +102,7 @@ func RegisterBuiltins(r *Registry) {
 	registerSearchTools(r)
 	registerEditFile(r)
 	registerWebFetch(r)
+	registerTodoWrite(r)
 }
 
 func toolDef(name, desc string, params map[string]any) llm.ToolDef {

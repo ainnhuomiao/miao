@@ -681,6 +681,9 @@ func (m *Model) activityView() string {
 	bar := bg.Foreground(toolColor).Render("▏")
 	padL := lipgloss.NewStyle().MarginLeft(m.columnMargin())
 
+	if v, ok := m.liveActivityView(w); ok {
+		return padL.Render(v)
+	}
 	if v, ok := m.todoActivityView(w); ok {
 		return padL.Render(v)
 	}
