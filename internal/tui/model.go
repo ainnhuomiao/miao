@@ -109,8 +109,9 @@ type Model struct {
 
 	approval *approvalState
 
-	// usage 是最近一次模型请求的用量，底栏显示上下文大小与缓存命中。
-	usage *llm.Usage
+	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
+	usage      *llm.Usage
+	usageFresh bool // 新一轮开始后的第一份用量覆盖旧值，之后累加
 }
 
 // New 创建 TUI 模型。
@@ -358,6 +359,7 @@ func (m *Model) submit() tea.Cmd {
 
 	m.streaming = true
 	m.streamStart = time.Now()
+	m.usageFresh = true
 	m.cancel = cancel
 	m.events = events
 	m.messages = append(m.messages,
@@ -439,7 +441,16 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 	switch msg.kind {
 	case agent.EventUsage:
 		if msg.usage != nil {
-			m.usage = msg.usage
+			if m.usageFresh || m.usage == nil {
+				u := *msg.usage
+				m.usage = &u
+				m.usageFresh = false
+			} else {
+				m.usage.PromptTokens += msg.usage.PromptTokens
+				m.usage.CompletionTokens += msg.usage.CompletionTokens
+				m.usage.TotalTokens += msg.usage.TotalTokens
+				m.usage.PromptCacheHitTokens += msg.usage.PromptCacheHitTokens
+			}
 		}
 		return m, waitForEvent(m.events)
 	case agent.EventDelta:
@@ -607,35 +618,17 @@ func (m *Model) layout() {
 	if vh < 3 {
 		vh = 3
 	}
-	mainW := m.width
+	m.viewport.Width = m.width
 	if m.drawerOpen {
-		dw := drawerWidth(m.width)
-		mainW = m.width - dw
-		if mainW < 24 {
-			mainW = 24
-			dw = m.width - mainW
-		}
-		m.drawerViewport.Width = max(4, dw-4) // 圆角边框 2 + 左右留白 2
-		m.drawerViewport.Height = max(1, vh-2)
+		// 工具面板在输入框正上方：固定高度、可滚动，宽度与输入框一致。
+		ph := min(drawerMaxLines, max(3, (vh-3)/3))
+		vh -= ph + 2
+		m.drawerViewport.Width = max(4, m.columnWidth()-4) // 圆角边框 2 + 左右留白 2
+		m.drawerViewport.Height = ph
 	}
-	m.viewport.Width = mainW
-	m.viewport.Height = vh
+	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())
-}
-
-func drawerWidth(total int) int {
-	w := total / 3
-	if w < 28 {
-		w = 28
-	}
-	if w > 48 {
-		w = 48
-	}
-	if w >= total-20 {
-		w = max(12, total/3)
-	}
-	return w
 }
 
 func (m *Model) refreshViewport(forceBottom bool) {

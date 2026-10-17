@@ -11,12 +11,15 @@ import (
 	"github.com/charmbracelet/lipgloss"
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
+
+	"agnet/internal/llm"
 )
 
 const (
 	headerHeight     = 2
 	inputMaxLines    = 6
 	columnMax        = 100
+	drawerMaxLines   = 8 // 工具面板最多显示的内容行数
 	inputFrameHeight = 2
 	hintHeight       = 1
 	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数
@@ -77,11 +80,11 @@ func (m *Model) view() string {
 	}
 
 	main := m.viewport.View()
-	if m.drawerOpen {
-		main = lipgloss.JoinHorizontal(lipgloss.Top, main, m.drawerBoxView())
-	}
 
 	parts := []string{m.headerView(), main}
+	if m.drawerOpen {
+		parts = append(parts, lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.drawerBoxView()))
+	}
 	if m.approval != nil {
 		parts = append(parts, m.approvalView())
 	}
@@ -205,42 +208,16 @@ func (m *Model) hintText() string {
 	return hint
 }
 
-// hintView 是分段底栏：模型  工作区  状态（生成时带 spinner 计时），后接快捷键提示。
+// hintView 是分段底栏：模型  工作区  用量  状态，后接快捷键提示。
+// 终端太窄时先藏缓存率，再藏整个用量段；模型名和状态始终保留。
 func (m *Model) hintView() string {
-	type seg struct {
-		text string
-		bg   lipgloss.AdaptiveColor
-		st   lipgloss.Style
+	left := m.segmentsView(true, true)
+	if lipgloss.Width(left) > m.width {
+		left = m.segmentsView(true, false)
 	}
-	segs := []seg{{m.modelName, accentColor, segAccentStyle}}
-	if ws := m.workspaceLabel(); ws != "" {
-		segs = append(segs, seg{ws, surface0Color, segStyle})
+	if lipgloss.Width(left) > m.width {
+		left = m.segmentsView(false, false)
 	}
-	if u := m.usageLabel(); u != "" {
-		segs = append(segs, seg{u, surface0Color, segStyle})
-	}
-	segs = append(segs, seg{"", surface0Color, segStyle}) // 状态段，内容单独上色
-
-	var b strings.Builder
-	for i, sg := range segs {
-		if i == len(segs)-1 {
-			b.WriteString(segStyle.Render(m.barStatus()))
-		} else {
-			b.WriteString(sg.st.Render(sg.text))
-		}
-		if nerdFont {
-			next := lipgloss.AdaptiveColor{}
-			fg := lipgloss.NewStyle().Foreground(sg.bg)
-			if i+1 < len(segs) {
-				next = segs[i+1].bg
-				fg = fg.Background(next)
-			}
-			b.WriteString(fg.Render("\ue0b0"))
-		} else if i+1 < len(segs) {
-			b.WriteString(segStyle.Render(""))
-		}
-	}
-	left := b.String()
 	room := m.width - lipgloss.Width(left) - 2
 	if room < 8 {
 		return left
@@ -248,17 +225,62 @@ func (m *Model) hintView() string {
 	return left + " " + mutedStyle.Render(truncateWidth(m.hintText(), room))
 }
 
-// usageLabel 显示最近一次请求的上下文 token 数，及 DeepSeek 缓存命中比例。
-func (m *Model) usageLabel() string {
+func (m *Model) segmentsView(showUsage, showCache bool) string {
+	type seg struct {
+		text string // 已渲染好的段内容
+		bg   lipgloss.AdaptiveColor
+	}
+	segs := []seg{{segAccentStyle.Render(m.modelName), accentColor}}
+	if ws := m.workspaceLabel(); ws != "" {
+		segs = append(segs, seg{segStyle.Render(ws), surface0Color})
+	}
+	if showUsage {
+		if u := m.usageLabel(showCache); u != "" {
+			segs = append(segs, seg{u, surface0Color})
+		}
+	}
+	segs = append(segs, seg{segStyle.Render(m.barStatus()), surface0Color})
+
+	var b strings.Builder
+	for i, sg := range segs {
+		b.WriteString(sg.text)
+		if nerdFont {
+			fg := lipgloss.NewStyle().Foreground(sg.bg)
+			if i+1 < len(segs) {
+				fg = fg.Background(segs[i+1].bg)
+			}
+			b.WriteString(fg.Render("\ue0b0"))
+		} else if i+1 < len(segs) {
+			b.WriteString(segStyle.Render(""))
+		}
+	}
+	return b.String()
+}
+
+// usageLabel 渲染用量段：↑输入 ↓输出，接口返回缓存数据时再加 green 色缓存率。
+// 没有用量时返回空串。
+func (m *Model) usageLabel(showCache bool) string {
 	u := m.usage
-	if u == nil || u.TotalTokens <= 0 {
+	if u == nil || (u.PromptTokens == 0 && u.CompletionTokens == 0) {
 		return ""
 	}
-	label := formatTokens(u.TotalTokens) + " tok"
-	if u.PromptCacheHitTokens > 0 && u.PromptTokens > 0 {
-		label += fmt.Sprintf(" · 缓存 %d%%", u.PromptCacheHitTokens*100/u.PromptTokens)
+	bg := lipgloss.NewStyle().Background(surface0Color)
+	muted := bg.Foreground(mutedColor)
+	out := muted.Render(" ↑" + formatTokens(u.PromptTokens) + " ↓" + formatTokens(u.CompletionTokens))
+	if showCache {
+		if pct, ok := cachePercent(u); ok {
+			out += muted.Render(" · ") + bg.Foreground(agentColor).Render(fmt.Sprintf("缓存 %d%%", pct))
+		}
 	}
-	return label
+	return out + bg.Render(" ")
+}
+
+// cachePercent 返回缓存命中率（命中数 / prompt_tokens）；无缓存数据时 ok 为 false。
+func cachePercent(u *llm.Usage) (int, bool) {
+	if u.PromptCacheHitTokens <= 0 || u.PromptTokens <= 0 {
+		return 0, false
+	}
+	return u.PromptCacheHitTokens * 100 / u.PromptTokens, true
 }
 
 // formatTokens 把 token 数缩写成 980 / 1.2k / 15k / 1.3M。
