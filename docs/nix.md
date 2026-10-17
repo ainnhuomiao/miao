@@ -20,6 +20,9 @@ flake 只看得到 git 已跟踪的文件，新加的文件要先 `git add`。
 
 ## 接进 MyFlake（需要你自己改）
 
+> 注意：MyFlake 在 GitHub 上有 CI，`git+file://` 路径在 CI 机器上不存在，提交后 CI 会失败。
+> 要提交的话先把 agnet 推到 GitHub（私有也行），把 url 改成 `github:<用户名>/agnet`；只在本机用就别提交这处改动。
+
 1. 在 `~/MyFlake/flake.nix` 的 `inputs` 里加（仓库没有远端，用本地路径）：
 
    ```nix
