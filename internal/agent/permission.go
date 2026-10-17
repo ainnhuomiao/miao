@@ -150,6 +150,9 @@ var neverAutoAllow = map[string]bool{
 	"lua": true, "php": true, "nix-shell": true, "eval": true, "exec": true, "busybox": true,
 }
 
+// goNeverAutoAllow 是会编译并运行任意程序的 go 子命令。
+var goNeverAutoAllow = map[string]bool{"run": true, "generate": true, "tool": true}
+
 // decide 返回 (decided, allow)：decided=false 表示要交给用户确认。
 func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool) {
 	p.mu.Lock()
@@ -167,7 +170,7 @@ func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool)
 		name, cargs, ok := parseCommand(args)
 		raw := strings.Join(append([]string{name}, cargs...), " ")
 		// 危险参数（-exec、-toolexec、-o…）和 shell 元字符、换行一律交给用户确认，白名单不放行。
-		if !ok || neverAutoAllow[filepath.Base(name)] || tools.HasDangerousFlag(name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
+		if !ok || neverAutoAllow[filepath.Base(name)] || (filepath.Base(name) == "go" && len(cargs) > 0 && goNeverAutoAllow[cargs[0]]) || tools.HasDangerousFlag(name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
 			return false, false
 		}
 		line := commandLine(args)
