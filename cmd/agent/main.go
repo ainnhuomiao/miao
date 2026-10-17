@@ -1,7 +1,4 @@
 // Command agent 是 GoAgent 的程序入口。
-//
-// 它只做三件事：读配置、组装依赖、启动 REPL。
-// 具体逻辑都在 internal/ 下的包里，便于学习和测试。
 package main
 
 import (
@@ -14,6 +11,7 @@ import (
 	"agnet/internal/config"
 	"agnet/internal/llm"
 	"agnet/internal/repl"
+	"agnet/internal/tools"
 	"agnet/internal/tui"
 )
 
@@ -33,13 +31,18 @@ func run() error {
 		return err
 	}
 
+	reg, err := tools.NewRegistry(cfg.Workspace)
+	if err != nil {
+		return err
+	}
+	tools.RegisterBuiltins(reg)
+
 	client := llm.NewOpenAI(cfg.APIKey, cfg.BaseURL, cfg.Model)
 	system := fmt.Sprintf(
-		"%s\n\n当前调用的模型标识是 %q，由用户通过配置指定。",
-		agent.DefaultSystemPrompt, cfg.Model)
-	ag := agent.New(client, system)
+		"%s\n\n当前调用的模型标识是 %q。工作区根目录是 %q（工具只能访问此目录内的相对路径）。",
+		agent.DefaultSystemPrompt, cfg.Model, cfg.Workspace)
+	ag := agent.New(client, system, reg)
 
-	// 没有真正的终端（例如管道、重定向、CI）时自动退回逐行 REPL。
 	if *plain || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 		return repl.New(ag, cfg.Model).Run(context.Background())
 	}

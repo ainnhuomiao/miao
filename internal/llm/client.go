@@ -4,7 +4,10 @@
 // 这个包刻意不依赖任何第三方库：HTTP、SSE、JSON 都由标准库完成。
 package llm
 
-import "context"
+import (
+	"context"
+	"encoding/json"
+)
 
 // Role 是对话消息的角色。
 type Role string
@@ -13,18 +16,48 @@ const (
 	RoleSystem    Role = "system"
 	RoleUser      Role = "user"
 	RoleAssistant Role = "assistant"
+	RoleTool      Role = "tool"
 )
 
+// ToolCall 是模型发起的一次工具调用。
+type ToolCall struct {
+	ID       string       `json:"id"`
+	Type     string       `json:"type"`
+	Function FunctionCall `json:"function"`
+}
+
+// FunctionCall 携带工具名和 JSON 参数字符串。
+type FunctionCall struct {
+	Name      string `json:"name"`
+	Arguments string `json:"arguments"`
+}
+
 // Message 是一条对话消息。
-// 当前阶段只需要 role 和 content；阶段 3 会加入 tool_calls。
+// 助手消息可带 ToolCalls；工具结果消息用 ToolCallID 关联。
 type Message struct {
-	Role    Role   `json:"role"`
-	Content string `json:"content"`
+	Role       Role       `json:"role"`
+	Content    string     `json:"content"`
+	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
+	ToolCallID string     `json:"tool_call_id,omitempty"`
+	Name       string     `json:"name,omitempty"`
+}
+
+// ToolDef 描述可供模型调用的工具（OpenAI tools 字段）。
+type ToolDef struct {
+	Type     string       `json:"type"`
+	Function FunctionDef  `json:"function"`
+}
+
+// FunctionDef 是工具的函数定义。
+type FunctionDef struct {
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Parameters  json.RawMessage `json:"parameters"`
 }
 
 // Delta 是流式响应中的一个增量片段。
-// Reasoning 对应 deepseek-reasoner 等推理模型的思考过程，
-// 普通模型通常为空。
+// Reasoning 对应推理模型的思考过程；ToolCalls 在流式拼接过程中也可能增量出现，
+// 但完整结果以 ChatResult.ToolCalls 为准。
 type Delta struct {
 	Content   string
 	Reasoning string
@@ -33,11 +66,21 @@ type Delta struct {
 // DeltaHandler 处理一个增量片段。返回错误会中止本次流式请求。
 type DeltaHandler func(Delta) error
 
-// Client 是模型客户端的能力抽象（Go 的接口）。
-//
-// agent 只依赖这个接口，因此：
-//   - 测试时可以注入一个假实现，不需要真的联网；
-//   - 以后可以换成 Anthropic、Ollama 等不同的实现。
+// ChatRequest 是一次对话请求。
+type ChatRequest struct {
+	Messages []Message
+	Tools    []ToolDef
+}
+
+// ChatResult 是一次流式请求聚合后的助手回合。
+type ChatResult struct {
+	Content      string
+	Reasoning    string
+	ToolCalls    []ToolCall
+	FinishReason string
+}
+
+// Client 是模型客户端的能力抽象。
 type Client interface {
-	Stream(ctx context.Context, messages []Message, onDelta DeltaHandler) error
+	StreamChat(ctx context.Context, req ChatRequest, onDelta DeltaHandler) (ChatResult, error)
 }

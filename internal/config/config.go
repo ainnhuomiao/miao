@@ -7,6 +7,7 @@ import (
 	"bufio"
 	"fmt"
 	"os"
+	"path/filepath"
 	"strings"
 )
 
@@ -17,14 +18,28 @@ const (
 
 // Config 是程序启动所需的全部配置。
 type Config struct {
-	APIKey  string
-	BaseURL string
-	Model   string
+	APIKey    string
+	BaseURL   string
+	Model     string
+	Workspace string
 }
 
 // Load 从环境变量和 .env 文件加载配置。
 func Load() (Config, error) {
 	loadDotEnv(".env")
+
+	ws := firstEnv("AGENT_WORKSPACE")
+	if ws == "" {
+		cwd, err := os.Getwd()
+		if err != nil {
+			return Config{}, fmt.Errorf("获取工作目录失败: %w", err)
+		}
+		ws = cwd
+	}
+	abs, err := filepath.Abs(ws)
+	if err != nil {
+		return Config{}, fmt.Errorf("解析工作区失败: %w", err)
+	}
 
 	cfg := Config{
 		APIKey: firstEnv("AGENT_API_KEY", "DEEPSEEK_API_KEY"),
@@ -36,6 +51,7 @@ func Load() (Config, error) {
 			firstEnv("AGENT_MODEL", "DEEPSEEK_MODEL"),
 			defaultModel,
 		),
+		Workspace: abs,
 	}
 
 	if cfg.APIKey == "" {
@@ -45,7 +61,6 @@ func Load() (Config, error) {
 	return cfg, nil
 }
 
-// firstEnv 返回第一个存在且非空的环境变量。
 func firstEnv(names ...string) string {
 	for _, name := range names {
 		if v := strings.TrimSpace(os.Getenv(name)); v != "" {
@@ -64,14 +79,10 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// loadDotEnv 读取一个简单的 KEY=VALUE 文件。
-//
-// 它故意只支持最常用的子集：空行、# 注释、可选的 export 前缀、
-// 以及成对的引号。已经存在的环境变量不会被覆盖。
 func loadDotEnv(path string) {
 	f, err := os.Open(path)
 	if err != nil {
-		return // 没有 .env 就只用环境变量，这不是错误
+		return
 	}
 	defer f.Close()
 
@@ -82,7 +93,7 @@ func loadDotEnv(path string) {
 			continue
 		}
 
-		key, value, ok := strings.Cut(line, "=") // Go 1.18+ 的字符串切割
+		key, value, ok := strings.Cut(line, "=")
 		if !ok {
 			continue
 		}

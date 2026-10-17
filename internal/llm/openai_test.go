@@ -3,81 +3,131 @@ package llm
 import (
 	"context"
 	"encoding/json"
-	"errors"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"strings"
 	"testing"
 )
 
-func TestStreamParsesSSE(t *testing.T) {
+func TestStreamChat_ContentAndReasoning(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.Method != http.MethodPost {
-			t.Errorf("方法 = %s, 想要 POST", r.Method)
-		}
 		if r.URL.Path != "/chat/completions" {
-			t.Errorf("路径 = %s, 想要 /chat/completions", r.URL.Path)
+			t.Fatalf("unexpected path: %s", r.URL.Path)
 		}
 		if got := r.Header.Get("Authorization"); got != "Bearer test-key" {
-			t.Errorf("Authorization = %q", got)
+			t.Fatalf("unexpected auth: %q", got)
 		}
-
-		var req chatRequest
-		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-			t.Errorf("解析请求体失败: %v", err)
-		}
-		if req.Model != "test-model" || !req.Stream {
-			t.Errorf("请求参数不正确: %+v", req)
-		}
-
 		w.Header().Set("Content-Type", "text/event-stream")
-		fmt.Fprint(w, ": keep-alive\n\n")
-		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"你\"}}]}\n\n")
-		fmt.Fprint(w, "data: {\"choices\":[{\"delta\":{\"content\":\"好\"}}]}\n\n")
-		fmt.Fprint(w, "data: [DONE]\n\n")
+		flusher, ok := w.(http.Flusher)
+		if !ok {
+			t.Fatal("response writer does not support flushing")
+		}
+		writeSSE(w, flusher, `{"choices":[{"delta":{"reasoning_content":"想一下"}}]}`)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"你好"}}]}`)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"，世界"},"finish_reason":"stop"}]}`)
+		writeSSE(w, flusher, "[DONE]")
 	}))
 	defer srv.Close()
 
 	client := NewOpenAI("test-key", srv.URL, "test-model")
-
-	var got strings.Builder
-	err := client.Stream(context.Background(),
-		[]Message{{Role: RoleUser, Content: "hi"}},
-		func(d Delta) error {
-			got.WriteString(d.Content)
-			return nil
-		})
+	var deltas []Delta
+	result, err := client.StreamChat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "hi"}},
+	}, func(d Delta) error {
+		deltas = append(deltas, d)
+		return nil
+	})
 	if err != nil {
-		t.Fatalf("Stream 返回错误: %v", err)
+		t.Fatalf("StreamChat: %v", err)
 	}
-	if want := "你好"; got.String() != want {
-		t.Errorf("拼出的回答 = %q, 想要 %q", got.String(), want)
+	if result.Content != "你好，世界" {
+		t.Fatalf("content = %q", result.Content)
+	}
+	if result.Reasoning != "想一下" {
+		t.Fatalf("reasoning = %q", result.Reasoning)
+	}
+	if result.FinishReason != "stop" {
+		t.Fatalf("finish = %q", result.FinishReason)
+	}
+	if len(deltas) != 3 {
+		t.Fatalf("delta count = %d", len(deltas))
 	}
 }
 
-func TestStreamAPIError(t *testing.T) {
+func TestStreamChat_ToolCallsByIndex(t *testing.T) {
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-		fmt.Fprint(w, `{"error":{"message":"invalid api key"}}`)
+		var req chatRequest
+		if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+			t.Fatalf("decode body: %v", err)
+		}
+		if len(req.Tools) != 1 || req.Tools[0].Function.Name != "read_file" {
+			t.Fatalf("tools = %+v", req.Tools)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"tool_calls":[{"index":0,"id":"call_1","type":"function","function":{"name":"read_file","arguments":"{\"path\":"}}]}}]}`)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"tool_calls":[{"index":0,"function":{"arguments":"\"a.go\"}"}}]},"finish_reason":"tool_calls"}]}`)
+		writeSSE(w, flusher, "[DONE]")
 	}))
 	defer srv.Close()
 
-	client := NewOpenAI("bad-key", srv.URL, "test-model")
-	err := client.Stream(context.Background(),
-		[]Message{{Role: RoleUser, Content: "hi"}}, nil)
-	if err == nil {
-		t.Fatal("期望返回错误，实际为 nil")
+	client := NewOpenAI("test-key", srv.URL, "test-model")
+	result, err := client.StreamChat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "read"}},
+		Tools: []ToolDef{{
+			Type: "function",
+			Function: FunctionDef{
+				Name:        "read_file",
+				Description: "read",
+				Parameters:  json.RawMessage(`{"type":"object"}`),
+			},
+		}},
+	}, nil)
+	if err != nil {
+		t.Fatalf("StreamChat: %v", err)
 	}
+	if result.FinishReason != "tool_calls" {
+		t.Fatalf("finish = %q", result.FinishReason)
+	}
+	if len(result.ToolCalls) != 1 {
+		t.Fatalf("tool_calls len = %d", len(result.ToolCalls))
+	}
+	tc := result.ToolCalls[0]
+	if tc.ID != "call_1" || tc.Function.Name != "read_file" {
+		t.Fatalf("tool call = %+v", tc)
+	}
+	if tc.Function.Arguments != `{"path":"a.go"}` {
+		t.Fatalf("args = %q", tc.Function.Arguments)
+	}
+}
 
-	var apiErr *APIError
-	if !errors.As(err, &apiErr) {
-		t.Fatalf("错误类型 = %T, 想要 *APIError: %v", err, err)
+func TestStreamChat_APIError(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+		_, _ = w.Write([]byte(`{"error":{"message":"bad key"}}`))
+	}))
+	defer srv.Close()
+
+	client := NewOpenAI("bad", srv.URL, "m")
+	_, err := client.StreamChat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "x"}},
+	}, nil)
+	if err == nil {
+		t.Fatal("expected error")
 	}
-	if apiErr.StatusCode != http.StatusUnauthorized {
-		t.Errorf("状态码 = %d, 想要 401", apiErr.StatusCode)
+	apiErr, ok := err.(*APIError)
+	if !ok {
+		t.Fatalf("want *APIError, got %T", err)
 	}
-	if !strings.Contains(err.Error(), "invalid api key") {
-		t.Errorf("错误信息应包含服务端原因: %v", err)
+	if apiErr.StatusCode != 401 {
+		t.Fatalf("status = %d", apiErr.StatusCode)
 	}
+	if !strings.Contains(err.Error(), "bad key") {
+		t.Fatalf("message = %v", err)
+	}
+}
+
+func writeSSE(w http.ResponseWriter, f http.Flusher, data string) {
+	_, _ = w.Write([]byte("data: " + data + "\n\n"))
+	f.Flush()
 }

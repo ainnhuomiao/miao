@@ -135,7 +135,7 @@ Go 知识点：`flag`、`log/slog`、`time`、`context.WithTimeout`、
 
 ---
 
-## 阶段 3 · 工具调用：让 agent 动手
+## 阶段 3 · 工具调用：让 agent 动手 ✅（一期：read_file / list_dir + 循环；run_command 仍待做）
 
 目标：接入 OpenAI function calling，让 agent 能读文件、列目录、执行命令。
 
@@ -173,6 +173,11 @@ type Registry struct {
 ```
 
 第一批工具：
+
+> **一期已落地：`read_file`、`list_dir`、按 index 拼接的流式 tool_calls、≤8 轮循环、`finish_reason=length` 拒批、工作区路径锁定、TUI 工具卡 + Tab 抽屉。`run_command` / `write_file` 下一小步。**
+
+原清单：
+
 
 - `read_file`：读取文本文件（限制大小，比如 256 KiB）
 - `list_dir`：列出目录内容

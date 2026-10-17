@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
@@ -11,17 +12,17 @@ import (
 )
 
 const (
-	headerHeight     = 2 // 标题行 + 分隔线
-	inputLines       = 2 // 输入框可见行数
-	inputFrameHeight = 2 // 上下边框
-	hintHeight       = 1 // 底部快捷键提示
+	headerHeight     = 2
+	inputLines       = 2
+	inputFrameHeight = 2
+	hintHeight       = 1
 )
 
-// 颜色同时适配浅色和深色终端。
 var (
 	accentColor = lipgloss.AdaptiveColor{Light: "#6D28D9", Dark: "#A78BFA"}
 	userColor   = lipgloss.AdaptiveColor{Light: "#0369A1", Dark: "#7DD3FC"}
 	agentColor  = lipgloss.AdaptiveColor{Light: "#047857", Dark: "#6EE7B7"}
+	toolColor   = lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#FBBF24"}
 	mutedColor  = lipgloss.AdaptiveColor{Light: "#71717A", Dark: "#8B8B93"}
 	errorColor  = lipgloss.AdaptiveColor{Light: "#B91C1C", Dark: "#F87171"}
 )
@@ -30,6 +31,7 @@ var (
 	titleStyle      = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
 	userLabelStyle  = lipgloss.NewStyle().Bold(true).Foreground(userColor)
 	agentLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(agentColor)
+	toolLabelStyle  = lipgloss.NewStyle().Bold(true).Foreground(toolColor)
 	mutedStyle      = lipgloss.NewStyle().Foreground(mutedColor)
 	errorStyle      = lipgloss.NewStyle().Foreground(errorColor)
 	promptStyle     = lipgloss.NewStyle().Foreground(accentColor)
@@ -37,6 +39,11 @@ var (
 	inputBoxStyle = lipgloss.NewStyle().
 			Border(lipgloss.RoundedBorder()).
 			BorderForeground(accentColor).
+			Padding(0, 1)
+
+	toolCardStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(toolColor).
 			Padding(0, 1)
 )
 
@@ -47,8 +54,9 @@ const helpText = `命令:
   /exit       退出
 
 快捷键:
-  Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考过程
-  PgUp/PgDn 滚动 · Esc 取消生成 · Ctrl+C 退出`
+  Enter 发送 · Ctrl+J 换行 · Tab 工具抽屉 · Ctrl+R 思考过程
+  PgUp/PgDn 滚动 · Esc 关抽屉/取消生成 · Ctrl+C 取消或退出
+  [ / ] 左侧会话（一期预留）`
 
 func (m *Model) view() string {
 	if !m.ready {
@@ -59,11 +67,15 @@ func (m *Model) view() string {
 			mutedStyle.Render("终端窗口太小\n请调整到至少 36×12"))
 	}
 
-	// 依次是：标题(2 行) + 对话区 + 输入框(2+2 行) + 提示(1 行)。
-	// 严格的行数控制可以避免内容超过终端高度导致界面跳动。
+	main := m.viewport.View()
+	if m.drawerOpen {
+		sep := mutedStyle.Render("│")
+		main = lipgloss.JoinHorizontal(lipgloss.Top, main, sep, m.drawerViewport.View())
+	}
+
 	return strings.Join([]string{
 		m.headerView(),
-		m.viewport.View(),
+		main,
 		m.inputView(),
 		m.hintView(),
 	}, "\n")
@@ -94,6 +106,12 @@ func (m *Model) statusView() string {
 		if m.lastAssistantContent() == "" {
 			label = "思考中"
 		}
+		for i := len(m.messages) - 1; i >= 0; i-- {
+			if m.messages[i].role == roleTool && !m.messages[i].done {
+				label = "工具中"
+				break
+			}
+		}
 		return m.spinner.View() + mutedStyle.Render(label)
 	}
 	return agentLabelStyle.Render("●") + mutedStyle.Render(" 就绪")
@@ -113,9 +131,12 @@ func (m *Model) inputView() string {
 }
 
 func (m *Model) hintView() string {
-	hint := "Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考 · PgUp/PgDn 滚动 · Ctrl+C 退出"
+	hint := "Enter 发送 · Ctrl+J 换行 · Tab 抽屉 · Ctrl+R 思考 · Ctrl+C 退出"
+	if m.drawerOpen {
+		hint = "Tab 关抽屉 · Esc 关抽屉 · PgUp/PgDn 滚动 · Ctrl+C 退出"
+	}
 	if m.streaming {
-		hint = "生成中 · Esc 取消 · PgUp/PgDn 滚动 · Ctrl+C 取消"
+		hint = "生成中 · Esc 取消 · Tab 抽屉 · PgUp/PgDn · Ctrl+C 取消"
 	}
 	if lipgloss.Width(hint)+1 > m.width {
 		hint = truncateWidth(hint, m.width-2)
@@ -126,6 +147,17 @@ func (m *Model) hintView() string {
 func (m *Model) renderTranscript() string {
 	var b strings.Builder
 	for _, msg := range m.messages {
+		// 跳过尚未有任何内容的空助手气泡（工具后预留的）
+		if msg.role == roleAssistant && msg.content == "" && msg.reasoning == "" && msg.done {
+			continue
+		}
+		if msg.role == roleAssistant && msg.content == "" && msg.reasoning == "" && !msg.done {
+			// 流式中的空气泡仍显示占位
+			if m.streaming {
+				b.WriteString(m.renderMessage(msg))
+			}
+			continue
+		}
 		b.WriteString(m.renderMessage(msg))
 	}
 	return strings.TrimRight(b.String(), "\n")
@@ -133,7 +165,7 @@ func (m *Model) renderTranscript() string {
 
 func (m *Model) renderMessage(msg chatMessage) string {
 	width := m.contentWidth()
-	pad := lipgloss.NewStyle().Padding(0, 2)
+	pad := lipgloss.NewStyle().Padding(0, 1)
 
 	switch msg.role {
 	case roleUser:
@@ -166,6 +198,33 @@ func (m *Model) renderMessage(msg chatMessage) string {
 		}
 		return pad.Render(b.String()) + "\n\n"
 
+	case roleTool:
+		innerW := max(8, width-4)
+		var body strings.Builder
+		body.WriteString(toolLabelStyle.Render("⚙ " + msg.toolName))
+		if !msg.done {
+			body.WriteString(mutedStyle.Render(" · 运行中…"))
+		} else if msg.toolError {
+			body.WriteString(errorStyle.Render(" · 失败"))
+		} else {
+			body.WriteString(mutedStyle.Render(fmt.Sprintf(" · %s", msg.toolDur.Round(time.Millisecond))))
+		}
+		body.WriteString("\n")
+		if msg.toolArgs != "" {
+			body.WriteString(mutedStyle.Width(innerW).Render(wrapText(compact(msg.toolArgs, 120), innerW)))
+			body.WriteString("\n")
+		}
+		if msg.done && msg.toolResult != "" {
+			preview := compact(msg.toolResult, 160)
+			st := mutedStyle
+			if msg.toolError {
+				st = errorStyle
+			}
+			body.WriteString(st.Width(innerW).Render(wrapText(preview, innerW)))
+		}
+		card := toolCardStyle.Width(width).Render(body.String())
+		return pad.Render(card) + "\n\n"
+
 	case roleNotice:
 		body := "· " + strings.ReplaceAll(msg.content, "\n", "\n  ")
 		return pad.Render(mutedStyle.Width(width).Render(wrapText(body, width))) + "\n"
@@ -177,11 +236,6 @@ func (m *Model) renderMessage(msg chatMessage) string {
 	return ""
 }
 
-// wrapText 按显示宽度换行，并使用 Unicode UAX #14 的换行机会。
-//
-// 为什么不能只靠 lipgloss 的 Width？因为它是按空格断词的，
-// 一长串没有空格的中文会被当成一个"单词"整体移到下一行，
-// 导致上一行留下大片空白。UAX #14 允许在汉字之间换行。
 func wrapText(s string, width int) string {
 	if width <= 0 || s == "" {
 		return s
@@ -212,7 +266,6 @@ func wrapParagraph(out *strings.Builder, p string, width int) {
 			col = 0
 		}
 
-		// 单个 segment 仍然超宽（例如没有空格的英文长串），按列硬切。
 		for segWidth > width {
 			head, tail := splitByWidth(seg, width)
 			out.WriteString(head)
@@ -233,7 +286,6 @@ func wrapParagraph(out *strings.Builder, p string, width int) {
 	}
 }
 
-// splitByWidth 在显示宽度 width 处切开字符串，保证不会切坏 UTF-8。
 func splitByWidth(s string, width int) (head, tail string) {
 	used := 0
 	for i, r := range s {
@@ -246,12 +298,14 @@ func splitByWidth(s string, width int) (head, tail string) {
 	return s, ""
 }
 
-// contentWidth 是消息正文的宽度。外层还有左右各 2 格留白。
 func (m *Model) contentWidth() int {
-	return max(10, m.width-4)
+	w := m.viewport.Width
+	if w <= 0 {
+		w = m.width
+	}
+	return max(10, w-4)
 }
 
-// truncateWidth 按终端显示宽度截断，中文等宽字符算 2 列。
 func truncateWidth(s string, width int) string {
 	if width <= 1 || lipgloss.Width(s) <= width {
 		return s

@@ -11,12 +11,13 @@ import (
 	"os/signal"
 	"strings"
 	"sync"
+	"time"
+	"unicode/utf8"
 
 	"agnet/internal/agent"
 	"agnet/internal/llm"
 )
 
-// ANSI 转义序列，用于给终端输出上色。
 const (
 	colorReset  = "\033[0m"
 	colorDim    = "\033[2m"
@@ -32,13 +33,11 @@ type REPL struct {
 	in    *bufio.Reader
 	out   io.Writer
 
-	// 正在进行的请求的取消函数。信号处理 goroutine 和主循环都会访问，
-	// 所以用互斥锁保护。
 	mu     sync.Mutex
 	cancel context.CancelFunc
 }
 
-// New 创建 REPL。model 只用于启动时展示。
+// New 创建 REPL。
 func New(ag *agent.Agent, model string) *REPL {
 	return &REPL{
 		ag:    ag,
@@ -48,11 +47,10 @@ func New(ag *agent.Agent, model string) *REPL {
 	}
 }
 
-// Run 启动交互循环，直到用户输入 /exit、按 Ctrl+C（等待输入时）或 stdin 关闭。
+// Run 启动交互循环。
 func (r *REPL) Run(ctx context.Context) error {
 	r.printBanner()
 
-	// signal.Notify 把 Ctrl+C 从"默认直接杀死进程"改成"投递到 channel"。
 	sigCh := make(chan os.Signal, 1)
 	signal.Notify(sigCh, os.Interrupt)
 	defer signal.Stop(sigCh)
@@ -93,8 +91,6 @@ func (r *REPL) Run(ctx context.Context) error {
 	}
 }
 
-// watchSignals 是运行在独立 goroutine 里的信号处理循环。
-// 正在生成回答时只取消本次请求；等待输入时则退出程序。
 func (r *REPL) watchSignals(sigCh <-chan os.Signal, stop <-chan struct{}) {
 	for {
 		select {
@@ -110,12 +106,11 @@ func (r *REPL) watchSignals(sigCh <-chan os.Signal, stop <-chan struct{}) {
 				continue
 			}
 			fmt.Fprintf(r.out, "\n%s再见！%s\n", colorDim, colorReset)
-			os.Exit(130) // 130 是 shell 中"被 SIGINT 中断"的惯例退出码
+			os.Exit(130)
 		}
 	}
 }
 
-// chat 完成一轮对话，并实时打印模型输出。
 func (r *REPL) chat(ctx context.Context, input string) {
 	reqCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -133,21 +128,38 @@ func (r *REPL) chat(ctx context.Context, input string) {
 
 	inReasoning := false
 	hasContent := false
-	err := r.ag.Send(reqCtx, input, func(d llm.Delta) error {
-		if d.Reasoning != "" {
-			if !inReasoning {
-				fmt.Fprint(r.out, colorDim)
-				inReasoning = true
+	err := r.ag.Send(reqCtx, input, func(e agent.Event) error {
+		switch e.Kind {
+		case agent.EventDelta:
+			d := e.Delta
+			if d.Reasoning != "" {
+				if !inReasoning {
+					fmt.Fprint(r.out, colorDim)
+					inReasoning = true
+				}
+				fmt.Fprint(r.out, d.Reasoning)
 			}
-			fmt.Fprint(r.out, d.Reasoning)
-		}
-		if d.Content != "" {
+			if d.Content != "" {
+				if inReasoning {
+					fmt.Fprint(r.out, colorReset+"\n\n")
+					inReasoning = false
+				}
+				fmt.Fprint(r.out, d.Content)
+				hasContent = true
+			}
+		case agent.EventToolStart:
 			if inReasoning {
-				fmt.Fprint(r.out, colorReset+"\n\n")
+				fmt.Fprint(r.out, colorReset)
 				inReasoning = false
 			}
-			fmt.Fprint(r.out, d.Content)
-			hasContent = true
+			fmt.Fprintf(r.out, "\n%s⚙ %s(%s)%s\n", colorDim, e.ToolName, summarize(e.ToolArgs, 80), colorReset)
+		case agent.EventToolEnd:
+			status := "ok"
+			if e.ToolError {
+				status = "err"
+			}
+			fmt.Fprintf(r.out, "%s  ↳ %s · %s · %s%s\n",
+				colorDim, status, e.Duration.Round(time.Millisecond), summarize(e.ToolResult, 80), colorReset)
 		}
 		return nil
 	})
@@ -164,6 +176,15 @@ func (r *REPL) chat(ctx context.Context, input string) {
 	case !hasContent:
 		fmt.Fprintf(r.out, "%s(模型没有返回文本内容)%s\n", colorDim, colorReset)
 	}
+}
+
+func summarize(s string, n int) string {
+	s = strings.ReplaceAll(strings.TrimSpace(s), "\n", " ")
+	if utf8.RuneCountInString(s) <= n {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:n]) + "…"
 }
 
 func (r *REPL) handleCommand(input string) (quit bool, err error) {
@@ -212,16 +233,17 @@ func (r *REPL) printHistory() {
 	}
 	for i, m := range history {
 		label := "你"
-		if m.Role == llm.RoleAssistant {
+		switch m.Role {
+		case llm.RoleAssistant:
 			label = "agent"
+		case llm.RoleTool:
+			label = "tool"
 		}
 		content := strings.ReplaceAll(m.Content, "\n", " ")
 		fmt.Fprintf(r.out, "%2d. %-5s %s\n", i+1, label, truncate(content, 60))
 	}
 }
 
-// truncate 按"字符"而不是字节截断。
-// 中文在 UTF-8 中占 3 个字节，直接切字节会产生乱码。
 func truncate(s string, n int) string {
 	runes := []rune(s)
 	if len(runes) <= n {

@@ -19,34 +19,45 @@ type fakeClient struct {
 	err    error
 }
 
-func (f *fakeClient) Stream(ctx context.Context, _ []llm.Message, onDelta llm.DeltaHandler) error {
+func (f *fakeClient) StreamChat(ctx context.Context, _ llm.ChatRequest, onDelta llm.DeltaHandler) (llm.ChatResult, error) {
+	var content, reasoning strings.Builder
 	for _, d := range f.deltas {
 		select {
 		case <-ctx.Done():
-			return ctx.Err()
+			return llm.ChatResult{}, ctx.Err()
 		default:
 		}
-		if err := onDelta(d); err != nil {
-			return err
+		content.WriteString(d.Content)
+		reasoning.WriteString(d.Reasoning)
+		if onDelta != nil {
+			if err := onDelta(d); err != nil {
+				return llm.ChatResult{}, err
+			}
 		}
 	}
-	return f.err
+	if f.err != nil {
+		return llm.ChatResult{}, f.err
+	}
+	return llm.ChatResult{
+		Content:      content.String(),
+		Reasoning:    reasoning.String(),
+		FinishReason: "stop",
+	}, nil
 }
 
-// blockingClient 一直挂起，直到 context 被取消，用来测试 Esc 取消。
 type blockingClient struct {
 	started chan struct{}
 }
 
-func (b *blockingClient) Stream(ctx context.Context, _ []llm.Message, _ llm.DeltaHandler) error {
+func (b *blockingClient) StreamChat(ctx context.Context, _ llm.ChatRequest, _ llm.DeltaHandler) (llm.ChatResult, error) {
 	close(b.started)
 	<-ctx.Done()
-	return ctx.Err()
+	return llm.ChatResult{}, ctx.Err()
 }
 
 func newTestModel(t *testing.T, width, height int, reply string) *Model {
 	t.Helper()
-	ag := agent.New(&fakeClient{deltas: []llm.Delta{{Content: reply}}}, "测试助手")
+	ag := agent.New(&fakeClient{deltas: []llm.Delta{{Content: reply}}}, "测试助手", nil)
 	m := New(ag, "test-model")
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
 	return m
@@ -134,7 +145,7 @@ func TestSubmitStreamsIntoTranscript(t *testing.T) {
 
 func TestEscCancelsStream(t *testing.T) {
 	fc := &blockingClient{started: make(chan struct{})}
-	m := New(agent.New(fc, ""), "test-model")
+	m := New(agent.New(fc, "", nil), "test-model")
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	m.input.SetValue("请写一篇很长的文章")
@@ -154,6 +165,24 @@ func TestEscCancelsStream(t *testing.T) {
 	}
 	if !strings.Contains(m.View(), "已取消") {
 		t.Error("界面上应提示已取消")
+	}
+}
+
+func TestTabTogglesDrawer(t *testing.T) {
+	m := newTestModel(t, 100, 24, "")
+	if m.drawerOpen {
+		t.Fatal("默认抽屉应关闭")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if !m.drawerOpen {
+		t.Fatal("Tab 后抽屉应打开")
+	}
+	if !strings.Contains(m.View(), "工具") {
+		t.Error("打开抽屉后应显示工具标题")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	if m.drawerOpen {
+		t.Fatal("Esc 应关闭抽屉")
 	}
 }
 
@@ -209,7 +238,7 @@ func TestSmallTerminalFallback(t *testing.T) {
 }
 
 func TestWrapTextCJK(t *testing.T) {
-	text := strings.Repeat("中文", 30) // 120 个显示列
+	text := strings.Repeat("中文", 30)
 	wrapped := wrapText(text, 20)
 
 	lines := strings.Split(wrapped, "\n")

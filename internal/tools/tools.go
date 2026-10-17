@@ -1,0 +1,101 @@
+// Package tools 提供 Agent 可调用的本地工具。
+package tools
+
+import (
+	"context"
+	"encoding/json"
+	"fmt"
+	"path/filepath"
+	"strings"
+
+	"agnet/internal/llm"
+)
+
+// Result 是工具执行结果。
+type Result struct {
+	Content string
+	IsError bool
+}
+
+// Tool 是一个可注册的工具。
+type Tool struct {
+	Def  llm.ToolDef
+	Run  func(ctx context.Context, args json.RawMessage) Result
+}
+
+// Registry 管理工具集合与工作区路径约束。
+type Registry struct {
+	workspace string
+	tools     map[string]Tool
+	order     []string
+}
+
+// NewRegistry 创建工具注册表。workspace 必须是绝对路径。
+func NewRegistry(workspace string) (*Registry, error) {
+	abs, err := filepath.Abs(workspace)
+	if err != nil {
+		return nil, fmt.Errorf("解析工作区路径失败: %w", err)
+	}
+	return &Registry{
+		workspace: abs,
+		tools:     make(map[string]Tool),
+	}, nil
+}
+
+// Workspace 返回锁定的工作区根目录。
+func (r *Registry) Workspace() string { return r.workspace }
+
+// Register 注册工具；同名覆盖并保持顺序。
+func (r *Registry) Register(t Tool) {
+	name := t.Def.Function.Name
+	if _, ok := r.tools[name]; !ok {
+		r.order = append(r.order, name)
+	}
+	r.tools[name] = t
+}
+
+// Definitions 返回发给模型的工具定义列表。
+func (r *Registry) Definitions() []llm.ToolDef {
+	out := make([]llm.ToolDef, 0, len(r.order))
+	for _, name := range r.order {
+		out = append(out, r.tools[name].Def)
+	}
+	return out
+}
+
+// Call 按名称执行工具。
+func (r *Registry) Call(ctx context.Context, name string, argsJSON string) Result {
+	t, ok := r.tools[name]
+	if !ok {
+		return Result{Content: fmt.Sprintf("未知工具: %s", name), IsError: true}
+	}
+	raw := json.RawMessage(strings.TrimSpace(argsJSON))
+	if len(raw) == 0 {
+		raw = json.RawMessage(`{}`)
+	}
+	if !json.Valid(raw) {
+		return Result{Content: fmt.Sprintf("参数不是合法 JSON: %s", argsJSON), IsError: true}
+	}
+	return t.Run(ctx, raw)
+}
+
+// ResolvePath 将相对路径锁定在工作区内，拒绝越界。
+func (r *Registry) ResolvePath(rel string) (string, error) {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return "", fmt.Errorf("路径不能为空")
+	}
+	cleaned := filepath.Clean(rel)
+	if filepath.IsAbs(cleaned) {
+		return "", fmt.Errorf("只允许相对工作区的路径")
+	}
+	full := filepath.Join(r.workspace, cleaned)
+	relToRoot, err := filepath.Rel(r.workspace, full)
+	if err != nil {
+		return "", fmt.Errorf("路径解析失败: %w", err)
+	}
+	if relToRoot == ".." || strings.HasPrefix(relToRoot, ".."+string(filepath.Separator)) {
+		return "", fmt.Errorf("路径越出工作区: %s", rel)
+	}
+	return full, nil
+}
