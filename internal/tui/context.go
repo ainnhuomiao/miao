@@ -78,3 +78,25 @@ func (m *Model) contextViewCells(cells int) string {
 	return pacmanMeter(m.ctxTokens, total, cells, closed) +
 		mutedStyle.Render(fmt.Sprintf("  %d%% · %s/%s", pct, formatTokens(m.ctxTokens), formatTokens(total)))
 }
+
+// narrowContext 在 room 列内给出窄屏顶栏右侧：轨道(≥8格)+百分比，或 ᗧ 42%；放不下返回空串。
+func (m *Model) narrowContext(room int) string {
+	total := contextWindow(m.modelName)
+	if total == 0 {
+		if t := mutedStyle.Render(formatTokens(m.ctxTokens) + " tok "); lipgloss.Width(t) <= room {
+			return t
+		}
+		return ""
+	}
+	pct := min(100, m.ctxTokens*100/total)
+	tail := mutedStyle.Render(fmt.Sprintf("  %d%% ", pct))
+	closed := m.streaming && time.Since(m.streamStart)/(250*time.Millisecond)%2 == 1
+	if cells := room - lipgloss.Width(tail); cells >= 8 {
+		return pacmanMeter(m.ctxTokens, total, min(cells, 16), closed) + tail
+	}
+	short := lipgloss.NewStyle().Foreground(pacYellowColor).Bold(true).Render("ᗧ") + mutedStyle.Render(fmt.Sprintf(" %d%% ", pct))
+	if lipgloss.Width(short) <= room {
+		return short
+	}
+	return ""
+}

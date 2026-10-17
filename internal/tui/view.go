@@ -123,14 +123,10 @@ func (m *Model) headerView() string {
 	if extra := m.width - lipgloss.Width(left) - lipgloss.Width(suffix) - lipgloss.Width(right) - 4; extra > 0 {
 		right = "  " + m.contextViewCells(16+extra) + " "
 	} else if extra < 0 {
-		// 窄屏：先缩短轨道（最少 4 格），再不够只留百分比，实在放不下才隐藏。
-		cells := 16 + extra
-		if cells >= 4 {
-			right = m.contextViewCells(cells) + " "
-		} else if total := contextWindow(m.modelName); total > 0 {
-			right = mutedStyle.Render(fmt.Sprintf("%d%% ", min(100, m.ctxTokens*100/total)))
-		} else {
-			right = mutedStyle.Render(formatTokens(m.ctxTokens) + " tok ")
+		// 窄屏（按定稿）：先去掉 54k/128k，轨道缩到最少 8 格，再不够只留 ᗧ 42%。
+		right = m.narrowContext(m.width - lipgloss.Width(left) - lipgloss.Width(suffix) - 3)
+		if right == "" {
+			right = m.narrowContext(m.width - lipgloss.Width(left) - 3)
 		}
 		if lipgloss.Width(left)+lipgloss.Width(right)+2 > m.width {
 			right = ""
