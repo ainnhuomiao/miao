@@ -128,11 +128,11 @@ func TestWebFetchBlocksPrivate(t *testing.T) {
 	}))
 	defer srv.Close()
 	for _, u := range []string{srv.URL, strings.Replace(srv.URL, "127.0.0.1", "localhost", 1)} {
-		if _, err := webFetch(context.Background(), u); err == nil || !strings.Contains(err.Error(), "内网") {
+		if _, err := webFetch(context.Background(), u); err == nil || !strings.Contains(err.Error(), "不允许访问内网地址") {
 			t.Errorf("%s 应被拒绝，得到 %v", u, err)
 		}
 	}
-	for ip, want := range map[string]bool{"10.1.2.3": true, "192.168.1.1": true, "169.254.169.254": true, "::1": true, "100.64.0.1": true, "8.8.8.8": false, "2606:4700::1111": false} {
+	for ip, want := range map[string]bool{"10.1.2.3": true, "172.20.0.1": true, "172.32.0.1": false, "192.168.1.1": true, "169.254.169.254": true, "::1": true, "100.64.0.1": true, "8.8.8.8": false, "2606:4700::1111": false} {
 		if got := isPrivateIP(net.ParseIP(ip)); got != want {
 			t.Errorf("isPrivateIP(%s)=%v want %v", ip, got, want)
 		}

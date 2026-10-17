@@ -65,7 +65,7 @@ func webFetchDial(ctx context.Context, network, address string) (net.Conn, error
 			return fmt.Errorf("无法识别地址 %s", host)
 		}
 		if !webFetchAllowPrivate && isPrivateIP(ip) {
-			return fmt.Errorf("禁止访问内网或本机地址 %s", ip)
+			return fmt.Errorf("不允许访问内网地址 %s", ip)
 		}
 		return nil
 	}
@@ -101,7 +101,7 @@ func checkHostPublic(ctx context.Context, host string) error {
 	}
 	for _, ip := range ips {
 		if isPrivateIP(ip.IP) {
-			return fmt.Errorf("禁止访问内网或本机地址 %s（%s）", host, ip.IP)
+			return fmt.Errorf("不允许访问内网地址 %s（%s）", host, ip.IP)
 		}
 	}
 	return nil
