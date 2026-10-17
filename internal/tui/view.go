@@ -234,7 +234,8 @@ func (m *Model) usageText() string {
 // statusDot 是底栏最左的状态：空闲 green ●，思考 mauve、跑工具 peach 的 spinner + 文字 + 计时。
 func (m *Model) statusDot() string {
 	if !m.streaming {
-		return lipgloss.NewStyle().Foreground(agentColor).Render("●")
+		return lipgloss.NewStyle().Foreground(agentColor).Render("●") +
+			lipgloss.NewStyle().Foreground(subtext0Color).Render(" 就绪")
 	}
 	label, color := "思考中", accentColor
 	for i := len(m.messages) - 1; i >= 0; i-- {
@@ -249,30 +250,30 @@ func (m *Model) statusDot() string {
 	sp := m.spinner
 	sp.Style = lipgloss.NewStyle().Foreground(color)
 	elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
-	return sp.View() + lipgloss.NewStyle().Foreground(color).Render(label) +
+	return sp.View() + lipgloss.NewStyle().Foreground(subtext0Color).Render(label) +
 		mutedStyle.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
 }
 
 // barView 拼出极简底栏：不铺底色、没有色块，只有状态点带颜色，其余灰字，宽度对齐对话列。
 //
-//	● deepseek-flash · ~/agnet                 ↑703 ↓78 · 缓存 72%   ? 帮助
+//	~/agnet            ● 就绪 · deepseek-flash · ↑703 ↓78 · 缓存72% · ? 帮助
 func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	w := m.columnWidth()
 	sep := mutedStyle.Render(" · ")
-	left := m.statusDot() + " " + lipgloss.NewStyle().Foreground(textColor).Render(m.modelName)
+	left := ""
 	if showPath {
-		if ws := strings.TrimPrefix(m.workspaceLabel(), "⌂ "); ws != "" {
-			left += sep + mutedStyle.Render(ws)
-		}
+		left = mutedStyle.Render(strings.TrimPrefix(m.workspaceLabel(), "⌂ "))
 	}
-	right := mutedStyle.Render(m.barKeys())
+	parts := []string{m.statusDot(), lipgloss.NewStyle().Foreground(accentColor).Render(m.modelName)}
 	if showUsage {
 		if u := m.usageText(); u != "" {
-			right = mutedStyle.Render(strings.Replace(u, "缓存", "缓存 ", 1)) + "   " + right
+			parts = append(parts, mutedStyle.Render(u))
 		}
 	}
+	parts = append(parts, mutedStyle.Render(m.barKeys()))
+	right := strings.Join(parts, sep)
 	gap := w - lipgloss.Width(left) - lipgloss.Width(right) - 2
-	if gap < 2 {
+	if gap < 1 {
 		return "", false
 	}
 	line := " " + left + strings.Repeat(" ", gap) + right + " "
@@ -652,15 +653,13 @@ func (m *Model) toolCount() int {
 
 func (m *Model) activityView() string {
 	w := max(10, m.columnWidth())
-	bg := lipgloss.NewStyle().Background(surface0Color)
+	bg := lipgloss.NewStyle()
 	bar := bg.Foreground(toolColor).Render("▏")
 	padL := lipgloss.NewStyle().MarginLeft(m.columnMargin())
 
 	rows := m.activityRows()
 	if len(rows) == 0 {
-		line := bar + bg.Foreground(mutedColor).Render("┈ 工具待命")
-		fill := max(0, w-lipgloss.Width(line))
-		return padL.Render(line + bg.Render(strings.Repeat(" ", fill)))
+		return padL.Render(" " + mutedStyle.Render("┈ 工具待命"))
 	}
 	t := rows[0]
 	var icon string
