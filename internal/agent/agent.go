@@ -127,43 +127,12 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 			return fmt.Errorf("模型请求工具调用，但未注册任何工具")
 		}
 
-		for _, tc := range result.ToolCalls {
-			name := tc.Function.Name
-			args := tc.Function.Arguments
-			if err := onEvent(Event{
-				Kind:       EventToolStart,
-				ToolCallID: tc.ID,
-				ToolName:   name,
-				ToolArgs:   args,
-			}); err != nil {
-				rollback()
-				return err
-			}
-
-			start := time.Now()
-			res := a.tools.Call(ctx, name, args)
-			dur := time.Since(start)
-
-			if err := onEvent(Event{
-				Kind:       EventToolEnd,
-				ToolCallID: tc.ID,
-				ToolName:   name,
-				ToolArgs:   args,
-				ToolResult: res.Content,
-				ToolError:  res.IsError,
-				Duration:   dur,
-			}); err != nil {
-				rollback()
-				return err
-			}
-
-			a.history = append(a.history, llm.Message{
-				Role:       llm.RoleTool,
-				Content:    res.Content,
-				ToolCallID: tc.ID,
-				Name:       name,
-			})
+		toolMsgs, err := runToolCalls(ctx, result.ToolCalls, a.tools.Call, onEvent)
+		if err != nil {
+			rollback()
+			return err
 		}
+		a.history = append(a.history, toolMsgs...)
 	}
 	rollback()
 	return fmt.Errorf("工具调用超过上限 %d 轮，已停止", maxToolRounds)
