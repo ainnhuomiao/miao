@@ -56,8 +56,8 @@ func TestHintViewFitsWidth(t *testing.T) {
 		if gw := ansi.StringWidth(got); gw > w {
 			t.Errorf("width %d: 底栏宽 %d 超出", w, gw)
 		}
-		if w >= 100 && ansi.StringWidth(got) != w {
-			t.Errorf("width %d: 宽屏时底栏应铺满整行，实际 %d", w, ansi.StringWidth(got))
+		if want := m.columnMargin() + m.columnWidth(); w >= 100 && ansi.StringWidth(got) != want {
+			t.Errorf("width %d: 底栏应与对话列对齐（宽 %d），实际 %d", w, want, ansi.StringWidth(got))
 		}
 		if w >= 100 && !strings.Contains(ansi.Strip(got), "? 帮助") {
 			t.Errorf("width %d: 宽屏应显示 ? 帮助: %q", w, ansi.Strip(got))

@@ -206,135 +206,96 @@ const keymapText = `键位表
   ?         显示本表（输入框为空时）
   Ctrl+C    退出`
 
-// barSeg 是底栏的一段：已渲染的内容和它的底色（用于箭头过渡）。
-type barSeg struct {
-	text string
-	bg   lipgloss.AdaptiveColor
+// pill 渲染一个圆角胶囊：底色 bg、字色 fg。开了 AGNET_NERD_FONT 时两端用  收口
+// （收口字前景色等于底色、背景透明），否则只是 「 文字 」 加底色。
+func pill(text string, fg, bg lipgloss.AdaptiveColor) string {
+	body := lipgloss.NewStyle().Foreground(fg).Background(bg).Render(" " + text + " ")
+	if !nerdFont {
+		return body
+	}
+	capSt := lipgloss.NewStyle().Foreground(bg)
+	return capSt.Render("\ue0b6") + body + capSt.Render("\ue0b4")
 }
 
-// joinSegs 把若干段连起来；装了 Nerd Font 用  箭头过渡，否则用 mantle 空格分隔。
-// edge 是这一组左右两侧的底色（整条的 mantle）。
-func joinSegs(segs []barSeg, rightAligned bool) string {
-	var b strings.Builder
-	for i, sg := range segs {
-		if rightAligned {
-			prev := mantleColor
-			if i > 0 {
-				prev = segs[i-1].bg
-			}
-			if nerdFont {
-				b.WriteString(lipgloss.NewStyle().Foreground(sg.bg).Background(prev).Render("\ue0b2"))
-			} else if i > 0 {
-				b.WriteString(lipgloss.NewStyle().Background(mantleColor).Render(" "))
-			}
-			b.WriteString(sg.text)
-			continue
-		}
-		b.WriteString(sg.text)
-		next := mantleColor
-		if i+1 < len(segs) {
-			next = segs[i+1].bg
-		}
-		if nerdFont {
-			b.WriteString(lipgloss.NewStyle().Foreground(sg.bg).Background(next).Render("\ue0b0"))
-		} else if i+1 < len(segs) {
-			b.WriteString(lipgloss.NewStyle().Background(mantleColor).Render(" "))
+// statusState 返回当前状态文字和胶囊底色：空闲 green，思考 mauve，跑工具 peach。
+func (m *Model) statusState() (string, lipgloss.AdaptiveColor) {
+	if !m.streaming {
+		return "● 就绪", agentColor
+	}
+	label, bg := "思考中", accentColor
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == roleTool && !m.messages[i].done {
+			label, bg = "工具中", toolColor
+			break
 		}
 	}
-	return b.String()
-}
-
-// statusPill 是右侧状态胶囊：空闲 green，思考 mauve + spinner，跑工具 peach + 计时。
-func (m *Model) statusPill() barSeg {
-	bg, label := agentColor, "● 就绪"
-	if m.streaming {
-		label = "思考中"
-		bg = accentColor
-		for i := len(m.messages) - 1; i >= 0; i-- {
-			if m.messages[i].role == roleTool && !m.messages[i].done {
-				label, bg = "工具中", toolColor
-				break
-			}
-		}
-		if label == "思考中" && m.lastAssistantContent() != "" {
-			label = "生成中"
-		}
-		elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
-		sp := m.spinner
-		sp.Style = lipgloss.NewStyle().Foreground(crustColor).Background(bg)
-		st := lipgloss.NewStyle().Foreground(crustColor).Background(bg)
-		return barSeg{st.Render(" ") + sp.View() + st.Render(fmt.Sprintf("%s %.1fs ", label, elapsed.Seconds())), bg}
+	if label == "思考中" && m.lastAssistantContent() != "" {
+		label = "生成中"
 	}
-	return barSeg{lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(crustColor).Background(bg).Render(label), bg}
+	elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
+	return fmt.Sprintf("%s %s %.1fs", m.spinner.View(), label, elapsed.Seconds()), bg
 }
 
-// barKeys 是底栏右侧的提示：平时只有「? 帮助」，生成和审批时换成当下能用的键。
-func (m *Model) barKeys() [][2]string {
+// barKeys 是底栏最右的灰字提示：平时只有「? 帮助」，生成和审批时换成当下能用的键。
+func (m *Model) barKeys() string {
 	switch {
 	case m.approval != nil:
-		return [][2]string{{"Y", "允许"}, {"N", "拒绝"}, {"Esc", "取消"}}
+		return "Y 允许  N 拒绝  Esc 取消"
 	case m.streaming:
-		return [][2]string{{"Esc", "取消"}}
+		return "Esc 取消"
 	default:
-		return [][2]string{{"?", "帮助"}}
+		return "? 帮助"
 	}
 }
 
-// barView 按显示开关拼出整条底栏；宽度不足时返回 ok=false。
-func (m *Model) barView(showPath, showUsage, showCache, showHelp bool) (string, bool) {
-	left := []barSeg{{segAccentStyle.Render(m.modelName), accentColor}}
-	if showPath {
-		if ws := m.workspaceLabel(); ws != "" {
-			st := lipgloss.NewStyle().Padding(0, 1).Foreground(textColor).Background(surface1Color)
-			left = append(left, barSeg{st.Render(ws), surface1Color})
-		}
+// usageText 是 token 胶囊的文字：↑输入 ↓输出 · 缓存N%；没有用量时为空。
+func (m *Model) usageText() string {
+	u := m.usage
+	if u == nil || (u.PromptTokens == 0 && u.CompletionTokens == 0) {
+		return ""
 	}
-	var right []barSeg
-	if showUsage {
-		if u := m.usageLabel(showCache); u != "" {
-			right = append(right, barSeg{u, surface0Color})
-		}
+	t := "↑" + formatTokens(u.PromptTokens) + " ↓" + formatTokens(u.CompletionTokens)
+	if pct, ok := cachePercent(u); ok {
+		t += fmt.Sprintf(" · 缓存%d%%", pct)
 	}
-	right = append(right, m.statusPill())
+	return t
+}
 
-	l := joinSegs(left, false)
-	r := joinSegs(right, true)
-	mantle := lipgloss.NewStyle().Background(mantleColor)
-	if showHelp {
-		for _, k := range m.barKeys() {
-			r += mantle.Render(" ") + mantle.Foreground(accentColor).Bold(true).Render(k[0]) + mantle.Foreground(mutedColor).Render(" "+k[1])
+// barView 拼出一行底栏（不铺底色，宽度等于对话列宽）；放不下时 ok=false。
+func (m *Model) barView(showPath, showUsage bool) (string, bool) {
+	w := m.columnWidth()
+	left := ""
+	if showPath {
+		if ws := strings.TrimPrefix(m.workspaceLabel(), "⌂ "); ws != "" {
+			left = mutedStyle.Render(ws)
 		}
-		r += mantle.Render(" ")
-	} else {
-		r += mantle.Render(" ")
 	}
-	gap := m.width - lipgloss.Width(l) - lipgloss.Width(r)
+	label, bg := m.statusState()
+	right := []string{pill(label, crustColor, bg), pill(m.modelName, accentColor, surface0Color)}
+	if showUsage {
+		if u := m.usageText(); u != "" {
+			right = append(right, pill(u, subtext0Color, surface0Color))
+		}
+	}
+	r := strings.Join(right, " ") + "  " + mutedStyle.Render(m.barKeys())
+	gap := w - lipgloss.Width(left) - lipgloss.Width(r) - 2
 	if gap < 1 {
 		return "", false
 	}
-	return l + mantle.Render(strings.Repeat(" ", gap)) + r, true
+	line := " " + left + strings.Repeat(" ", gap) + r + " "
+	return lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(line), true
 }
 
-// hintView 是底栏：左边模型和路径，右边用量、状态胶囊和「? 帮助」，整条 mantle 底。
-// 窄屏时依次藏：帮助 → 缓存 → 路径 → 用量；模型名和状态始终保留。
+// hintView 是底栏：左边灰字路径，右边状态、模型、token 三个圆角胶囊和灰字「? 帮助」。
+// 窄屏时先藏 token 胶囊，再藏路径。
 func (m *Model) hintView() string {
-	tries := [][4]bool{
-		{true, true, true, true},
-		{true, true, true, false},
-		{true, true, false, false},
-		{false, true, false, false},
-		{false, false, false, false},
-	}
-	for _, t := range tries {
-		if out, ok := m.barView(t[0], t[1], t[2], t[3]); ok {
+	for _, t := range [][2]bool{{true, true}, {true, false}, {false, false}} {
+		if out, ok := m.barView(t[0], t[1]); ok {
 			return out
 		}
 	}
-	out, _ := m.barView(false, false, false, false)
-	if out == "" {
-		return truncateWidth(m.modelName, m.width)
-	}
-	return out
+	label, bg := m.statusState()
+	return truncateWidth(pill(label, crustColor, bg)+" "+m.modelName, m.width)
 }
 
 // usageLabel 渲染用量段：↑输入 ↓输出，接口返回缓存数据时再加 green 色缓存率。
