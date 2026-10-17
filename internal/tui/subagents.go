@@ -19,6 +19,7 @@ const (
 	subRowEnabled = "开关"
 	subRowMax     = "并发上限"
 	subRowFollow  = "跟随主模型"
+	subRowWeb     = "允许联网"
 )
 
 // subagentState 记录子代理的累计用量（不计入 ctxTokens）。
@@ -59,6 +60,7 @@ func (m *Model) subagentsMatches() []paletteCmd {
 		{name: subRowEnabled, desc: on},
 		{name: subRowMax, desc: fmt.Sprintf("%d（←/→ 或 +/- 调整，1~8）", cfg.Max)},
 	}
+	rows = append(rows, subWebRow(cfg))
 	follow := paletteCmd{name: subRowFollow, desc: "子代理模型：使用主代理当前模型（" + m.modelName + "）"}
 	if cfg.Model == "" {
 		follow.desc += " ✓"
@@ -100,6 +102,8 @@ func (m *Model) handleSubagentsKey(msg tea.KeyMsg, matches []paletteCmd) (bool, 
 			return true, nil
 		case subRowFollow:
 			cfg.Model = ""
+		case subRowWeb:
+			cfg.AllowWeb = !cfg.AllowWeb
 		default:
 			cfg.Model = sel
 		}

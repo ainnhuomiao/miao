@@ -19,6 +19,8 @@ type Config struct {
 	Enabled bool   `json:"enabled"`
 	Max     int    `json:"max"`
 	Model   string `json:"model"`
+	// AllowWeb 为 true 时子代理额外获得 web_fetch（默认关闭，防止数据外传）。
+	AllowWeb bool `json:"allow_web"`
 }
 
 // Defaults 返回默认配置：关闭、并发 3、跟随主模型。

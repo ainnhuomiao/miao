@@ -33,7 +33,8 @@ const (
 // Manager 持有子代理配置，并按配置在主注册表里注册或移除 task 工具。
 type Manager struct {
 	reg       *tools.Registry
-	sub       *tools.Registry
+	sub       *tools.Registry // 本地只读工具
+	subWeb    *tools.Registry // 本地只读工具 + web_fetch（allow_web 时）
 	client    llm.Client
 	mainModel func() string
 
@@ -60,6 +61,7 @@ func New(reg *tools.Registry, client llm.Client, mainModel func() string, cfg Co
 	m := &Manager{
 		reg:       reg,
 		sub:       full.Subset(AllowedTools...),
+		subWeb:    full.Subset(append(append([]string{}, AllowedTools...), WebTool)...),
 		client:    client,
 		mainModel: mainModel,
 		MaxSteps:  DefaultMaxSteps,
@@ -72,8 +74,13 @@ func New(reg *tools.Registry, client llm.Client, mainModel func() string, cfg Co
 	return m
 }
 
-// SubTools 返回子代理可用的工具注册表（测试用）。
-func (m *Manager) SubTools() *tools.Registry { return m.sub }
+// SubTools 返回按当前配置子代理可用的工具注册表。
+func (m *Manager) SubTools() *tools.Registry {
+	if m.Config().AllowWeb {
+		return m.subWeb
+	}
+	return m.sub
+}
 
 // Config 返回当前配置。
 func (m *Manager) Config() Config {
@@ -201,7 +208,8 @@ func (m *Manager) run(ctx context.Context, args json.RawMessage) tools.Result {
 	r := &Runner{
 		Client:     m.client,
 		Model:      model,
-		Tools:      m.sub,
+		Tools:      m.SubTools(),
+		System:     subSystemPrompt(cfg.AllowWeb),
 		MaxSteps:   m.MaxSteps,
 		OnActivity: progress,
 		OnUsage:    usageSink(ctx),
@@ -246,4 +254,11 @@ func Setup(reg *tools.Registry, client llm.Client, mainModel func() string) (*Ma
 	m := New(reg, client, mainModel, cfg)
 	SetCurrent(m)
 	return m, err
+}
+
+func subSystemPrompt(allowWeb bool) string {
+	if allowWeb {
+		return SystemPrompt + webPromptNote
+	}
+	return SystemPrompt
 }

@@ -239,3 +239,30 @@ func TestConcurrencyLimit(t *testing.T) {
 		t.Fatal("结束后运行数应为 0")
 	}
 }
+
+func TestSubToolsNoWebByDefault(t *testing.T) {
+	m, _ := newMgr(t, &fakeClient{}, Config{Enabled: true})
+	if hasDef(m.SubTools(), WebTool) {
+		t.Fatal("默认不应给子代理 web_fetch")
+	}
+	for _, n := range AllowedTools {
+		if n == WebTool {
+			t.Fatal("白名单不应含 web_fetch")
+		}
+	}
+	if strings.Contains(subSystemPrompt(false), "web_fetch") {
+		t.Fatal("默认提示词不应提联网")
+	}
+}
+
+func TestSubToolsAllowWeb(t *testing.T) {
+	m, _ := newMgr(t, &fakeClient{}, Config{Enabled: true, AllowWeb: true})
+	sub := m.SubTools()
+	if !hasDef(sub, WebTool) || len(sub.Definitions()) != len(AllowedTools)+1 {
+		t.Fatalf("允许联网时应多 web_fetch：%d", len(sub.Definitions()))
+	}
+	_ = m.SetConfig(Config{Enabled: true})
+	if hasDef(m.SubTools(), WebTool) {
+		t.Fatal("关闭允许联网后应移除 web_fetch")
+	}
+}

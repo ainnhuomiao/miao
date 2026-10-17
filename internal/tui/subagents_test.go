@@ -106,6 +106,18 @@ func TestSubagentsMenuSavesConfig(t *testing.T) {
 	if c, _ := subagent.LoadConfig(); c.Max != 1 {
 		t.Fatalf("应夹到 1 并保存：%+v", c)
 	}
+	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // 允许联网
+	if !strings.Contains(m.paletteView(), "允许联网") || mgr.SubTools().Has("web_fetch") {
+		t.Fatal("默认应关闭联网")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if c, _ := subagent.LoadConfig(); !c.AllowWeb || !mgr.SubTools().Has("web_fetch") {
+		t.Fatalf("Enter 应开启联网并保存：%+v", c)
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if mgr.Config().AllowWeb || mgr.SubTools().Has("web_fetch") {
+		t.Fatal("再次 Enter 应关闭联网")
+	}
 	m.Update(tea.KeyMsg{Type: tea.KeyDown})
 	m.Update(tea.KeyMsg{Type: tea.KeyDown}) // 第一个具体模型
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
