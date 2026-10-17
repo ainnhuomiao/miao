@@ -136,3 +136,18 @@ func TestRunCommand_ApprovalGate(t *testing.T) {
 		t.Fatalf("expected path reject: %+v", res)
 	}
 }
+
+func TestNeedsApproval(t *testing.T) {
+	cases := map[string]bool{
+		"ls": false, "git status": false, "git push": true, "git reset --hard": true,
+		"go test ./...": false, "go run .": true, "go env -w X=1": true, "make": true,
+		"env rm x": true, "sed -i s/a/b/ f": true, "find . -name x": false,
+		"find . -delete": true, "find . -exec rm {} ;": true, "sort -o f f": true,
+	}
+	for c, want := range cases {
+		f := strings.Fields(c)
+		if got := needsApproval(f[0], f[1:]); got != want {
+			t.Errorf("%q: got %v want %v", c, got, want)
+		}
+	}
+}

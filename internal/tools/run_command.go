@@ -22,9 +22,9 @@ const (
 var commandAllowlist = map[string]struct{}{
 	"go": {}, "git": {}, "ls": {}, "cat": {}, "head": {}, "tail": {},
 	"wc": {}, "rg": {}, "grep": {}, "find": {}, "pwd": {}, "echo": {},
-	"date": {}, "make": {}, "uname": {}, "which": {}, "file": {}, "stat": {},
+	"date": {}, "uname": {}, "which": {}, "file": {}, "stat": {},
 	"diff": {}, "sort": {}, "uniq": {}, "basename": {},
-	"dirname": {}, "env": {}, "true": {}, "false": {}, "test": {},
+	"dirname": {}, "true": {}, "false": {}, "test": {},
 }
 
 func registerRunCommand(r *Registry) {
@@ -63,7 +63,7 @@ func registerRunCommand(r *Registry) {
 			}
 
 			display := formatCommandDisplay(name, in.Args)
-			if _, ok := commandAllowlist[name]; !ok {
+			if needsApproval(name, in.Args) {
 				approver := r.Approver()
 				if approver == nil {
 					return Result{
@@ -168,4 +168,47 @@ func truncateOutput(s string, max int) string {
 		return s
 	}
 	return s[:max] + "\n\n…(已截断)"
+}
+
+// 这些命令名在白名单里，但只有部分子命令/参数是只读安全的。
+var (
+	gitReadOnly = map[string]bool{"status": true, "log": true, "diff": true, "show": true,
+		"rev-parse": true, "ls-files": true, "blame": true, "shortlog": true, "describe": true}
+	goSafe = map[string]bool{"build": true, "test": true, "vet": true, "version": true,
+		"list": true, "doc": true, "env": true}
+	findDanger = map[string]bool{"-exec": true, "-execdir": true, "-ok": true, "-okdir": true,
+		"-delete": true, "-fprint": true, "-fprint0": true, "-fprintf": true, "-fls": true}
+)
+
+// needsApproval 判断命令是否要走审批：白名单外，或白名单内但带写入/任意执行能力的用法。
+func needsApproval(name string, args []string) bool {
+	if _, ok := commandAllowlist[name]; !ok {
+		return true
+	}
+	first := ""
+	if len(args) > 0 {
+		first = args[0]
+	}
+	switch name {
+	case "git":
+		return !gitReadOnly[first]
+	case "go":
+		if first == "env" && len(args) > 1 && strings.HasPrefix(args[1], "-w") {
+			return true
+		}
+		return !goSafe[first]
+	case "find":
+		for _, a := range args {
+			if findDanger[a] {
+				return true
+			}
+		}
+	case "sort":
+		for _, a := range args {
+			if a == "-o" || strings.HasPrefix(a, "--output") {
+				return true
+			}
+		}
+	}
+	return false
 }
