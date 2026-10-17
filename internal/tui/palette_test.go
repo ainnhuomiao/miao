@@ -41,6 +41,13 @@ func TestPaletteSlashShowsAll(t *testing.T) {
 			t.Fatalf("渲染中缺少 %s", c.name)
 		}
 	}
+	if !strings.Contains(view, "↓") {
+		t.Fatal("命令超过 8 条时最后一行应有灰字 ↓")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyUp}) // 第一项按 ↑ 跳到最后一项
+	if v := ansi.Strip(m.View()); !strings.Contains(v, "/exit") {
+		t.Fatal("↑ 回到最后一项后 /exit 应滚出来")
+	}
 	if strings.Contains(view, "工具待命") {
 		t.Fatal("菜单应替代工具状态行")
 	}

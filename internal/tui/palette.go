@@ -255,7 +255,12 @@ func (m *Model) paletteView() string {
 		} else {
 			line = "  " + nameStyle.Render(name)
 		}
-		lines = append(lines, line+"  "+desc)
+		line += "  " + desc
+		if i == end-1 && end < len(matches) { // 下面还有命令：最后一行右侧灰字 ↓
+			line = truncateWidth(line, w-2)
+			line += strings.Repeat(" ", max(1, w-1-lipgloss.Width(line))) + mutedStyle.Render("↓")
+		}
+		lines = append(lines, line)
 	}
 	return pad.Render(strings.Join(lines, "\n"))
 }
