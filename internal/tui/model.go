@@ -88,6 +88,7 @@ type approvalState struct {
 type Model struct {
 	side      sidebarState // 左侧会话侧栏
 	git       gitState     // /commit 进行中
+	sub       subagentState
 	ag        *agent.Agent
 	modelName string
 
@@ -537,6 +538,9 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 			}
 		}
 		return m, waitForEvent(m.events)
+	case agent.EventSubagentUsage:
+		m.addSubagentUsage(msg.usage)
+		return m, waitForEvent(m.events)
 	case agent.EventDelta:
 		last := m.lastAssistant()
 		if last == nil || last.done {
@@ -676,6 +680,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		} else {
 			m.applyTheme(fields[1])
 		}
+
+	case "/subagents":
+		m.openSubagentsMenu()
 
 	case "/mcp":
 		m.notice(mcpSummary())

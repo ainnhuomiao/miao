@@ -36,7 +36,7 @@ func joinActivity(w int, prefix, text string, textStyle lipgloss.Style, right st
 // liveActivityView：命令运行中且有实时输出时，工具行显示 peach 竖线 + 最新一行输出。
 func (m *Model) liveActivityView(w int) (string, bool) {
 	rows := m.activityRows()
-	if len(rows) == 0 || rows[0].done || rows[0].toolLive == "" {
+	if len(rows) == 0 || rows[0].done || rows[0].toolLive == "" || rows[0].toolName == "task" { // task 的进度由子代理状态行显示
 		return "", false
 	}
 	live := strings.TrimSpace(firstLine(strings.ReplaceAll(rows[0].toolLive, "\t", " ")))

@@ -58,9 +58,9 @@ func TestPaletteSlashShowsAll(t *testing.T) {
 
 func TestPaletteFilterPrefix(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
-	typeText(m, "/se")
+	typeText(m, "/sess")
 	if got := paletteNames(m); len(got) != 1 || got[0] != "/sessions" {
-		t.Fatalf("/se 匹配 %v，想要 [/sessions]", got)
+		t.Fatalf("/sess 匹配 %v，想要 [/sessions]", got)
 	}
 }
 

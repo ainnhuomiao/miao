@@ -31,6 +31,8 @@ const (
 	EventUsage
 	// EventToolProgress 推送工具运行中的最新一行输出（放在 ToolResult）。
 	EventToolProgress
+	// EventSubagentUsage 推送子代理一次模型请求的用量（计入会话用量，不影响上下文大小）。
+	EventSubagentUsage
 )
 
 // Event 是 Agent 向 UI 推送的进度。
@@ -93,6 +95,9 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 	}
 
 	for round := 0; round < maxToolRounds; round++ {
+		if a.tools != nil {
+			defs = a.tools.Definitions() // 每次请求重新取：/subagents 开关、MCP 工具即时生效
+		}
 		messages := a.requestMessages()
 		result, err := a.client.StreamChat(ctx, llm.ChatRequest{
 			Messages: messages,

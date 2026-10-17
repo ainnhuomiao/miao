@@ -16,6 +16,7 @@ import (
 	"agnet/internal/llm"
 	"agnet/internal/mcp"
 	"agnet/internal/repl"
+	"agnet/internal/subagent"
 	"agnet/internal/tools"
 	"agnet/internal/tui"
 )
@@ -60,6 +61,9 @@ func run() error {
 	ag := agent.New(client, system, reg)
 	ag.SetAgentsMDLoaded(md != "")
 	ag.SetAllowedCommands(agent.AllowedCommandsFromEnv())
+	if _, err := subagent.Setup(reg, client, ag.Model); err != nil {
+		fmt.Fprintf(os.Stderr, "读取子代理配置失败：%v\n", err)
+	}
 
 	if headlessMode {
 		mode, err := headless.ParseMode(*modeFlag)

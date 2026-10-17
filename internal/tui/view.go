@@ -38,6 +38,7 @@ const helpText = `命令:
   /commit     模型写提交信息，确认后只提交本会话改过的文件
   /model      切换模型（/model <名字>）
   /theme      切换主题（/theme <名字>，↑↓ 实时预览）
+  /subagents  子代理设置（开关、并发上限、模型）
   /mcp        查看 MCP 服务器状态与工具数
   /reasoning  展开或收起思考过程
   /exit       退出
@@ -659,6 +660,9 @@ func (m *Model) activityView() string {
 	padL := lipgloss.NewStyle().MarginLeft(m.columnMargin())
 
 	if v, ok := m.liveActivityView(w); ok {
+		return padL.Render(v)
+	}
+	if v, ok := m.subagentActivityView(w); ok {
 		return padL.Render(v)
 	}
 	if v, ok := m.todoActivityView(w); ok {

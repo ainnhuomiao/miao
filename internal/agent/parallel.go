@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"agnet/internal/llm"
+	"agnet/internal/subagent"
 	"agnet/internal/tools"
 )
 
@@ -23,6 +24,7 @@ var readOnlyTools = map[string]bool{
 	"grep":      true,
 	"glob":      true,
 	"web_fetch": true,
+	"task":      true, // 只读子代理；并发数由 subagent.Manager 的信号量限制
 }
 
 // isReadOnlyTool 报告工具是否可并发执行。
@@ -79,6 +81,7 @@ func runToolCalls(ctx context.Context, calls []llm.ToolCall, call toolCaller, on
 		pctx := tools.WithProgress(runCtx, func(line string) {
 			emit(Event{Kind: EventToolProgress, ToolCallID: tc.ID, ToolName: name, ToolResult: line})
 		})
+		pctx = subagent.WithUsageSink(pctx, func(u llm.Usage) { emit(Event{Kind: EventSubagentUsage, ToolCallID: tc.ID, ToolName: name, Usage: &u}) })
 		res := safeCall(pctx, call, name, args)
 		emit(Event{
 			Kind:       EventToolEnd,

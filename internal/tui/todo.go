@@ -76,7 +76,7 @@ func (m *Model) todoActivityView(w int) (string, bool) {
 
 // toggleTodoPanel 响应 Ctrl+T；无清单时给出灰色提示。
 func (m *Model) toggleTodoPanel() {
-	if len(m.currentTodos()) == 0 {
+	if len(m.currentTodos()) == 0 && !m.subagentsRunning() {
 		m.todoPanel = false
 		m.notice("当前没有任务清单。")
 		m.layout()
@@ -87,7 +87,7 @@ func (m *Model) toggleTodoPanel() {
 }
 
 func (m *Model) todoPanelVisible() bool {
-	return m.todoPanel && !m.paletteOpen() && m.approval == nil && len(m.currentTodos()) > 0
+	return m.todoPanel && !m.paletteOpen() && m.approval == nil && (len(m.currentTodos()) > 0 || m.subagentsRunning())
 }
 
 // todoPanelHeight 是面板占用的行数（未显示为 0）。
@@ -119,6 +119,7 @@ func (m *Model) todoPanelLines() []string {
 		more := len(lines) - (todoPanelMaxLines - 1)
 		lines = append(lines[:todoPanelMaxLines-1], mutedStyle.Render(fmt.Sprintf(" … 还有 %d 项", more)))
 	}
+	lines = append(lines, m.subagentPanelLines(w)...)
 	return lines
 }
 

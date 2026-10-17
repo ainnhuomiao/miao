@@ -40,7 +40,7 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 	}
 
 	payload, err := json.Marshal(chatRequest{
-		Model:         c.Model(),
+		Model:         firstNonEmptyModel(req.Model, c.Model()),
 		Messages:      req.Messages,
 		Tools:         req.Tools,
 		Stream:        true,
@@ -262,4 +262,11 @@ type streamResponse struct {
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`
+}
+
+func firstNonEmptyModel(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }

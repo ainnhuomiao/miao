@@ -45,6 +45,7 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/commit", desc: "让模型写提交信息，确认后提交本会话改过的文件"},
 		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
 		{name: "/theme", desc: "切换主题（当前：" + m.savedTheme() + "）", needArg: true},
+		{name: "/subagents", desc: "子代理设置：开关、并发上限、模型", needArg: true},
 		{name: "/mcp", desc: "查看 MCP 服务器状态与工具"},
 		{name: "/reasoning", desc: "思考过程：展开/收起（当前：" + reasoning + "）"},
 		{name: "/exit", desc: "退出"},
@@ -58,6 +59,9 @@ func (m *Model) paletteOpen() bool {
 	}
 	v := m.input.Value()
 	if _, ok := m.atMode(); ok {
+		return !(m.palette.esc && v == m.palette.hidden)
+	}
+	if m.subagentsMode() {
 		return !(m.palette.esc && v == m.palette.hidden)
 	}
 	if _, ok := m.themeMode(); ok {
@@ -76,6 +80,9 @@ func (m *Model) paletteOpen() bool {
 func (m *Model) paletteMatches() []paletteCmd {
 	if q, ok := m.atMode(); ok {
 		return m.atMatches(q)
+	}
+	if m.subagentsMode() {
+		return m.subagentsMatches()
 	}
 	if q, ok := m.modelMode(); ok {
 		return m.modelMatches(q)
@@ -165,6 +172,9 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return false, nil
 	}
 	matches := m.paletteMatches()
+	if ok, cmd := m.handleSubagentsKey(msg, matches); ok {
+		return true, cmd
+	}
 	switch msg.String() {
 	case "up", "down":
 		if len(matches) == 0 {
@@ -292,7 +302,7 @@ func (m *Model) paletteView() string {
 	all := m.paletteCommands()
 	if _, ok := m.modelMode(); ok {
 		all = matches
-	} else if _, ok := m.themeMode(); ok {
+	} else if _, ok := m.themeMode(); ok || m.subagentsMode() {
 		all = matches
 	} else if _, ok := m.atMode(); ok {
 		all = matches[m.palette.top:min(len(matches), m.palette.top+m.paletteWindow())]

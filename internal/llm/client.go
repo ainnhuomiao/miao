@@ -70,6 +70,7 @@ type DeltaHandler func(Delta) error
 type ChatRequest struct {
 	Messages []Message
 	Tools    []ToolDef
+	Model    string // 非空时覆盖客户端当前模型（子代理用，不改变主模型）
 }
 
 // ChatResult 是一次流式请求聚合后的助手回合。
