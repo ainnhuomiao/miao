@@ -3,8 +3,8 @@ package repl
 
 import (
 	"bufio"
-	"encoding/json"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
