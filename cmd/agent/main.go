@@ -77,6 +77,7 @@ func run() error {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
+		defer ag.KillJobs() // 不留下后台命令
 		return headless.Run(ctx, ag, text, os.Stdout, os.Stderr, *verbose)
 	}
 

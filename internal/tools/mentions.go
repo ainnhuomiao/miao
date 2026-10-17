@@ -64,6 +64,10 @@ func (r *Registry) ExpandMentions(text string) (expanded string, attached, warni
 	for _, p := range MentionedPaths(text) {
 		full, err := r.ResolvePath(p)
 		if err != nil {
+			continue // 绝对路径、../ 越界：静默忽略
+		}
+		if err := r.checkNoSymlinkEscape(full); err != nil {
+			warnings = append(warnings, "@"+p+" 未附加：符号链接指向工作区外")
 			continue
 		}
 		info, err := os.Stat(full)

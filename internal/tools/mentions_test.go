@@ -2,6 +2,8 @@ package tools
 
 import (
 	"context"
+	"os"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -59,5 +61,30 @@ func TestListFilesSkipsIgnoredAndSensitive(t *testing.T) {
 	}
 	if got, _ := r.ListFiles(context.Background(), 1); len(got) != 1 {
 		t.Fatalf("limit 无效：%q", got)
+	}
+}
+
+func TestExpandMentionsBoundary(t *testing.T) {
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "id_rsa"), []byte("SECRET-KEY"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	r := newSearchRegistry(t, map[string]string{"ok.go": "package ok"})
+	if err := os.Symlink(filepath.Join(outside, "id_rsa"), filepath.Join(r.workspace, "link")); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(outside, filepath.Join(r.workspace, "dirlink")); err != nil {
+		t.Fatal(err)
+	}
+	abs := filepath.Join(outside, "id_rsa")
+	out, att, warn := r.ExpandMentions("@../../.ssh/id_rsa @" + abs + " @/etc/passwd @link @dirlink/id_rsa @ok.go")
+	if strings.Contains(out, "SECRET-KEY") || strings.Contains(out, "root:") {
+		t.Fatalf("越界内容被附加：%q", out)
+	}
+	if strings.Join(att, ",") != "ok.go" {
+		t.Fatalf("attached=%q", att)
+	}
+	if ws := strings.Join(warn, "\n"); !strings.Contains(ws, "@link 未附加") || !strings.Contains(ws, "@dirlink/id_rsa 未附加") {
+		t.Fatalf("符号链接越界应提示：%q", warn)
 	}
 }
