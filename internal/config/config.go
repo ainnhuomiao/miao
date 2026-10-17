@@ -28,7 +28,7 @@ type Config struct {
 func Load() (Config, error) {
 	loadDotEnv(".env")
 
-	ws := firstEnv("AGENT_WORKSPACE")
+	ws := firstEnv(AgentEnvNames("WORKSPACE")...)
 	if ws == "" {
 		cwd, err := os.Getwd()
 		if err != nil {
@@ -42,13 +42,13 @@ func Load() (Config, error) {
 	}
 
 	cfg := Config{
-		APIKey: firstEnv("AGENT_API_KEY", "DEEPSEEK_API_KEY"),
+		APIKey: firstEnv(append(AgentEnvNames("API_KEY"), "DEEPSEEK_API_KEY")...),
 		BaseURL: firstNonEmpty(
-			firstEnv("AGENT_BASE_URL", "DEEPSEEK_BASE_URL"),
+			firstEnv(append(AgentEnvNames("BASE_URL"), "DEEPSEEK_BASE_URL")...),
 			defaultBaseURL,
 		),
 		Model: firstNonEmpty(
-			firstEnv("AGENT_MODEL", "DEEPSEEK_MODEL"),
+			firstEnv(append(AgentEnvNames("MODEL"), "DEEPSEEK_MODEL")...),
 			defaultModel,
 		),
 		Workspace: abs,
@@ -56,7 +56,7 @@ func Load() (Config, error) {
 
 	if cfg.APIKey == "" {
 		return Config{}, fmt.Errorf(
-			"缺少 API Key：请执行 `cp .env.example .env`，然后填入 AGENT_API_KEY")
+			"缺少 API Key：请执行 `cp .env.example .env`，然后填入 MIAO_API_KEY")
 	}
 	return cfg, nil
 }

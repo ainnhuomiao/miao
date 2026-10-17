@@ -8,3 +8,6 @@ bin/
 *.out
 /agent
 /miao
+
+# nix build 产物
+result
