@@ -206,36 +206,6 @@ const keymapText = `键位表
   ?         显示本表（输入框为空时）
   Ctrl+C    退出`
 
-// pill 渲染一个圆角胶囊：底色 bg、字色 fg。开了 AGNET_NERD_FONT 时两端用  收口
-// （收口字前景色等于底色、背景透明），否则只是 「 文字 」 加底色。
-func pill(text string, fg, bg lipgloss.AdaptiveColor) string {
-	body := lipgloss.NewStyle().Foreground(fg).Background(bg).Render(" " + text + " ")
-	if !nerdFont {
-		return body
-	}
-	capSt := lipgloss.NewStyle().Foreground(bg)
-	return capSt.Render("\ue0b6") + body + capSt.Render("\ue0b4")
-}
-
-// statusState 返回当前状态文字和胶囊底色：空闲 green，思考 mauve，跑工具 peach。
-func (m *Model) statusState() (string, lipgloss.AdaptiveColor) {
-	if !m.streaming {
-		return "● 就绪", agentColor
-	}
-	label, bg := "思考中", accentColor
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].role == roleTool && !m.messages[i].done {
-			label, bg = "工具中", toolColor
-			break
-		}
-	}
-	if label == "思考中" && m.lastAssistantContent() != "" {
-		label = "生成中"
-	}
-	elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
-	return fmt.Sprintf("%s %s %.1fs", m.spinner.View(), label, elapsed.Seconds()), bg
-}
-
 // barKeys 是底栏最右的灰字提示：平时只有「? 帮助」，生成和审批时换成当下能用的键。
 func (m *Model) barKeys() string {
 	switch {
@@ -261,41 +231,62 @@ func (m *Model) usageText() string {
 	return t
 }
 
-// barView 拼出一行底栏（不铺底色，宽度等于对话列宽）；放不下时 ok=false。
+// statusDot 是底栏最左的状态：空闲 green ●，思考 mauve、跑工具 peach 的 spinner + 文字 + 计时。
+func (m *Model) statusDot() string {
+	if !m.streaming {
+		return lipgloss.NewStyle().Foreground(agentColor).Render("●")
+	}
+	label, color := "思考中", accentColor
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == roleTool && !m.messages[i].done {
+			label, color = "工具中", toolColor
+			break
+		}
+	}
+	if label == "思考中" && m.lastAssistantContent() != "" {
+		label = "生成中"
+	}
+	sp := m.spinner
+	sp.Style = lipgloss.NewStyle().Foreground(color)
+	elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
+	return sp.View() + lipgloss.NewStyle().Foreground(color).Render(label) +
+		mutedStyle.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
+}
+
+// barView 拼出极简底栏：不铺底色、没有色块，只有状态点带颜色，其余灰字，宽度对齐对话列。
+//
+//	● deepseek-flash · ~/agnet                 ↑703 ↓78 · 缓存 72%   ? 帮助
 func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	w := m.columnWidth()
-	left := ""
+	sep := mutedStyle.Render(" · ")
+	left := m.statusDot() + " " + lipgloss.NewStyle().Foreground(textColor).Render(m.modelName)
 	if showPath {
 		if ws := strings.TrimPrefix(m.workspaceLabel(), "⌂ "); ws != "" {
-			left = mutedStyle.Render(ws)
+			left += sep + mutedStyle.Render(ws)
 		}
 	}
-	label, bg := m.statusState()
-	right := []string{pill(label, crustColor, bg), pill(m.modelName, accentColor, surface0Color)}
+	right := mutedStyle.Render(m.barKeys())
 	if showUsage {
 		if u := m.usageText(); u != "" {
-			right = append(right, pill(u, subtext0Color, surface0Color))
+			right = mutedStyle.Render(strings.Replace(u, "缓存", "缓存 ", 1)) + "   " + right
 		}
 	}
-	r := strings.Join(right, " ") + "  " + mutedStyle.Render(m.barKeys())
-	gap := w - lipgloss.Width(left) - lipgloss.Width(r) - 2
-	if gap < 1 {
+	gap := w - lipgloss.Width(left) - lipgloss.Width(right) - 2
+	if gap < 2 {
 		return "", false
 	}
-	line := " " + left + strings.Repeat(" ", gap) + r + " "
+	line := " " + left + strings.Repeat(" ", gap) + right + " "
 	return lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(line), true
 }
 
-// hintView 是底栏：左边灰字路径，右边状态、模型、token 三个圆角胶囊和灰字「? 帮助」。
-// 窄屏时先藏 token 胶囊，再藏路径。
+// hintView 是极简底栏。窄屏时先藏 token，再藏路径。
 func (m *Model) hintView() string {
 	for _, t := range [][2]bool{{true, true}, {true, false}, {false, false}} {
 		if out, ok := m.barView(t[0], t[1]); ok {
 			return out
 		}
 	}
-	label, bg := m.statusState()
-	return truncateWidth(pill(label, crustColor, bg)+" "+m.modelName, m.width)
+	return truncateWidth(m.statusDot()+" "+m.modelName, m.width)
 }
 
 // usageLabel 渲染用量段：↑输入 ↓输出，接口返回缓存数据时再加 green 色缓存率。

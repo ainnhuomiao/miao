@@ -69,10 +69,10 @@ func TestHintViewNarrowKeepsModelAndStatus(t *testing.T) {
 	m := &Model{ag: agent.New(nil, "", nil), modelName: "deepseek-flash", width: 30,
 		usage: &llm.Usage{PromptTokens: 7700, CompletionTokens: 939, PromptCacheHitTokens: 2700}}
 	got := ansi.Strip(m.hintView())
-	if !strings.Contains(got, "deepseek-flash") || !strings.Contains(got, "就绪") {
+	if !strings.Contains(got, "deepseek-flash") || !strings.Contains(got, "●") {
 		t.Fatalf("窄屏应保留模型名和状态: %q", got)
 	}
-	if strings.Contains(got, "帮助") || strings.Contains(got, "缓存") {
-		t.Fatalf("窄屏应先藏帮助和缓存: %q", got)
+	if strings.Contains(got, "缓存") {
+		t.Fatalf("窄屏应先藏 token 和缓存: %q", got)
 	}
 }
