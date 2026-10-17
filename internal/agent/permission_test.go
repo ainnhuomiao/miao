@@ -42,6 +42,9 @@ func TestPermissionDecisions(t *testing.T) {
 		{name: "白名单不放行 &&", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", "&&", "rm", "-rf", "x"), wantAsked: true, wantAllowed: true},
 		{name: "白名单不放行换行", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test\nrm"), wantAsked: true, wantAllowed: true},
 		{name: "白名单不放行反引号和重定向", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", "`id`", ">x"), wantAsked: true, wantAllowed: true},
+		{name: "sh -c 即使在白名单也要审批", allow: []string{"sh", "bash -c"}, tool: "run_command", args: cmd("sh", "-c", "rm -rf x"), wantAsked: true, wantAllowed: true},
+		{name: "带路径的 bash 也要审批", allow: []string{"/bin/bash"}, tool: "run_command", args: cmd("/bin/bash", "-c", "id"), wantAsked: true, wantAllowed: true},
+		{name: "env 包装也要审批", allow: []string{"env"}, tool: "run_command", args: cmd("env", "go", "test"), wantAsked: true, wantAllowed: true},
 		{name: "会话放行编辑整类", session: []struct {
 			tool string
 			args json.RawMessage

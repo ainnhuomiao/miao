@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 
@@ -141,6 +142,14 @@ func matchPrefix(line, prefix string) bool {
 	return line == prefix || strings.HasPrefix(line, prefix+" ")
 }
 
+// neverAutoAllow 是能执行任意代码的程序：哪怕写进白名单也每次都要用户确认。
+var neverAutoAllow = map[string]bool{
+	"sh": true, "bash": true, "zsh": true, "fish": true, "dash": true, "ksh": true,
+	"env": true, "xargs": true, "sudo": true, "doas": true, "nohup": true, "timeout": true, "nice": true,
+	"python": true, "python3": true, "perl": true, "ruby": true, "node": true, "deno": true, "bun": true,
+	"lua": true, "php": true, "nix-shell": true, "eval": true, "exec": true, "busybox": true,
+}
+
 // decide 返回 (decided, allow)：decided=false 表示要交给用户确认。
 func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool) {
 	p.mu.Lock()
@@ -158,7 +167,7 @@ func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool)
 		name, cargs, ok := parseCommand(args)
 		raw := strings.Join(append([]string{name}, cargs...), " ")
 		// 危险参数（-exec、-toolexec、-o…）和 shell 元字符、换行一律交给用户确认，白名单不放行。
-		if !ok || tools.HasDangerousFlag(name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
+		if !ok || neverAutoAllow[filepath.Base(name)] || tools.HasDangerousFlag(name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
 			return false, false
 		}
 		line := commandLine(args)
