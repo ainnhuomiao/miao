@@ -92,16 +92,28 @@ func TestColumnWidthAndCentering(t *testing.T) {
 	}
 }
 
-func TestColumnUsesMainAreaWhenDrawerOpen(t *testing.T) {
-	m := newTestModel(t, 140, 30, "ok")
-	m.drawerOpen = true
-	m.layout()
-	main := 140 - drawerWidth(140)
-	if m.viewport.Width != main {
-		t.Fatalf("抽屉打开后主区宽=%d，想要 %d", m.viewport.Width, main)
-	}
-	if got := m.columnWidth(); got != min(main, columnMax) {
-		t.Fatalf("抽屉打开后 columnWidth=%d，想要 %d", got, min(main, columnMax))
+func TestDrawerPanelAboveInput(t *testing.T) {
+	for _, h := range []int{16, 30, 50} {
+		m := newTestModel(t, 140, h, "ok")
+		m.drawerOpen = true
+		m.layout()
+		if m.viewport.Width != 140 {
+			t.Fatalf("高 %d：面板打开后对话区应占满宽度，得到 %d", h, m.viewport.Width)
+		}
+		if m.drawerViewport.Width != m.columnWidth()-4 {
+			t.Fatalf("高 %d：面板宽=%d，想要和输入框同宽 %d", h, m.drawerViewport.Width, m.columnWidth()-4)
+		}
+		if ph := m.drawerViewport.Height; ph < 3 || ph > drawerMaxLines {
+			t.Fatalf("高 %d：面板高=%d 超出 3..%d", h, ph, drawerMaxLines)
+		}
+		lines := strings.Split(m.View(), "\n")
+		if len(lines) != h {
+			t.Fatalf("高 %d：整屏 %d 行，应刚好占满", h, len(lines))
+		}
+		// 面板在输入框上方：倒数第 4 行（输入框上边框之上）是面板下边框。
+		if !strings.Contains(lines[len(lines)-5], "╰") {
+			t.Fatalf("高 %d：输入框上方不是面板：%q", h, lines[len(lines)-5])
+		}
 	}
 }
 
