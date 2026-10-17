@@ -45,13 +45,7 @@ const helpText = `命令:
   /hooks      查看已配置的 hook（工具调用前后、回合结束自动执行的命令）
   自定义命令  .agnet/commands/*.md 或 ~/.config/agnet/commands/*.md，模板里用 $ARGS 接参数
   /reasoning  展开或收起思考过程
-  /exit       退出
-
-快捷键:
-  Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考过程 · Ctrl+T 任务清单
-  PgUp/PgDn 滚动 · Esc 取消审批/取消生成 · Ctrl+C 取消或退出
-  名单外 run_command：Y 允许 · N/Esc 拒绝
-  [ / ] 左侧会话（一期预留）`
+  /exit       退出`
 
 func (m *Model) view() string {
 	if !m.ready {
@@ -89,6 +83,9 @@ func (m *Model) view() string {
 	}
 	if m.approval != nil {
 		parts = append(parts, m.approvalView())
+	}
+	if m.keysCard {
+		parts = append(parts, m.keysCardView())
 	}
 	parts = append(parts, m.inputView(), m.hintView())
 	return m.withSidebar(side, parts[0], strings.Join(parts[1:], "\n"))
@@ -207,17 +204,6 @@ func (m *Model) approvalView() string {
 	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
 }
-
-// keymapText 是按 ? 时列出的完整键位表。
-const keymapText = `键位表
-  Enter     发送
-  Ctrl+J    换行
-  Ctrl+R    显示/隐藏思考过程
-  Shift+Tab 切换权限模式
-  Esc       取消生成
-  PgUp/PgDn 滚动对话
-  ?         显示本表（输入框为空时）
-  Ctrl+C    退出`
 
 // barKeys 是底栏最右的灰字提示：平时只有「? 帮助」，生成和审批时换成当下能用的键。
 func (m *Model) barKeys() string {

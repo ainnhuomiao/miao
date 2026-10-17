@@ -87,6 +87,7 @@ type approvalState struct {
 // Model 是 TUI 的全部状态。
 type Model struct {
 	side      sidebarState // 左侧会话侧栏
+	keysCard  bool         // ? 快捷键速查卡，见 keys.go
 	picker    pickerState  // /sessions 会话选择列表
 	git       gitState     // /commit 进行中
 	rewind    rewindState  // Esc Esc 回退
@@ -226,6 +227,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, m.onClipImage(msg)
 
 	case tea.KeyMsg:
+		if m.keysCard { // 速查卡打开时任意键关闭
+			m.keysCard = false
+			m.layout()
+			return m, nil
+		}
 		if m.approval == nil {
 			if msg.String() == "ctrl+b" {
 				m.toggleSidebar()
@@ -389,8 +395,8 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "?":
 		// 输入框为空时 ? 弹出键位表；有内容时照常输入问号。
 		if m.input.Value() == "" {
-			m.messages = append(m.messages, chatMessage{role: roleNotice, content: keymapText, done: true})
-			m.refreshViewport(true)
+			m.keysCard = true
+			m.layout()
 			return m, nil
 		}
 
@@ -699,7 +705,7 @@ func (m *Model) runCommand(text string) tea.Cmd {
 
 	case "/help":
 		m.messages = append(m.messages, chatMessage{
-			role: roleNotice, content: helpText, done: true,
+			role: roleNotice, content: helpText + "\n\n" + keymapText(), done: true,
 		})
 		m.refreshViewport(true)
 
@@ -966,6 +972,9 @@ func (m *Model) layout() {
 	}
 	vh -= m.todoPanelHeight()
 	vh -= m.rewindHeight()
+	if m.keysCard {
+		vh -= keysCardHeight()
+	}
 	vh -= m.pickerHeight()
 	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
