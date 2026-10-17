@@ -7,6 +7,7 @@ import (
 	"strings"
 	"time"
 
+	"agnet/internal/hooks"
 	"agnet/internal/llm"
 	"agnet/internal/tools"
 )
@@ -62,6 +63,9 @@ type Agent struct {
 
 	agentsMD bool // 启动时是否加载了 AGENTS.md
 	perm     permissions
+
+	hooks       *hooks.Runner  // 用户配置的 hook，可为 nil
+	rawApprover tools.Approver // 未经权限包装的审批回调（项目 hook 信任确认用）
 }
 
 // New 创建 Agent。registry 可为 nil（无工具）。
@@ -93,6 +97,7 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 	rollback := func() {
 		a.history = a.history[:checkpoint]
 	}
+	stopRetries := 0
 
 	for round := 0; round < maxToolRounds; round++ {
 		if a.tools != nil {
@@ -124,6 +129,13 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 		a.history = append(a.history, assistant)
 
 		if len(result.ToolCalls) == 0 {
+			if stopRetries < maxStopHookRetries {
+				if msg, failed := a.runStopHook(ctx, round, onEvent); failed {
+					stopRetries++
+					a.history = append(a.history, llm.Message{Role: llm.RoleUser, Content: msg})
+					continue
+				}
+			}
 			return nil
 		}
 		if result.FinishReason == "length" {
@@ -135,7 +147,7 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 			return fmt.Errorf("模型请求工具调用，但未注册任何工具")
 		}
 
-		toolMsgs, err := runToolCalls(ctx, result.ToolCalls, a.tools.Call, onEvent)
+		toolMsgs, err := runToolCalls(ctx, result.ToolCalls, a.callTool, onEvent)
 		if err != nil {
 			rollback()
 			return err
@@ -157,6 +169,7 @@ func (a *Agent) requestMessages() []llm.Message {
 
 // SetApprover 把审批回调交给工具注册表（例如 TUI 确认卡）。
 func (a *Agent) SetApprover(fn tools.Approver) {
+	a.rawApprover = fn
 	if a.tools != nil {
 		a.tools.SetApprover(a.wrapApprover(fn))
 	}

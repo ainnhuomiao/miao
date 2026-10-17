@@ -118,6 +118,7 @@ type Model struct {
 
 	approval  *approvalState
 	mention   mentionState // @ 引用文件补全缓存
+	userCmds  userCmdState // 自定义斜杠命令缓存
 	themeOrig string       // /theme 预览前的主题，空表示没在预览
 	palette   paletteState
 	models    modelListState
@@ -437,7 +438,12 @@ func (m *Model) submit() tea.Cmd {
 	if strings.HasPrefix(text, "/") {
 		return m.runCommand(text)
 	}
+	return m.sendMessage(text, text)
+}
 
+// sendMessage 把一条消息发给模型：界面显示 display，实际发送 prompt（自定义命令时两者不同）。
+func (m *Model) sendMessage(display, prompt string) tea.Cmd {
+	text := display
 	m.markRewindPoint(text)
 	events := make(chan streamEventMsg, 128)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -448,7 +454,7 @@ func (m *Model) submit() tea.Cmd {
 	m.cancel = cancel
 	m.events = events
 	m.messages = append(m.messages, chatMessage{role: roleUser, content: text, done: true})
-	sendText := m.expandMentions(text) // 「已附加 …」灰字放在用户消息下面
+	sendText := m.expandMentions(prompt) // 「已附加 …」灰字放在用户消息下面
 	m.messages = append(m.messages, chatMessage{role: roleAssistant})
 	m.refreshViewport(true)
 
@@ -706,7 +712,13 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		})
 		m.refreshViewport(false)
 
+	case "/hooks":
+		m.notice(m.ag.Hooks().Summary())
+
 	default:
+		if cmd, ok := m.runUserCommand(text); ok {
+			return cmd
+		}
 		m.messages = append(m.messages, chatMessage{
 			role:    roleNotice,
 			content: "未知命令 " + fields[0] + "，输入 /help 查看帮助。",

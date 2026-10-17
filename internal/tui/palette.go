@@ -29,6 +29,11 @@ type paletteState struct {
 }
 
 func (m *Model) paletteCommands() []paletteCmd {
+	return append(m.builtinPalette(), m.userPalette()...)
+}
+
+// builtinPalette 是内置命令；自定义命令见 userPalette。
+func (m *Model) builtinPalette() []paletteCmd {
 	reasoning := "收起"
 	if m.showReasoning {
 		reasoning = "展开"
@@ -48,6 +53,7 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/theme", desc: "切换主题（当前：" + m.savedTheme() + "）", needArg: true},
 		{name: "/subagents", desc: "子代理设置：开关、并发上限、模型", needArg: true},
 		{name: "/mcp", desc: "查看 MCP 服务器状态与工具"},
+		{name: "/hooks", desc: "查看已配置的 hook"},
 		{name: "/reasoning", desc: "思考过程：展开/收起（当前：" + reasoning + "）"},
 		{name: "/exit", desc: "退出"},
 	}

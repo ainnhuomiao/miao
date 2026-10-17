@@ -13,6 +13,7 @@ import (
 	"agnet/internal/agent"
 	"agnet/internal/config"
 	"agnet/internal/headless"
+	"agnet/internal/hooks"
 	"agnet/internal/llm"
 	"agnet/internal/mcp"
 	"agnet/internal/repl"
@@ -61,6 +62,11 @@ func run() error {
 	ag := agent.New(client, system, reg)
 	ag.SetAgentsMDLoaded(md != "")
 	ag.SetAllowedCommands(agent.AllowedCommandsFromEnv())
+	hookRunner, err := hooks.Load(cfg.Workspace, ag.HookApprover())
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "读取 hook 配置失败（出错的部分已忽略）：%v\n", err)
+	}
+	ag.SetHooks(hookRunner)
 	if _, err := subagent.Setup(reg, client, ag.Model); err != nil {
 		fmt.Fprintf(os.Stderr, "读取子代理配置失败：%v\n", err)
 	}

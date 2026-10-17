@@ -42,6 +42,8 @@ const helpText = `命令:
   /theme      切换主题（/theme <名字>，↑↓ 实时预览）
   /subagents  子代理设置（开关、并发上限、模型）
   /mcp        查看 MCP 服务器状态与工具数
+  /hooks      查看已配置的 hook（工具调用前后、回合结束自动执行的命令）
+  自定义命令  .agnet/commands/*.md 或 ~/.config/agnet/commands/*.md，模板里用 $ARGS 接参数
   /reasoning  展开或收起思考过程
   /exit       退出
 
