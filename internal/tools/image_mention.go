@@ -26,6 +26,12 @@ func (r *Registry) MentionedImages(text string) (imgs []llm.Image, warnings []st
 			continue
 		}
 		rel := strings.TrimPrefix(p, "./")
+		if err := r.checkNoSymlinkEscape(full); err != nil {
+			continue // ExpandMentions 已经报过警告
+		}
+		if isSensitive(rel) {
+			continue
+		}
 		head := make([]byte, 512)
 		f, err := os.Open(full)
 		if err != nil {
@@ -34,12 +40,6 @@ func (r *Registry) MentionedImages(text string) (imgs []llm.Image, warnings []st
 		n, _ := f.Read(head)
 		f.Close()
 		if !isImageMention(head[:n]) {
-			continue
-		}
-		if err := r.checkNoSymlinkEscape(full); err != nil {
-			continue // ExpandMentions 已经报过警告
-		}
-		if isSensitive(rel) {
 			continue
 		}
 		if info.Size() > llm.MaxImageBytes {
