@@ -88,6 +88,9 @@ func (r *Registry) ExpandMentions(text string) (expanded string, attached, warni
 			warnings = append(warnings, fmt.Sprintf("@%s 未附加：%v", rel, err))
 			continue
 		}
+		if isImageMention(data) {
+			continue // 图片由 MentionedImages 作为图片附加
+		}
 		if !utf8.Valid(data) || strings.ContainsRune(string(data), 0) {
 			warnings = append(warnings, fmt.Sprintf("@%s 未附加：不是文本文件", rel))
 			continue

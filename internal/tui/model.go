@@ -89,6 +89,7 @@ type Model struct {
 	side      sidebarState // 左侧会话侧栏
 	git       gitState     // /commit 进行中
 	rewind    rewindState  // Esc Esc 回退
+	img       imageState   // Ctrl+V / @ 图片，见 images.go
 	sub       subagentState
 	ag        *agent.Agent
 	modelName string
@@ -220,6 +221,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case gitMsg:
 		return m.handleGitMsg(msg)
 
+	case clipImageMsg:
+		return m, m.onClipImage(msg)
+
 	case tea.KeyMsg:
 		if m.approval == nil {
 			if msg.String() == "ctrl+b" {
@@ -341,6 +345,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		}
 	}
 
+	if ok, cmd := m.handleImageKey(msg); ok {
+		return m, cmd
+	}
 	if ok, cmd := m.handlePaletteKey(msg); ok {
 		return m, cmd
 	}
@@ -428,6 +435,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 func (m *Model) submit() tea.Cmd {
 	text := strings.TrimSpace(m.input.Value())
+	if text == "" && len(m.img.pending) > 0 {
+		text = "请看图片"
+	}
 	if text == "" {
 		return nil
 	}
@@ -455,6 +465,7 @@ func (m *Model) sendMessage(display, prompt string) tea.Cmd {
 	m.events = events
 	m.messages = append(m.messages, chatMessage{role: roleUser, content: text, done: true})
 	sendText := m.expandMentions(prompt) // 「已附加 …」灰字放在用户消息下面
+	m.collectImages(prompt)
 	m.messages = append(m.messages, chatMessage{role: roleAssistant})
 	m.refreshViewport(true)
 
@@ -847,6 +858,7 @@ func chatMessagesFromHistory(sess *session.Session) []chatMessage {
 		switch msg.Role {
 		case llm.RoleUser:
 			out = append(out, chatMessage{role: roleUser, content: msg.Content, done: true})
+			out = append(out, imageNotices(msg.Images)...)
 		case llm.RoleAssistant:
 			out = append(out, chatMessage{role: roleAssistant, content: msg.Content, done: true})
 			for _, tc := range msg.ToolCalls {

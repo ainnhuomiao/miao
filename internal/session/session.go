@@ -85,7 +85,7 @@ func (s *Store) Save(sess *Session) error {
 		sess.Title = TitleFrom(sess.Messages)
 	}
 	sess.Updated = s.now()
-	data, err := json.MarshalIndent(sess, "", "  ")
+	data, err := json.MarshalIndent(s.diskForm(sess), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -125,6 +125,7 @@ func (s *Store) Load(id string) (*Session, error) {
 	if err := json.Unmarshal(data, &sess); err != nil {
 		return nil, fmt.Errorf("会话文件损坏 %s: %w", id, err)
 	}
+	s.loadImages(&sess, data)
 	return &sess, nil
 }
 

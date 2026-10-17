@@ -104,7 +104,7 @@ func renderForSummary(m llm.Message) string {
 func EstimateTokens(msgs []llm.Message) int {
 	n := 0
 	for _, m := range msgs {
-		n += estimateText(m.Content) + 4
+		n += estimateText(m.Content) + 4 + llm.ImageTokens*len(m.Images)
 		for _, tc := range m.ToolCalls {
 			n += estimateText(tc.Function.Name+tc.Function.Arguments) + 4
 		}

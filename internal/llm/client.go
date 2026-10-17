@@ -40,6 +40,8 @@ type Message struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Name       string     `json:"name,omitempty"`
+	// Images 是用户消息附带的图片；非空时 content 序列化为多模态 parts，见 image.go。
+	Images []Image `json:"-"`
 }
 
 // ToolDef 描述可供模型调用的工具（OpenAI tools 字段）。

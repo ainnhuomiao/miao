@@ -66,6 +66,8 @@ type Agent struct {
 
 	hooks       *hooks.Runner  // 用户配置的 hook，可为 nil
 	rawApprover tools.Approver // 未经权限包装的审批回调（项目 hook 信任确认用）
+
+	pendingImages []llm.Image // 下一条用户消息附带的图片，见 images.go
 }
 
 // New 创建 Agent。registry 可为 nil（无工具）。
@@ -87,6 +89,7 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 	a.history = append(a.history, llm.Message{
 		Role:    llm.RoleUser,
 		Content: userInput,
+		Images:  a.takeImages(),
 	})
 
 	var defs []llm.ToolDef
@@ -164,7 +167,7 @@ func (a *Agent) requestMessages() []llm.Message {
 		out = append(out, llm.Message{Role: llm.RoleSystem, Content: a.systemPrompt()})
 	}
 	out = append(out, a.history...)
-	return out
+	return a.visionFilter(out)
 }
 
 // SetApprover 把审批回调交给工具注册表（例如 TUI 确认卡）。
