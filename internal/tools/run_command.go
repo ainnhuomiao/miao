@@ -189,6 +189,11 @@ func needsApproval(name string, args []string) bool {
 	if len(args) > 0 {
 		first = args[0]
 	}
+	for _, a := range args {
+		if dangerousFlag(name, a) {
+			return true
+		}
+	}
 	switch name {
 	case "git":
 		return !gitReadOnly[first]
@@ -209,6 +214,24 @@ func needsApproval(name string, args []string) bool {
 				return true
 			}
 		}
+	}
+	return false
+}
+
+// dangerousFlag 识别能写文件或执行任意程序的参数（含 -flag=value 形式）。
+func dangerousFlag(name, a string) bool {
+	key, _, _ := strings.Cut(a, "=")
+	switch name {
+	case "go":
+		switch strings.TrimLeft(key, "-") {
+		case "exec", "toolexec", "o", "overlay", "modfile", "coverprofile",
+			"cpuprofile", "memprofile", "blockprofile", "mutexprofile", "trace", "outputdir":
+			return strings.HasPrefix(a, "-")
+		}
+	case "git":
+		k := strings.TrimLeft(key, "-")
+		return strings.HasPrefix(a, "-") && (k == "output" || k == "ext-diff" || k == "textconv" ||
+			strings.HasPrefix(k, "exec") || k == "c" || k == "config-env")
 	}
 	return false
 }

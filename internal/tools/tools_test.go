@@ -143,6 +143,9 @@ func TestNeedsApproval(t *testing.T) {
 		"go test ./...": false, "go run .": true, "go env -w X=1": true, "make": true,
 		"env rm x": true, "sed -i s/a/b/ f": true, "find . -name x": false,
 		"find . -delete": true, "find . -exec rm {} ;": true, "sort -o f f": true,
+		"go test -exec rm ./...": true, "go build -toolexec=x .": true, "go build -o /tmp/x .": true,
+		"git diff --output=f": true, "git log --output f": true, "git -c core.pager=x log": true,
+		"go test -run TestX ./...": false, "git diff --stat": false,
 	}
 	for c, want := range cases {
 		f := strings.Fields(c)
