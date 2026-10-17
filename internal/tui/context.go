@@ -65,13 +65,16 @@ func pacmanMeter(used, total, cells int, mouthClosed bool) string {
 }
 
 // contextView 是顶栏右侧：ᗧ•••• 42% · 54k/128k；未知模型只显示 54k tok。
-func (m *Model) contextView() string {
+func (m *Model) contextView() string { return m.contextViewCells(16) }
+
+// contextViewCells 同 contextView，但豆子轨道为 cells 格，顶栏用它铺满整行。
+func (m *Model) contextViewCells(cells int) string {
 	total := contextWindow(m.modelName)
 	if total == 0 {
 		return mutedStyle.Render(formatTokens(m.ctxTokens) + " tok")
 	}
 	closed := m.streaming && time.Since(m.streamStart)/(250*time.Millisecond)%2 == 1
 	pct := min(100, m.ctxTokens*100/total)
-	return pacmanMeter(m.ctxTokens, total, 16, closed) +
+	return pacmanMeter(m.ctxTokens, total, cells, closed) +
 		mutedStyle.Render(fmt.Sprintf("  %d%% · %s/%s", pct, formatTokens(m.ctxTokens), formatTokens(total)))
 }

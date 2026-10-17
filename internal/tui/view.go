@@ -114,8 +114,11 @@ func (m *Model) drawerBoxView() string {
 func (m *Model) headerView() string {
 	left := " " + titleStyle.Render("GoAgent")
 	suffix := " · " + m.modelName
-	right := m.contextView() + " "
-	if lipgloss.Width(left)+lipgloss.Width(suffix)+lipgloss.Width(right)+2 > m.width {
+	// 豆子轨道铺满标题与数字之间的整段空白。
+	right := m.contextViewCells(16) + " "
+	if extra := m.width - lipgloss.Width(left) - lipgloss.Width(suffix) - lipgloss.Width(right) - 4; extra > 0 {
+		right = "  " + m.contextViewCells(16+extra) + " "
+	} else if extra < 0 {
 		right = ""
 	}
 	if lipgloss.Width(left)+lipgloss.Width(suffix)+lipgloss.Width(right)+2 <= m.width {
