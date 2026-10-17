@@ -1,5 +1,7 @@
 # 本地密钥，绝对不要提交
 .env
+.env.*
+!.env.example
 
 # 构建产物
 bin/
