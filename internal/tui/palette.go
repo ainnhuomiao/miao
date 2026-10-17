@@ -53,6 +53,9 @@ func (m *Model) paletteOpen() bool {
 		return false
 	}
 	v := m.input.Value()
+	if _, ok := m.atMode(); ok {
+		return !(m.palette.esc && v == m.palette.hidden)
+	}
 	if _, ok := m.modelMode(); !ok && (!strings.HasPrefix(v, "/") || strings.ContainsAny(v, " \t\n")) {
 		return false
 	}
@@ -64,6 +67,9 @@ func (m *Model) paletteOpen() bool {
 
 // paletteMatches 按前缀优先、子序列其次筛选命令。
 func (m *Model) paletteMatches() []paletteCmd {
+	if q, ok := m.atMode(); ok {
+		return m.atMatches(q)
+	}
 	if q, ok := m.modelMode(); ok {
 		return m.modelMatches(q)
 	}
@@ -163,7 +169,17 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		m.palette.hidden = m.input.Value()
 		m.syncPalette()
 		return true, nil
-	case "tab":
+	case "tab", "enter":
+		if _, ok := m.atMode(); ok {
+			if len(matches) == 0 {
+				return msg.String() == "tab", nil // 没匹配时 Enter 照常发送
+			}
+			m.atComplete(matches[m.palette.sel])
+			return true, nil
+		}
+		if msg.String() == "enter" {
+			break
+		}
 		if len(matches) > 0 {
 			c := matches[m.palette.sel]
 			m.paletteComplete(c)
@@ -172,6 +188,8 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			}
 		}
 		return true, nil
+	}
+	switch msg.String() {
 	case "enter":
 		if len(matches) == 0 {
 			return false, nil // 交给原逻辑（提示未知命令）
@@ -228,7 +246,9 @@ func (m *Model) paletteView() string {
 	matches := m.paletteMatches()
 	if len(matches) == 0 {
 		empty := "  没有匹配的命令"
-		if _, ok := m.modelMode(); ok {
+		if _, ok := m.atMode(); ok {
+			empty = "  没有匹配的文件"
+		} else if _, ok := m.modelMode(); ok {
 			empty = "  没有匹配的模型（Enter 直接切换到输入的名字）"
 		}
 		return pad.Render(mutedStyle.Render(truncateWidth(empty, w)))
@@ -237,6 +257,8 @@ func (m *Model) paletteView() string {
 	all := m.paletteCommands()
 	if _, ok := m.modelMode(); ok {
 		all = matches
+	} else if _, ok := m.atMode(); ok {
+		all = matches[m.palette.top:min(len(matches), m.palette.top+m.paletteWindow())]
 	}
 	for _, c := range all {
 		nameW = max(nameW, lipgloss.Width(c.name))

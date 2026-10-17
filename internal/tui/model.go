@@ -114,6 +114,7 @@ type Model struct {
 	sidebarReserved bool
 
 	approval *approvalState
+	mention  mentionState // @ 引用文件补全缓存
 	palette  paletteState
 	models   modelListState
 
@@ -435,16 +436,15 @@ func (m *Model) submit() tea.Cmd {
 	m.usageFresh = true
 	m.cancel = cancel
 	m.events = events
-	m.messages = append(m.messages,
-		chatMessage{role: roleUser, content: text, done: true},
-		chatMessage{role: roleAssistant},
-	)
+	m.messages = append(m.messages, chatMessage{role: roleUser, content: text, done: true})
+	sendText := m.expandMentions(text) // 「已附加 …」灰字放在用户消息下面
+	m.messages = append(m.messages, chatMessage{role: roleAssistant})
 	m.refreshViewport(true)
 
 	ag := m.ag
 	go func() {
 		defer close(events)
-		err := ag.Send(ctx, text, func(e agent.Event) error {
+		err := ag.Send(ctx, sendText, func(e agent.Event) error {
 			msg := streamEventMsg{
 				kind:       e.Kind,
 				content:    e.Delta.Content,
