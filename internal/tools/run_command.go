@@ -23,7 +23,7 @@ var commandAllowlist = map[string]struct{}{
 	"go": {}, "git": {}, "ls": {}, "cat": {}, "head": {}, "tail": {},
 	"wc": {}, "rg": {}, "grep": {}, "find": {}, "pwd": {}, "echo": {},
 	"date": {}, "make": {}, "uname": {}, "which": {}, "file": {}, "stat": {},
-	"diff": {}, "sort": {}, "uniq": {}, "sed": {}, "awk": {}, "basename": {},
+	"diff": {}, "sort": {}, "uniq": {}, "basename": {},
 	"dirname": {}, "env": {}, "true": {}, "false": {}, "test": {},
 }
 
