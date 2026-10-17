@@ -172,7 +172,7 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 func (a *Agent) requestMessages() []llm.Message {
 	out := make([]llm.Message, 0, len(a.history)+1)
 	if a.system != "" {
-		out = append(out, llm.Message{Role: llm.RoleSystem, Content: a.system})
+		out = append(out, llm.Message{Role: llm.RoleSystem, Content: a.systemPrompt()})
 	}
 	out = append(out, a.history...)
 	return out

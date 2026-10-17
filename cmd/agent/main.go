@@ -39,8 +39,8 @@ func run() error {
 
 	client := llm.NewOpenAI(cfg.APIKey, cfg.BaseURL, cfg.Model)
 	system := fmt.Sprintf(
-		"%s\n\n当前调用的模型标识是 %q。工作区根目录是 %q（工具只能访问此目录内的相对路径）。",
-		agent.DefaultSystemPrompt, cfg.Model, cfg.Workspace)
+		"%s\n\n当前调用的模型标识是 \"%s\"。工作区根目录是 %q（工具只能访问此目录内的相对路径）。",
+		agent.DefaultSystemPrompt, agent.ModelPlaceholder, cfg.Workspace)
 	md, truncated, err := agent.LoadAgentsMD(cfg.Workspace)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "读取 %s 失败：%v\n", agent.AgentsMDName, err)
