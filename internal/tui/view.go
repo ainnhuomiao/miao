@@ -14,7 +14,7 @@ import (
 
 const (
 	headerHeight     = 2
-	inputLines       = 2
+	inputMaxLines    = 6
 	inputFrameHeight = 2
 	hintHeight       = 1
 	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数

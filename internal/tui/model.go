@@ -115,7 +115,7 @@ func New(ag *agent.Agent, modelName string) *Model {
 	ta.Prompt = "› "
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
-	ta.SetHeight(inputLines)
+	ta.SetHeight(1)
 	ta.SetPromptFunc(2, func(i int) string {
 		if i == 0 {
 			return "› "
@@ -211,6 +211,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	m.fitInput()
 	return m, cmd
 }
 
@@ -331,6 +332,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
+	m.fitInput()
 	return m, cmd
 }
 
@@ -340,6 +342,7 @@ func (m *Model) submit() tea.Cmd {
 		return nil
 	}
 	m.input.Reset()
+	m.fitInput()
 
 	if strings.HasPrefix(text, "/") {
 		return m.runCommand(text)
@@ -586,7 +589,7 @@ func (m *Model) Close() {
 }
 
 func (m *Model) layout() {
-	vh := m.height - headerHeight - (inputLines + inputFrameHeight) - hintHeight
+	vh := m.height - headerHeight - (m.inputHeight() + inputFrameHeight) - hintHeight
 	if m.approval != nil {
 		vh -= approvalCardBase + len(m.approval.displayLines())
 	}
@@ -607,7 +610,7 @@ func (m *Model) layout() {
 	m.viewport.Width = mainW
 	m.viewport.Height = vh
 	m.input.SetWidth(max(10, m.width-4))
-	m.input.SetHeight(inputLines)
+	m.input.SetHeight(m.inputHeight())
 }
 
 func drawerWidth(total int) int {
@@ -799,4 +802,23 @@ func (a *approvalState) displayLines() []string {
 			fmt.Sprintf("…还有 %d 行，Tab 在抽屉里看全部", more))
 	}
 	return lines
+}
+
+// inputHeight 按内容算输入框行数（含软换行），1 到 inputMaxLines 行。
+func (m *Model) inputHeight() int {
+	w := max(1, m.input.Width())
+	n := 0
+	for _, l := range strings.Split(m.input.Value(), "\n") {
+		n += max(1, (lipgloss.Width(l)+w-1)/w)
+	}
+	return min(max(1, n), inputMaxLines)
+}
+
+// fitInput 在输入行数变化时重新布局。
+func (m *Model) fitInput() {
+	if h := m.inputHeight(); h != m.input.Height() {
+		m.input.SetHeight(h)
+		m.layout()
+		m.refreshViewport(false)
+	}
 }
