@@ -15,6 +15,7 @@ import (
 const (
 	headerHeight     = 2
 	inputMaxLines    = 6
+	columnMax        = 100
 	inputFrameHeight = 2
 	hintHeight       = 1
 	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数
@@ -159,7 +160,11 @@ func (m *Model) lastAssistantContent() string {
 }
 
 func (m *Model) inputView() string {
-	return inputBoxStyle.Render(m.input.View())
+	st := inputBoxStyle
+	if strings.TrimSpace(m.input.Value()) == "" {
+		st = st.BorderForeground(mutedColor) // 空着时边框淡一点
+	}
+	return lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(st.Render(m.input.View()))
 }
 
 func (m *Model) approvalView() string {
@@ -484,11 +489,7 @@ func splitByWidth(s string, width int) (head, tail string) {
 }
 
 func (m *Model) contentWidth() int {
-	w := m.viewport.Width
-	if w <= 0 {
-		w = m.width
-	}
-	return max(10, w-4)
+	return max(10, m.columnWidth()-4)
 }
 
 func truncateWidth(s string, width int) string {

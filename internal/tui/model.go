@@ -609,7 +609,7 @@ func (m *Model) layout() {
 	}
 	m.viewport.Width = mainW
 	m.viewport.Height = vh
-	m.input.SetWidth(max(10, m.width-4))
+	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())
 }
 
@@ -629,7 +629,7 @@ func drawerWidth(total int) int {
 
 func (m *Model) refreshViewport(forceBottom bool) {
 	atBottom := m.viewport.AtBottom()
-	m.viewport.SetContent(m.renderTranscript())
+	m.viewport.SetContent(lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.renderTranscript()))
 	if forceBottom || atBottom {
 		m.viewport.GotoBottom()
 	}
@@ -821,4 +821,17 @@ func (m *Model) fitInput() {
 		m.layout()
 		m.refreshViewport(false)
 	}
+}
+
+// columnWidth 是对话区和输入框共用的列宽：最多 columnMax，宽屏居中。
+func (m *Model) columnWidth() int {
+	w := m.viewport.Width
+	if w <= 0 {
+		w = m.width
+	}
+	return min(w, columnMax)
+}
+
+func (m *Model) columnMargin() int {
+	return max(0, (m.viewport.Width-m.columnWidth())/2)
 }
