@@ -19,11 +19,11 @@ const (
 	headerHeight     = 2
 	inputMaxLines    = 6
 	columnMax        = 100
-	activityMaxRows  = 3 // 输入框上方工具状态条最多行数
+	activityMaxRows  = 1 // 输入框上方工具状态条只占一行
 	inputFrameHeight = 2
 	hintHeight       = 1
 	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数
-	approvalMaxLines = 10
+	approvalMaxLines = 12
 )
 
 var (
@@ -65,8 +65,8 @@ const helpText = `命令:
   /exit       退出
 
 快捷键:
-  Enter 发送 · Ctrl+J 换行 · Tab 工具抽屉 · Ctrl+R 思考过程
-  PgUp/PgDn 滚动 · Esc 关抽屉/取消审批/取消生成 · Ctrl+C 取消或退出
+  Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考过程
+  PgUp/PgDn 滚动 · Esc 取消审批/取消生成 · Ctrl+C 取消或退出
   名单外 run_command：Y 允许 · N/Esc 拒绝
   [ / ] 左侧会话（一期预留）`
 
@@ -197,7 +197,7 @@ func (m *Model) approvalView() string {
 func (m *Model) hintText() string {
 	hint := "Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考 · Ctrl+C 退出"
 	if m.drawerOpen {
-		hint = "Tab 关抽屉 · Esc 关抽屉 · PgUp/PgDn 滚动 · Ctrl+C 退出"
+		hint = "PgUp/PgDn 滚动 · Ctrl+C 退出"
 	}
 	if m.streaming {
 		hint = "生成中 · Esc 取消 · PgUp/PgDn · Ctrl+C 取消"
@@ -601,6 +601,16 @@ func (m *Model) activityRows() []chatMessage {
 }
 
 // activityView 渲染输入框上方的常驻工具状态条；没有工具调用时为空。
+func (m *Model) toolCount() int {
+	n := 0
+	for _, msg := range m.messages {
+		if msg.role == roleTool {
+			n++
+		}
+	}
+	return n
+}
+
 func (m *Model) activityView() string {
 	rows := m.activityRows()
 	if len(rows) == 0 {
@@ -625,8 +635,9 @@ func (m *Model) activityView() string {
 			icon = "✓"
 		}
 		if t.done {
-			dur = t.toolDur.Round(time.Millisecond).String()
+			dur = t.toolDur.Round(time.Millisecond).String() + "  "
 		}
+		dur += fmt.Sprintf("工具 %d", m.toolCount())
 		detail := formatArgs(t.toolName, t.toolArgs)
 		if t.done {
 			if t.toolError {

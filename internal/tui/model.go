@@ -781,7 +781,7 @@ func (a *approvalState) body() []string {
 	return strings.Split(strings.TrimRight(a.display, "\n"), "\n")
 }
 
-// displayLines 是卡片里显示的行：最多 approvalMaxLines 行，超出提示去抽屉看。
+// displayLines 是卡片里显示的行：最多 approvalMaxLines 行，超出部分折叠成一行提示。
 func (a *approvalState) displayLines() []string {
 	lines := a.body()
 	if len(lines) > approvalMaxLines {
