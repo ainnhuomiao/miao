@@ -198,14 +198,14 @@ func (m *Model) approvalView() string {
 	var lines []string
 	for _, l := range m.approval.displayLines() {
 		style := lipgloss.NewStyle()
-		if m.approval.toolName == "write_file" {
+		if isFileEdit(m.approval.toolName) {
 			style = diffLineStyle(l)
 		}
 		lines = append(lines, style.Render(truncateWidth(l, innerW)))
 	}
 	cmd := strings.Join(lines, "\n")
 	hint := "Y 允许 · N 拒绝 · Esc 取消"
-	if m.approval.toolName == "write_file" {
+	if isFileEdit(m.approval.toolName) {
 		hint = "Y 写入 · N 拒绝 · Esc 取消"
 	}
 	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)

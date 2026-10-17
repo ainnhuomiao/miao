@@ -975,7 +975,7 @@ func compact(s string, maxRunes int) string {
 
 // title 是审批卡标题。
 func (a *approvalState) title() string {
-	if a.toolName == "write_file" {
+	if isFileEdit(a.toolName) {
 		head, _, _ := strings.Cut(a.display, "\n")
 		return "确认写入 " + head
 	}
@@ -984,7 +984,7 @@ func (a *approvalState) title() string {
 
 // body 是标题之下的全部内容行。
 func (a *approvalState) body() []string {
-	if a.toolName == "write_file" {
+	if isFileEdit(a.toolName) {
 		_, rest, _ := strings.Cut(a.display, "\n")
 		if rest == "" {
 			return nil
@@ -1036,3 +1036,6 @@ func (m *Model) columnWidth() int {
 func (m *Model) columnMargin() int {
 	return max(0, (m.viewport.Width-m.columnWidth())/2)
 }
+
+// isFileEdit 判断审批卡是否为文件写入类（标题 + diff 行）。
+func isFileEdit(tool string) bool { return tool == "write_file" || tool == "edit_file" }
