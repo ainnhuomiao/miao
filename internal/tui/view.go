@@ -247,11 +247,8 @@ func (m *Model) statusDot() string {
 	if label == "思考中" && m.lastAssistantContent() != "" {
 		label = "生成中"
 	}
-	sp := m.spinner
-	sp.Style = lipgloss.NewStyle().Foreground(color)
-	elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
-	return sp.View() + lipgloss.NewStyle().Foreground(subtext0Color).Render(label) +
-		mutedStyle.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
+	return lipgloss.NewStyle().Foreground(color).Render("●") +
+		lipgloss.NewStyle().Foreground(subtext0Color).Render(" "+label)
 }
 
 // barView 拼出极简底栏：不铺底色、没有色块，只有状态点带颜色，其余灰字，宽度对齐对话列。
