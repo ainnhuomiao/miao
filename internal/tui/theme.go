@@ -1,7 +1,9 @@
 package tui
 
 import (
+	"os"
 	"strings"
+	"unicode/utf8"
 
 	catppuccin "github.com/catppuccin/go"
 	"github.com/charmbracelet/lipgloss"
@@ -21,14 +23,13 @@ var (
 	textColor     = ctp(catppuccin.Flavor.Text)
 	mutedColor    = ctp(catppuccin.Flavor.Overlay0)
 	surface0Color = ctp(catppuccin.Flavor.Surface0)
-	baseColor     = ctp(catppuccin.Flavor.Base)
+	crustColor    = ctp(catppuccin.Flavor.Crust)
+
+	// nerdFont 为真时底栏用 powerline 箭头分段；设置 AGNET_NERD_FONT=1 开启。
+	nerdFont = os.Getenv("AGNET_NERD_FONT") == "1"
 )
 
-const logoArt = `  __ _  __ _ _ __   ___| |_
- / _` + "`" + ` |/ _` + "`" + ` | '_ \ / _ \ __|
-| (_| | (_| | | | |  __/ |_
- \__,_|\__, |_| |_|\___|\__|
-       |___/`
+const logoArt = "▄▀█ █▀▀ █▄ █ █▀▀ ▀█▀\n█▀█ █▄█ █ ▀█ ██▄  █ "
 
 // gradientLogo 把 logo 按列从 mauve 渐变到 blue。
 func gradientLogo() string {
@@ -39,19 +40,21 @@ func gradientLogo() string {
 	lines := strings.Split(logoArt, "\n")
 	w := 0
 	for _, l := range lines {
-		w = max(w, len(l))
+		w = max(w, utf8.RuneCountInString(l))
 	}
 	var b strings.Builder
 	for i, l := range lines {
 		if i > 0 {
 			b.WriteByte('\n')
 		}
-		for x, r := range l {
+		x := 0
+		for _, r := range l {
 			t := float64(x) / float64(max(1, w-1))
 			c := lipgloss.Color(lerpHex(from, to, t))
 			b.WriteString(lipgloss.NewStyle().Foreground(c).Bold(true).Render(string(r)))
+			x++
 		}
-		b.WriteString(strings.Repeat(" ", w-len(l))) // 补齐宽度，居中时各行对齐
+		b.WriteString(strings.Repeat(" ", w-x)) // 补齐宽度，居中时各行对齐
 	}
 	return b.String()
 }

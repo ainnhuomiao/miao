@@ -44,7 +44,7 @@ var (
 	userTagStyle  = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(userColor).Background(surface0Color)
 	agentTagStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(agentColor).Background(surface0Color)
 
-	segAccentStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(baseColor).Background(accentColor)
+	segAccentStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(crustColor).Background(accentColor)
 	segStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(textColor).Background(surface0Color)
 
 	approvalBoxStyle = lipgloss.NewStyle().
@@ -105,7 +105,7 @@ func (m *Model) drawerBoxView() string {
 }
 
 func (m *Model) headerView() string {
-	right := m.statusView()
+	right := ""
 	left := " " + titleStyle.Render("GoAgent")
 
 	suffix := " · " + m.modelName
@@ -140,10 +140,11 @@ func (m *Model) statusView() string {
 		if label == "工具中" {
 			color = toolColor
 		}
-		sp.Style = lipgloss.NewStyle().Foreground(color)
+		sp.Style = lipgloss.NewStyle().Foreground(color).Background(surface0Color)
 		elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
-		return sp.View() + lipgloss.NewStyle().Foreground(color).Render(label) +
-			mutedStyle.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
+		bg := lipgloss.NewStyle().Background(surface0Color)
+		return sp.View() + bg.Foreground(color).Render(label) +
+			bg.Foreground(mutedColor).Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
 	}
 	return agentLabelStyle.Render("●") + mutedStyle.Render(" 就绪")
 }
@@ -198,17 +199,53 @@ func (m *Model) hintText() string {
 	return hint
 }
 
-// hintView 是分段底栏：模型 | 工作区 | 快捷键提示。
+// hintView 是分段底栏：模型  工作区  状态（生成时带 spinner 计时），后接快捷键提示。
 func (m *Model) hintView() string {
-	left := segAccentStyle.Render(m.modelName)
-	if ws := m.workspaceLabel(); ws != "" {
-		left += segStyle.Render(ws)
+	type seg struct {
+		text string
+		bg   lipgloss.AdaptiveColor
+		st   lipgloss.Style
 	}
+	segs := []seg{{m.modelName, accentColor, segAccentStyle}}
+	if ws := m.workspaceLabel(); ws != "" {
+		segs = append(segs, seg{ws, surface0Color, segStyle})
+	}
+	segs = append(segs, seg{"", surface0Color, segStyle}) // 状态段，内容单独上色
+
+	var b strings.Builder
+	for i, sg := range segs {
+		if i == len(segs)-1 {
+			b.WriteString(segStyle.Render(m.barStatus()))
+		} else {
+			b.WriteString(sg.st.Render(sg.text))
+		}
+		if nerdFont {
+			next := lipgloss.AdaptiveColor{}
+			fg := lipgloss.NewStyle().Foreground(sg.bg)
+			if i+1 < len(segs) {
+				next = segs[i+1].bg
+				fg = fg.Background(next)
+			}
+			b.WriteString(fg.Render("\ue0b0"))
+		} else if i+1 < len(segs) {
+			b.WriteString(segStyle.Render(""))
+		}
+	}
+	left := b.String()
 	room := m.width - lipgloss.Width(left) - 2
 	if room < 8 {
-		return truncateWidth(m.modelName, m.width)
+		return left
 	}
 	return left + " " + mutedStyle.Render(truncateWidth(m.hintText(), room))
+}
+
+// barStatus 是底栏状态段：就绪，或生成时 spinner + 状态 + 计时。
+func (m *Model) barStatus() string {
+	bg := lipgloss.NewStyle().Background(surface0Color)
+	if !m.streaming {
+		return bg.Foreground(agentColor).Render("● ") + bg.Foreground(textColor).Render("就绪")
+	}
+	return m.statusView()
 }
 
 func (m *Model) workspaceLabel() string {
@@ -256,9 +293,9 @@ func (m *Model) renderTranscript() string {
 		group.Reset()
 	}
 
-	if !m.hasUserMessage() && m.viewport.Height >= 10 {
+	if !m.hasUserMessage() && m.viewport.Height >= 6 {
 		logo := gradientLogo()
-		sub := mutedStyle.Render("用 Go 写的终端 agent · /help 查看命令")
+		sub := mutedStyle.Render("你的 Go 终端 agent · /help 查看命令")
 		b.WriteString(lipgloss.PlaceHorizontal(max(width, lipgloss.Width(logo)), lipgloss.Center,
 			logo+"\n\n"+sub) + "\n\n")
 	}
