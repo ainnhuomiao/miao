@@ -185,3 +185,11 @@ func (a *Agent) History() []llm.Message {
 	copy(out, a.history)
 	return out
 }
+
+// Workspace 返回工具工作区根目录；没有工具时为空。
+func (a *Agent) Workspace() string {
+	if a == nil || a.tools == nil {
+		return ""
+	}
+	return a.tools.Workspace()
+}

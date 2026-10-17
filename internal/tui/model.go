@@ -99,6 +99,7 @@ type Model struct {
 	events    chan streamEventMsg
 
 	showReasoning bool
+	streamStart   time.Time
 	drawerOpen    bool
 	drawerFocus   bool // 焦点在抽屉时滚轮/Pg 作用于抽屉
 	// 左侧会话侧栏：一期接口预留，按 [ ] 暂为 noop
@@ -348,6 +349,7 @@ func (m *Model) submit() tea.Cmd {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	m.streaming = true
+	m.streamStart = time.Now()
 	m.cancel = cancel
 	m.events = events
 	m.messages = append(m.messages,

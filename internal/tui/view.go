@@ -2,6 +2,7 @@ package tui
 
 import (
 	"fmt"
+	"os"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -18,15 +19,6 @@ const (
 	hintHeight       = 1
 	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数
 	approvalMaxLines = 6
-)
-
-var (
-	accentColor = lipgloss.AdaptiveColor{Light: "#6D28D9", Dark: "#A78BFA"}
-	userColor   = lipgloss.AdaptiveColor{Light: "#0369A1", Dark: "#7DD3FC"}
-	agentColor  = lipgloss.AdaptiveColor{Light: "#047857", Dark: "#6EE7B7"}
-	toolColor   = lipgloss.AdaptiveColor{Light: "#B45309", Dark: "#FBBF24"}
-	mutedColor  = lipgloss.AdaptiveColor{Light: "#71717A", Dark: "#8B8B93"}
-	errorColor  = lipgloss.AdaptiveColor{Light: "#B91C1C", Dark: "#F87171"}
 )
 
 var (
@@ -49,8 +41,11 @@ var (
 				BorderForeground(toolColor).
 				Padding(0, 1)
 
-	userTagStyle  = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(lipgloss.Color("#0B1020")).Background(userColor)
-	agentTagStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(lipgloss.Color("#0B1020")).Background(agentColor)
+	userTagStyle  = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(userColor).Background(surface0Color)
+	agentTagStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(agentColor).Background(surface0Color)
+
+	segAccentStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(baseColor).Background(accentColor)
+	segStyle       = lipgloss.NewStyle().Padding(0, 1).Foreground(textColor).Background(surface0Color)
 
 	approvalBoxStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
@@ -140,7 +135,15 @@ func (m *Model) statusView() string {
 				break
 			}
 		}
-		return m.spinner.View() + mutedStyle.Render(label)
+		sp := m.spinner
+		color := accentColor
+		if label == "工具中" {
+			color = toolColor
+		}
+		sp.Style = lipgloss.NewStyle().Foreground(color)
+		elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
+		return sp.View() + lipgloss.NewStyle().Foreground(color).Render(label) +
+			mutedStyle.Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
 	}
 	return agentLabelStyle.Render("●") + mutedStyle.Render(" 就绪")
 }
@@ -181,7 +184,7 @@ func (m *Model) approvalView() string {
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
 }
 
-func (m *Model) hintView() string {
+func (m *Model) hintText() string {
 	hint := "Enter 发送 · Ctrl+J 换行 · Tab 抽屉 · Ctrl+R 思考 · Ctrl+C 退出"
 	if m.drawerOpen {
 		hint = "Tab 关抽屉 · Esc 关抽屉 · PgUp/PgDn 滚动 · Ctrl+C 退出"
@@ -192,10 +195,31 @@ func (m *Model) hintView() string {
 	if m.approval != nil {
 		hint = "确认命令 · Y 允许 · N 拒绝 · Esc 取消"
 	}
-	if lipgloss.Width(hint)+1 > m.width {
-		hint = truncateWidth(hint, m.width-2)
+	return hint
+}
+
+// hintView 是分段底栏：模型 | 工作区 | 快捷键提示。
+func (m *Model) hintView() string {
+	left := segAccentStyle.Render(m.modelName)
+	if ws := m.workspaceLabel(); ws != "" {
+		left += segStyle.Render(ws)
 	}
-	return " " + mutedStyle.Render(hint)
+	room := m.width - lipgloss.Width(left) - 2
+	if room < 8 {
+		return truncateWidth(m.modelName, m.width)
+	}
+	return left + " " + mutedStyle.Render(truncateWidth(m.hintText(), room))
+}
+
+func (m *Model) workspaceLabel() string {
+	ws := m.ag.Workspace()
+	if ws == "" {
+		return ""
+	}
+	if home, err := os.UserHomeDir(); err == nil && strings.HasPrefix(ws, home) {
+		ws = "~" + strings.TrimPrefix(ws, home)
+	}
+	return "⌂ " + ws
 }
 
 func (m *Model) renderTranscript() string {
@@ -230,6 +254,13 @@ func (m *Model) renderTranscript() string {
 		b.WriteString(pad.Render(strings.TrimRight(body, "\n")) + "\n\n")
 		inGroup, reasoning, reasoningText, pendingStream = false, 0, nil, false
 		group.Reset()
+	}
+
+	if !m.hasUserMessage() && m.viewport.Height >= 10 {
+		logo := gradientLogo()
+		sub := mutedStyle.Render("用 Go 写的终端 agent · /help 查看命令")
+		b.WriteString(lipgloss.PlaceHorizontal(max(width, lipgloss.Width(logo)), lipgloss.Center,
+			logo+"\n\n"+sub) + "\n\n")
 	}
 
 	for idx := range m.messages {
@@ -442,8 +473,8 @@ func truncateWidth(s string, width int) string {
 }
 
 var (
-	diffAddStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("2"))
-	diffDelStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("1"))
+	diffAddStyle = lipgloss.NewStyle().Foreground(agentColor)
+	diffDelStyle = lipgloss.NewStyle().Foreground(errorColor)
 )
 
 // diffLineStyle 按 "+ "/"- " 前缀给 diff 行上色，其余行用弱化色。
@@ -456,4 +487,13 @@ func diffLineStyle(l string) lipgloss.Style {
 	default:
 		return mutedStyle
 	}
+}
+
+func (m *Model) hasUserMessage() bool {
+	for _, msg := range m.messages {
+		if msg.role == roleUser {
+			return true
+		}
+	}
+	return false
 }
