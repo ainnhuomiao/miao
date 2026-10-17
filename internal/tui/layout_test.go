@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"fmt"
+	"github.com/charmbracelet/x/ansi"
 	"strings"
 	"testing"
 
@@ -92,28 +94,32 @@ func TestColumnWidthAndCentering(t *testing.T) {
 	}
 }
 
-func TestDrawerPanelAboveInput(t *testing.T) {
-	for _, h := range []int{16, 30, 50} {
-		m := newTestModel(t, 140, h, "ok")
-		m.drawerOpen = true
-		m.layout()
-		if m.viewport.Width != 140 {
-			t.Fatalf("高 %d：面板打开后对话区应占满宽度，得到 %d", h, m.viewport.Width)
+func TestActivityBarAboveInput(t *testing.T) {
+	m := newTestModel(t, 120, 30, "ok")
+	if m.activityView() != "" {
+		t.Fatal("没有工具调用时状态条应隐藏")
+	}
+	for i := 0; i < 5; i++ {
+		m.messages = append(m.messages, chatMessage{role: roleTool, toolName: fmt.Sprintf("t%d", i),
+			toolArgs: `{"path":"."}`, toolResult: "a\nb", done: i < 4})
+	}
+	m.layout()
+	rows := m.activityRows()
+	if len(rows) != activityMaxRows || rows[len(rows)-1].toolName != "t4" {
+		t.Fatalf("应显示最近 %d 条且最新在下：%+v", activityMaxRows, rows)
+	}
+	lines := strings.Split(m.View(), "\n")
+	if len(lines) != 30 {
+		t.Fatalf("整屏 %d 行，应刚好 30", len(lines))
+	}
+	for _, l := range lines {
+		if lipgloss.Width(l) > 120 {
+			t.Fatalf("行超宽：%q", l)
 		}
-		if m.drawerViewport.Width != m.columnWidth()-4 {
-			t.Fatalf("高 %d：面板宽=%d，想要和输入框同宽 %d", h, m.drawerViewport.Width, m.columnWidth()-4)
-		}
-		if ph := m.drawerViewport.Height; ph < 3 || ph > drawerMaxLines {
-			t.Fatalf("高 %d：面板高=%d 超出 3..%d", h, ph, drawerMaxLines)
-		}
-		lines := strings.Split(m.View(), "\n")
-		if len(lines) != h {
-			t.Fatalf("高 %d：整屏 %d 行，应刚好占满", h, len(lines))
-		}
-		// 面板在输入框上方：倒数第 4 行（输入框上边框之上）是面板下边框。
-		if !strings.Contains(lines[len(lines)-5], "╰") {
-			t.Fatalf("高 %d：输入框上方不是面板：%q", h, lines[len(lines)-5])
-		}
+	}
+	// 状态条紧贴输入框上边框
+	if !strings.Contains(ansi.Strip(lines[len(lines)-5]), "t4") {
+		t.Fatalf("输入框上方应是最新工具行：%q", lines[len(lines)-5])
 	}
 }
 

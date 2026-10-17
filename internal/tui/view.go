@@ -19,11 +19,11 @@ const (
 	headerHeight     = 2
 	inputMaxLines    = 6
 	columnMax        = 100
-	drawerMaxLines   = 8 // 工具面板最多显示的内容行数
+	activityMaxRows  = 3 // 输入框上方工具状态条最多行数
 	inputFrameHeight = 2
 	hintHeight       = 1
 	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数
-	approvalMaxLines = 6
+	approvalMaxLines = 10
 )
 
 var (
@@ -82,8 +82,8 @@ func (m *Model) view() string {
 	main := m.viewport.View()
 
 	parts := []string{m.headerView(), main}
-	if m.drawerOpen {
-		parts = append(parts, lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.drawerBoxView()))
+	if rows := m.activityView(); rows != "" {
+		parts = append(parts, rows)
 	}
 	if m.approval != nil {
 		parts = append(parts, m.approvalView())
@@ -186,21 +186,21 @@ func (m *Model) approvalView() string {
 		lines = append(lines, style.Render(truncateWidth(l, innerW)))
 	}
 	cmd := strings.Join(lines, "\n")
-	hint := "Y 允许 · N 拒绝 · Esc 取消 · Tab 详情"
+	hint := "Y 允许 · N 拒绝 · Esc 取消"
 	if m.approval.toolName == "write_file" {
-		hint = "Y 写入 · N 拒绝 · Esc 取消 · Tab 全部改动"
+		hint = "Y 写入 · N 拒绝 · Esc 取消"
 	}
 	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
 }
 
 func (m *Model) hintText() string {
-	hint := "Enter 发送 · Ctrl+J 换行 · Tab 抽屉 · Ctrl+R 思考 · Ctrl+C 退出"
+	hint := "Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考 · Ctrl+C 退出"
 	if m.drawerOpen {
 		hint = "Tab 关抽屉 · Esc 关抽屉 · PgUp/PgDn 滚动 · Ctrl+C 退出"
 	}
 	if m.streaming {
-		hint = "生成中 · Esc 取消 · Tab 抽屉 · PgUp/PgDn · Ctrl+C 取消"
+		hint = "生成中 · Esc 取消 · PgUp/PgDn · Ctrl+C 取消"
 	}
 	if m.approval != nil {
 		hint = "确认命令 · Y 允许 · N 拒绝 · Esc 取消"
@@ -587,4 +587,61 @@ func (m *Model) hasUserMessage() bool {
 		}
 	}
 	return false
+}
+
+// activityRows 是最近几次工具调用（最新的在最下面），每次一行。
+func (m *Model) activityRows() []chatMessage {
+	var rows []chatMessage
+	for i := len(m.messages) - 1; i >= 0 && len(rows) < activityMaxRows; i-- {
+		if m.messages[i].role == roleTool {
+			rows = append([]chatMessage{m.messages[i]}, rows...)
+		}
+	}
+	return rows
+}
+
+// activityView 渲染输入框上方的常驻工具状态条；没有工具调用时为空。
+func (m *Model) activityView() string {
+	rows := m.activityRows()
+	if len(rows) == 0 {
+		return ""
+	}
+	w := max(10, m.columnWidth()-4)
+	bar := lipgloss.NewStyle().Foreground(toolColor).Render("▏")
+	var out []string
+	for _, t := range rows {
+		var icon string
+		iconStyle := agentLabelStyle
+		dur := ""
+		switch {
+		case !t.done:
+			sp := m.spinner
+			sp.Style = lipgloss.NewStyle().Foreground(toolColor)
+			icon = sp.View()
+			iconStyle = lipgloss.NewStyle()
+		case t.toolError:
+			icon, iconStyle = "✗", errorStyle
+		default:
+			icon = "✓"
+		}
+		if t.done {
+			dur = t.toolDur.Round(time.Millisecond).String()
+		}
+		detail := formatArgs(t.toolName, t.toolArgs)
+		if t.done {
+			if t.toolError {
+				detail += " · " + firstLine(t.toolResult)
+			} else if s := toolSummary(t.toolName, t.toolResult); s != "" && t.toolName != "run_command" {
+				detail += " · " + s
+			}
+		}
+		name := toolLabelStyle.Render(t.toolName)
+		room := w - lipgloss.Width(icon) - lipgloss.Width(t.toolName) - lipgloss.Width(dur) - 4
+		detail = truncateWidth(strings.TrimPrefix(detail, " · "), max(1, room))
+		gap := max(1, room-lipgloss.Width(detail)+1)
+		line := bar + iconStyle.Render(icon) + " " + name + " " + mutedStyle.Render(detail) +
+			strings.Repeat(" ", gap) + mutedStyle.Render(dur)
+		out = append(out, " "+line)
+	}
+	return lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(strings.Join(out, "\n"))
 }

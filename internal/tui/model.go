@@ -156,7 +156,7 @@ func New(ag *agent.Agent, modelName string) *Model {
 		drawerViewport: dvp,
 		messages: []chatMessage{{
 			role:    roleNotice,
-			content: "已就绪。输入消息开始对话，输入 /help 查看命令。Tab 开/关工具抽屉。",
+			content: "已就绪。输入消息开始对话，输入 /help 查看命令。",
 			done:    true,
 		}},
 	}
@@ -230,11 +230,6 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	if m.approval != nil {
 		switch msg.String() {
 		case "tab":
-			m.drawerOpen = !m.drawerOpen
-			m.drawerFocus = m.drawerOpen
-			m.layout()
-			m.refreshViewport(false)
-			m.refreshDrawer()
 			return m, nil
 		case "pgup", "pgdown":
 			if m.drawerOpen {
@@ -296,12 +291,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case "tab":
-		m.drawerOpen = !m.drawerOpen
-		m.drawerFocus = m.drawerOpen
-		m.layout()
-		m.refreshViewport(false)
-		m.refreshDrawer()
-		return m, nil
+		return m, nil // 工具状态条常驻，不再有抽屉
 
 	case "[", "]":
 		// 一期：左侧会话侧栏接口预留，暂 noop
@@ -619,13 +609,7 @@ func (m *Model) layout() {
 		vh = 3
 	}
 	m.viewport.Width = m.width
-	if m.drawerOpen {
-		// 工具面板在输入框正上方：固定高度、可滚动，宽度与输入框一致。
-		ph := min(drawerMaxLines, max(3, (vh-3)/3))
-		vh -= ph + 2
-		m.drawerViewport.Width = max(4, m.columnWidth()-4) // 圆角边框 2 + 左右留白 2
-		m.drawerViewport.Height = ph
-	}
+	vh -= len(m.activityRows())
 	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())
@@ -803,7 +787,7 @@ func (a *approvalState) displayLines() []string {
 	if len(lines) > approvalMaxLines {
 		more := len(lines) - (approvalMaxLines - 1)
 		lines = append(append([]string{}, lines[:approvalMaxLines-1]...),
-			fmt.Sprintf("…还有 %d 行，Tab 在抽屉里看全部", more))
+			fmt.Sprintf("…还有 %d 行", more))
 	}
 	return lines
 }

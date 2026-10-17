@@ -168,21 +168,12 @@ func TestEscCancelsStream(t *testing.T) {
 	}
 }
 
-func TestTabTogglesDrawer(t *testing.T) {
+func TestTabIsNoop(t *testing.T) {
 	m := newTestModel(t, 100, 24, "")
-	if m.drawerOpen {
-		t.Fatal("默认抽屉应关闭")
-	}
+	before := m.View()
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if !m.drawerOpen {
-		t.Fatal("Tab 后抽屉应打开")
-	}
-	if !strings.Contains(m.View(), "工具") {
-		t.Error("打开抽屉后应显示工具标题")
-	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	if m.drawerOpen {
-		t.Fatal("Esc 应关闭抽屉")
+	if m.drawerOpen || m.View() != before {
+		t.Fatal("工具状态条常驻后 Tab 不应改变界面")
 	}
 }
 
