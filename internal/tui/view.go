@@ -446,6 +446,9 @@ func (m *Model) assistantBody(msg *chatMessage, width int) string {
 
 // toolCardLine 是主区的一行工具卡：⚙ name · ✓ 12ms · 摘要。
 func (m *Model) toolCardLine(msg chatMessage, width int) string {
+	if isTaskTool(msg.toolName) {
+		return m.taskCardLine(msg, width)
+	}
 	name := "⚙ " + msg.toolName
 	var summary string
 	switch {
@@ -673,6 +676,9 @@ func (m *Model) activityView() string {
 		return padL.Render(v)
 	}
 	if v, ok := m.subagentActivityView(w); ok {
+		return padL.Render(v)
+	}
+	if v, ok := m.taskActivityView(w); ok {
 		return padL.Render(v)
 	}
 	if v, ok := m.todoActivityView(w); ok {
