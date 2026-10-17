@@ -18,6 +18,15 @@ func TestActivityHiddenWithoutTools(t *testing.T) {
 	if v := m.activityView(); v != "" {
 		t.Fatalf("没有工具调用时状态条应为空，得到 %q", v)
 	}
+	before := len(strings.Split(m.View(), "\n"))
+	if before != 30 {
+		t.Fatalf("空闲时整屏 %d 行，应为 30（状态条占位）", before)
+	}
+	m.messages = append(m.messages, toolMsg("list_dir", `{"path":"."}`, "a", true, false))
+	m.layout()
+	if after := len(strings.Split(m.View(), "\n")); after != before {
+		t.Fatalf("出现工具调用后行数从 %d 变成 %d，输入框会跳", before, after)
+	}
 }
 
 func TestActivityIsOneLineShowingLatest(t *testing.T) {

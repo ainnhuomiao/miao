@@ -82,9 +82,8 @@ func (m *Model) view() string {
 	main := m.viewport.View()
 
 	parts := []string{m.headerView(), main}
-	if rows := m.activityView(); rows != "" {
-		parts = append(parts, rows)
-	}
+	// 工具状态条常驻占一行，空闲时为空行，输入框不会上下跳
+	parts = append(parts, m.activityView())
 	if m.approval != nil {
 		parts = append(parts, m.approvalView())
 	}

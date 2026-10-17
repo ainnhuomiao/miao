@@ -617,7 +617,7 @@ func (m *Model) layout() {
 		vh = 3
 	}
 	m.viewport.Width = m.width
-	vh -= len(m.activityRows())
+	vh -= activityMaxRows // 工具状态条常驻占位
 	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())
