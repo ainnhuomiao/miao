@@ -38,6 +38,7 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/sessions", desc: "列出已保存会话"},
 		{name: "/load", desc: "加载会话 <id>", needArg: true},
 		{name: "/clear", desc: "清空对话并换新会话"},
+		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
 		{name: "/reasoning", desc: "思考过程：展开/收起（当前：" + reasoning + "）"},
 		{name: "/exit", desc: "退出"},
 	}
@@ -49,7 +50,7 @@ func (m *Model) paletteOpen() bool {
 		return false
 	}
 	v := m.input.Value()
-	if !strings.HasPrefix(v, "/") || strings.ContainsAny(v, " \t\n") {
+	if _, ok := m.modelMode(); !ok && (!strings.HasPrefix(v, "/") || strings.ContainsAny(v, " \t\n")) {
 		return false
 	}
 	if m.palette.esc && v == m.palette.hidden {
@@ -60,6 +61,9 @@ func (m *Model) paletteOpen() bool {
 
 // paletteMatches 按前缀优先、子序列其次筛选命令。
 func (m *Model) paletteMatches() []paletteCmd {
+	if q, ok := m.modelMode(); ok {
+		return m.modelMatches(q)
+	}
 	q := strings.ToLower(strings.TrimPrefix(m.input.Value(), "/"))
 	var prefix, fuzzy []paletteCmd
 	for _, c := range m.paletteCommands() {
@@ -158,17 +162,36 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 		return true, nil
 	case "tab":
 		if len(matches) > 0 {
-			m.paletteComplete(matches[m.palette.sel])
+			c := matches[m.palette.sel]
+			m.paletteComplete(c)
+			if c.name == "/model" {
+				return true, m.fetchModelsCmd()
+			}
 		}
 		return true, nil
 	case "enter":
 		if len(matches) == 0 {
 			return false, nil // 交给原逻辑（提示未知命令）
 		}
+		_, inModel := m.modelMode()
 		if m.streaming {
+			if inModel {
+				m.notice("正在生成回复，暂不能切换模型。")
+			}
 			return true, nil
 		}
 		c := matches[m.palette.sel]
+		if inModel {
+			m.input.Reset()
+			m.fitInput()
+			m.syncPalette()
+			m.switchModel(c.name)
+			return true, nil
+		}
+		if c.name == "/model" {
+			m.paletteComplete(c)
+			return true, m.fetchModelsCmd()
+		}
 		if c.needArg {
 			m.paletteComplete(c)
 			return true, nil
@@ -182,6 +205,13 @@ func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 }
 
 func (m *Model) paletteComplete(c paletteCmd) {
+	if _, ok := m.modelMode(); ok {
+		m.input.SetValue("/model " + c.name)
+		m.input.CursorEnd()
+		m.fitInput()
+		m.syncPalette()
+		return
+	}
 	m.input.SetValue(c.name + " ")
 	m.input.CursorEnd()
 	m.fitInput()
@@ -194,10 +224,18 @@ func (m *Model) paletteView() string {
 	pad := lipgloss.NewStyle().MarginLeft(m.columnMargin())
 	matches := m.paletteMatches()
 	if len(matches) == 0 {
-		return pad.Render(mutedStyle.Render(truncateWidth("  没有匹配的命令", w)))
+		empty := "  没有匹配的命令"
+		if _, ok := m.modelMode(); ok {
+			empty = "  没有匹配的模型（Enter 直接切换到输入的名字）"
+		}
+		return pad.Render(mutedStyle.Render(truncateWidth(empty, w)))
 	}
 	nameW := 0
-	for _, c := range m.paletteCommands() {
+	all := m.paletteCommands()
+	if _, ok := m.modelMode(); ok {
+		all = matches
+	}
+	for _, c := range all {
 		nameW = max(nameW, lipgloss.Width(c.name))
 	}
 	selStyle := lipgloss.NewStyle().Foreground(accentColor).Bold(true)

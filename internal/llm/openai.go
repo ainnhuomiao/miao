@@ -9,6 +9,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"sync"
 	"time"
 )
 
@@ -16,8 +17,10 @@ import (
 type OpenAIClient struct {
 	apiKey  string
 	baseURL string
-	model   string
 	http    *http.Client
+
+	mu    sync.RWMutex
+	model string
 }
 
 // NewOpenAI 创建客户端。
@@ -37,7 +40,7 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 	}
 
 	payload, err := json.Marshal(chatRequest{
-		Model:         c.model,
+		Model:         c.Model(),
 		Messages:      req.Messages,
 		Tools:         req.Tools,
 		Stream:        true,

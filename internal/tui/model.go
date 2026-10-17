@@ -110,6 +110,7 @@ type Model struct {
 
 	approval *approvalState
 	palette  paletteState
+	models   modelListState
 
 	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
 	usage      *llm.Usage
@@ -189,7 +190,7 @@ func (m *Model) initSessionStore() {
 }
 
 func (m *Model) Init() tea.Cmd {
-	return textarea.Blink
+	return tea.Batch(textarea.Blink, m.fetchModelsCmd())
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -233,6 +234,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			resp:     msg.resp,
 		}
 		m.layout()
+		return m, nil
+
+	case modelsMsg:
+		m.handleModelsMsg(msg)
 		return m, nil
 
 	case approvalClearMsg:
@@ -588,6 +593,13 @@ func (m *Model) runCommand(text string) tea.Cmd {
 			m.loadSession(fields[1])
 		}
 
+	case "/model":
+		if len(fields) < 2 {
+			m.notice("当前模型：" + m.modelName + "。用法：/model <模型名>")
+			return m.fetchModelsCmd()
+		}
+		m.switchModel(fields[1])
+
 	case "/help":
 		m.messages = append(m.messages, chatMessage{
 			role: roleNotice, content: helpText, done: true,
@@ -702,6 +714,9 @@ func (m *Model) loadSession(id string) {
 	}
 	m.sess = sess
 	m.ag.SetHistory(sess.Messages)
+	if sess.Model != "" && sess.Model != m.modelName {
+		m.applyModel(sess.Model)
+	}
 	m.usage = nil
 	m.ctxTokens = 0
 	m.usageFresh = false
