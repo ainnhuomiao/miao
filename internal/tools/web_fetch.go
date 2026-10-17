@@ -6,10 +6,12 @@ import (
 	"fmt"
 	"io"
 	"mime"
+	"net"
 	"net/http"
 	"net/url"
 	"regexp"
 	"strings"
+	"syscall"
 	"time"
 	"unicode/utf8"
 
@@ -23,8 +25,93 @@ const (
 	webFetchTimeout   = 15 * time.Second
 )
 
-// webFetchClient 可在测试中替换。
-var webFetchClient = &http.Client{Timeout: webFetchTimeout}
+// webFetchAllowPrivate 为 true 时允许访问内网地址（仅测试用）。
+var webFetchAllowPrivate = false
+
+// webFetchClient 在拨号时检查真实 IP，DNS 解析结果和重定向后的地址都会被检查，
+// 拒绝 localhost、内网、链路本地等地址，防止模型借此访问本机服务。
+var webFetchClient = &http.Client{
+	Timeout: webFetchTimeout,
+	Transport: &http.Transport{
+		Proxy:               http.ProxyFromEnvironment,
+		DialContext:         webFetchDial,
+		TLSHandshakeTimeout: 10 * time.Second,
+	},
+	CheckRedirect: func(req *http.Request, via []*http.Request) error {
+		if len(via) >= 5 {
+			return fmt.Errorf("重定向次数过多")
+		}
+		if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
+			return fmt.Errorf("重定向到不支持的协议 %s", req.URL.Scheme)
+		}
+		return checkHostPublic(req.Context(), req.URL.Hostname())
+	},
+}
+
+// webFetchDial 拨号前检查目标 IP。本机代理（如 127.0.0.1:7890）是用户自己配置的，
+// 连代理本身放行；经代理访问的目标域名在 webFetch 里另行解析检查。
+func webFetchDial(ctx context.Context, network, address string) (net.Conn, error) {
+	d := &net.Dialer{Timeout: webFetchTimeout}
+	if isProxyAddr(address) {
+		return d.DialContext(ctx, network, address)
+	}
+	d.Control = func(_, addr string, _ syscall.RawConn) error {
+		host, _, err := net.SplitHostPort(addr)
+		if err != nil {
+			return err
+		}
+		ip := net.ParseIP(host)
+		if ip == nil {
+			return fmt.Errorf("无法识别地址 %s", host)
+		}
+		if !webFetchAllowPrivate && isPrivateIP(ip) {
+			return fmt.Errorf("禁止访问内网或本机地址 %s", ip)
+		}
+		return nil
+	}
+	return d.DialContext(ctx, network, address)
+}
+
+func isProxyAddr(address string) bool {
+	for _, scheme := range []string{"http", "https"} {
+		req := &http.Request{URL: &url.URL{Scheme: scheme, Host: "example.com"}}
+		p, err := http.ProxyFromEnvironment(req)
+		if err != nil || p == nil {
+			continue
+		}
+		port := p.Port()
+		if port == "" {
+			port = map[string]string{"http": "80", "https": "443", "socks5": "1080"}[p.Scheme]
+		}
+		if net.JoinHostPort(p.Hostname(), port) == address {
+			return true
+		}
+	}
+	return false
+}
+
+// checkHostPublic 解析域名并确认所有 IP 都不是内网地址（经代理时拨号检查看不到真实目标）。
+func checkHostPublic(ctx context.Context, host string) error {
+	if webFetchAllowPrivate {
+		return nil
+	}
+	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	if err != nil {
+		return nil // 解析失败交给代理或拨号去报错
+	}
+	for _, ip := range ips {
+		if isPrivateIP(ip.IP) {
+			return fmt.Errorf("禁止访问内网或本机地址 %s（%s）", host, ip.IP)
+		}
+	}
+	return nil
+}
+
+func isPrivateIP(ip net.IP) bool {
+	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() ||
+		(ip.To4() != nil && ip.To4()[0] == 100 && ip.To4()[1]&0xC0 == 64) // 100.64.0.0/10 运营商级 NAT
+}
 
 func registerWebFetch(r *Registry) {
 	r.Register(Tool{
@@ -58,6 +145,9 @@ func webFetch(ctx context.Context, raw string) (string, error) {
 	}
 	ctx, cancel := context.WithTimeout(ctx, webFetchTimeout)
 	defer cancel()
+	if err := checkHostPublic(ctx, u.Hostname()); err != nil {
+		return "", err
+	}
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
 		return "", err
