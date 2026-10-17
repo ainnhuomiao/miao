@@ -88,6 +88,7 @@ type approvalState struct {
 type Model struct {
 	side      sidebarState // 左侧会话侧栏
 	git       gitState     // /commit 进行中
+	rewind    rewindState  // Esc Esc 回退
 	sub       subagentState
 	ag        *agent.Agent
 	modelName string
@@ -225,6 +226,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if ok, cmd := m.sidebarKey(msg); ok {
+				return m, cmd
+			}
+			if ok, cmd := m.rewindKey(msg); ok {
 				return m, cmd
 			}
 		}
@@ -434,6 +438,7 @@ func (m *Model) submit() tea.Cmd {
 		return m.runCommand(text)
 	}
 
+	m.markRewindPoint(text)
 	events := make(chan streamEventMsg, 128)
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -667,6 +672,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 
 	case "/commit":
 		return m.startCommit()
+
+	case "/fork":
+		m.forkSession()
 
 	case "/help":
 		m.messages = append(m.messages, chatMessage{
@@ -929,6 +937,7 @@ func (m *Model) layout() {
 		vh -= activityMaxRows // 工具状态条常驻占位
 	}
 	vh -= m.todoPanelHeight()
+	vh -= m.rewindHeight()
 	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())

@@ -36,6 +36,8 @@ const helpText = `命令:
   /compact    压缩上下文（用量到 80% 时自动触发）
   /diff       查看本次会话改过的文件和 diff
   /commit     模型写提交信息，确认后只提交本会话改过的文件
+  /fork       把当前对话复制成新会话
+  Esc Esc     回到之前的某条消息重新编辑（文件改动一起还原）
   /model      切换模型（/model <名字>）
   /theme      切换主题（/theme <名字>，↑↓ 实时预览）
   /subagents  子代理设置（开关、并发上限、模型）
@@ -76,6 +78,9 @@ func (m *Model) view() string {
 			parts = append(parts, p)
 		}
 		parts = append(parts, m.activityView())
+	}
+	if m.rewind.open {
+		parts = append(parts, m.rewindView())
 	}
 	if m.approval != nil {
 		parts = append(parts, m.approvalView())

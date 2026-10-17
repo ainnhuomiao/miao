@@ -43,6 +43,7 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/compact", desc: "压缩上下文：把早期对话总结成摘要"},
 		{name: "/diff", desc: "查看本次会话改过的文件和 diff"},
 		{name: "/commit", desc: "让模型写提交信息，确认后提交本会话改过的文件"},
+		{name: "/fork", desc: "把当前对话复制成新会话（原会话保留）"},
 		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
 		{name: "/theme", desc: "切换主题（当前：" + m.savedTheme() + "）", needArg: true},
 		{name: "/subagents", desc: "子代理设置：开关、并发上限、模型", needArg: true},

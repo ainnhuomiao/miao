@@ -16,3 +16,11 @@ func (a *Agent) SetSnapshotDir(dir string) {
 		a.tools.SetSnapshotDir(dir)
 	}
 }
+
+// UndoDepth 返回当前可撤销的快照数。
+func (a *Agent) UndoDepth() int {
+	if a.tools == nil {
+		return 0
+	}
+	return a.tools.UndoDepth()
+}

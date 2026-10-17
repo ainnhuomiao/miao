@@ -12,6 +12,7 @@ func (m *Model) syncSnapshotDir() {
 		dir = filepath.Join(m.store.Dir(), "snapshots", m.sess.ID)
 	}
 	m.ag.SetSnapshotDir(dir)
+	m.resetRewindPoints()
 }
 
 // undo 撤销最近一次文件修改，并插一条灰字提示。

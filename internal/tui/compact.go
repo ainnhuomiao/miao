@@ -58,6 +58,7 @@ func (m *Model) handleCompactDone(msg compactDoneMsg) (tea.Model, tea.Cmd) {
 			m.notice("压缩失败：" + msg.err.Error())
 		}
 	default:
+		m.resetRewindPoints() // 历史已被摘要替换，旧下标失效
 		before := max(m.ctxTokens, msg.res.Before)
 		m.ctxTokens = msg.res.After
 		prefix := "已压缩"
