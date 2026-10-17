@@ -311,9 +311,10 @@ func TestSessionAutoSaveAndCommands(t *testing.T) {
 
 	m.input.SetValue("/sessions")
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if !strings.Contains(m.messages[len(m.messages)-1].content, oldID) {
-		t.Fatalf("/sessions 应列出 id，得到: %q", m.messages[len(m.messages)-1].content)
+	if !m.picker.open || len(m.pickerMatches()) == 0 || m.pickerMatches()[0].ID != oldID {
+		t.Fatalf("/sessions 应弹出列表并包含 %s", oldID)
 	}
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 
 	m.input.SetValue("/new")
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -366,11 +367,7 @@ func TestLoadMissingAndEmptySessions(t *testing.T) {
 	}
 
 	m.input.SetValue("/load")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // 菜单打开：无参 /load 先补全为 "/load "
-	if v := m.input.Value(); v != "/load " {
-		t.Fatalf("/load Enter 应补全，得到 %q", v)
-	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // /load 已不在菜单里，无参直接给用法
 	last = m.messages[len(m.messages)-1].content
 	if !strings.Contains(last, "用法") {
 		t.Fatalf("/load 无参提示不符: %q", last)

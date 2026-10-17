@@ -29,8 +29,8 @@ const (
 const helpText = `命令:
   /help       显示帮助
   /new        新建会话
-  /sessions   列出已保存会话
-  /load <id>  加载会话
+  /sessions   切换会话（↑↓ 选择 · Enter 切换 · 打字筛选 · d 删除）
+  /load <id>  按 id 加载会话
   /clear      清空对话并换新会话
   /undo       撤销最近一次文件修改（可连续撤销）
   /compact    压缩上下文（用量到 80% 时自动触发）
@@ -80,6 +80,9 @@ func (m *Model) view() string {
 			parts = append(parts, p)
 		}
 		parts = append(parts, m.activityView())
+	}
+	if m.picker.open {
+		parts = append(parts, m.sessionPickerView())
 	}
 	if m.rewind.open {
 		parts = append(parts, m.rewindView())

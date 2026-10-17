@@ -87,6 +87,7 @@ type approvalState struct {
 // Model 是 TUI 的全部状态。
 type Model struct {
 	side      sidebarState // 左侧会话侧栏
+	picker    pickerState  // /sessions 会话选择列表
 	git       gitState     // /commit 进行中
 	rewind    rewindState  // Esc Esc 回退
 	img       imageState   // Ctrl+V / @ 图片，见 images.go
@@ -231,6 +232,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, nil
 			}
 			if ok, cmd := m.sidebarKey(msg); ok {
+				return m, cmd
+			}
+			if ok, cmd := m.sessionPickerKey(msg); ok {
 				return m, cmd
 			}
 			if ok, cmd := m.rewindKey(msg); ok {
@@ -662,11 +666,11 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		m.beginNewSession("已新建会话。")
 
 	case "/sessions":
-		m.listSessions()
+		m.openSessionPicker()
 
 	case "/load":
 		if len(fields) < 2 {
-			m.notice("用法：/load <会话 id>（先用 /sessions 查看）")
+			m.notice("用法：/load <会话 id>（或用 /sessions 直接选）")
 		} else {
 			m.loadSession(fields[1])
 		}
@@ -962,6 +966,7 @@ func (m *Model) layout() {
 	}
 	vh -= m.todoPanelHeight()
 	vh -= m.rewindHeight()
+	vh -= m.pickerHeight()
 	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())

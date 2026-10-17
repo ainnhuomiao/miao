@@ -98,22 +98,19 @@ func TestPaletteArrowSelect(t *testing.T) {
 
 func TestPaletteTabComplete(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
-	typeText(m, "/lo")
+	typeText(m, "/mod")
 	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if v := m.input.Value(); v != "/load " {
-		t.Fatalf("补全后=%q，想要 \"/load \"", v)
-	}
-	if m.paletteOpen() {
-		t.Fatal("补全后菜单应关闭")
+	if v := m.input.Value(); v != "/model " {
+		t.Fatalf("补全后=%q，想要 \"/model \"", v)
 	}
 }
 
 func TestPaletteEnterLoadCompletes(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
-	typeText(m, "/load")
+	typeText(m, "/model")
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if v := m.input.Value(); v != "/load " {
-		t.Fatalf("/load Enter 后=%q，想要补全", v)
+	if v := m.input.Value(); v != "/model " {
+		t.Fatalf("/model Enter 后=%q，想要补全", v)
 	}
 }
 

@@ -41,8 +41,7 @@ func (m *Model) builtinPalette() []paletteCmd {
 	return []paletteCmd{
 		{name: "/help", desc: "显示帮助"},
 		{name: "/new", desc: "新建会话"},
-		{name: "/sessions", desc: "列出已保存会话"},
-		{name: "/load", desc: "加载会话 <id>", needArg: true},
+		{name: "/sessions", desc: "切换会话"},
 		{name: "/clear", desc: "清空对话并换新会话"},
 		{name: "/undo", desc: "撤销最近一次文件修改"},
 		{name: "/compact", desc: "压缩上下文：把早期对话总结成摘要"},
