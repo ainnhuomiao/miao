@@ -552,7 +552,7 @@ func (m *Model) renderDrawer() string {
 				status = fmt.Sprintf("完成 · %s", t.toolDur.Round(time.Millisecond))
 			}
 		}
-		b.WriteString(agentLabelStyle.Render("⚙ " + t.toolName))
+		b.WriteString(toolLabelStyle.Render("⚙ " + t.toolName))
 		b.WriteString("\n")
 		b.WriteString(mutedStyle.Render(status))
 		b.WriteString("\n")

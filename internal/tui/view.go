@@ -41,10 +41,6 @@ var (
 			BorderForeground(accentColor).
 			Padding(0, 1)
 
-	toolCardStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(toolColor).
-			Padding(0, 1)
 )
 
 const helpText = `命令:
@@ -199,31 +195,43 @@ func (m *Model) renderMessage(msg chatMessage) string {
 		return pad.Render(b.String()) + "\n\n"
 
 	case roleTool:
-		innerW := max(8, width-4)
-		var body strings.Builder
-		body.WriteString(toolLabelStyle.Render("⚙ " + msg.toolName))
-		if !msg.done {
-			body.WriteString(mutedStyle.Render(" · 运行中…"))
-		} else if msg.toolError {
-			body.WriteString(errorStyle.Render(" · 失败"))
-		} else {
-			body.WriteString(mutedStyle.Render(fmt.Sprintf(" · %s", msg.toolDur.Round(time.Millisecond))))
-		}
-		body.WriteString("\n")
-		if msg.toolArgs != "" {
-			body.WriteString(mutedStyle.Width(innerW).Render(wrapText(compact(msg.toolArgs, 120), innerW)))
-			body.WriteString("\n")
-		}
-		if msg.done && msg.toolResult != "" {
-			preview := compact(msg.toolResult, 160)
-			st := mutedStyle
-			if msg.toolError {
-				st = errorStyle
+		// 默认一行：⚙ name · ✓ 12ms · 摘要；详情留给抽屉。
+		name := "⚙ " + msg.toolName
+		var summary string
+		switch {
+		case !msg.done:
+			summary = "运行中…"
+		case msg.toolError:
+			summary = "✗"
+			if preview := compact(msg.toolResult, 40); preview != "" {
+				summary += " · " + preview
 			}
-			body.WriteString(st.Width(innerW).Render(wrapText(preview, innerW)))
+		default:
+			summary = fmt.Sprintf("✓ %s", msg.toolDur.Round(time.Millisecond))
+			if preview := compact(msg.toolResult, 48); preview != "" {
+				summary += " · " + preview
+			}
 		}
-		card := toolCardStyle.Width(width).Render(body.String())
-		return pad.Render(card) + "\n\n"
+		// 先按纯文本截断，再上色，避免 ANSI 干扰换行宽度。
+		plain := name + " · " + summary
+		if lipgloss.Width(plain) > width {
+			plain = truncateWidth(plain, width)
+			// 截断后重新拆：尽量保留工具名着色
+			if i := strings.Index(plain, " · "); i >= 0 {
+				name, summary = plain[:i], plain[i+len(" · "):]
+			} else {
+				name, summary = plain, ""
+			}
+		}
+		suffix := ""
+		if summary != "" {
+			if msg.done && msg.toolError {
+				suffix = errorStyle.Render(" · " + summary)
+			} else {
+				suffix = mutedStyle.Render(" · " + summary)
+			}
+		}
+		return pad.Render(toolLabelStyle.Render(name)+suffix) + "\n\n"
 
 	case roleNotice:
 		body := "· " + strings.ReplaceAll(msg.content, "\n", "\n  ")
