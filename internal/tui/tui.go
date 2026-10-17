@@ -19,11 +19,12 @@ func Run(ag *agent.Agent, modelName string) error {
 		tea.WithMouseCellMotion(),
 	)
 
-	ag.SetApprover(func(ctx context.Context, toolName, display string, _ json.RawMessage) (bool, error) {
+	ag.SetApprover(func(ctx context.Context, toolName, display string, args json.RawMessage) (bool, error) {
 		resp := make(chan bool, 1)
 		p.Send(approvalRequestMsg{
 			toolName: toolName,
 			display:  display,
+			args:     args,
 			resp:     resp,
 		})
 		select {

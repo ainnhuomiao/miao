@@ -48,6 +48,7 @@ func run() error {
 	system = agent.WithAgentsMD(system, md, truncated)
 	ag := agent.New(client, system, reg)
 	ag.SetAgentsMDLoaded(md != "")
+	ag.SetAllowedCommands(agent.AllowedCommandsFromEnv())
 
 	if *plain || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 		return repl.New(ag, cfg.Model).Run(context.Background())

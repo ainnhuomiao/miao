@@ -8,6 +8,13 @@ const ModelPlaceholder = "{{MODEL}}"
 
 // systemPrompt 返回本次请求实际使用的系统提示词。
 func (a *Agent) systemPrompt() string {
+	if a.Mode() == ModePlan {
+		return a.basePrompt() + planModeNote
+	}
+	return a.basePrompt()
+}
+
+func (a *Agent) basePrompt() string {
 	if !strings.Contains(a.system, ModelPlaceholder) {
 		return a.system
 	}

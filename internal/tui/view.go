@@ -71,7 +71,7 @@ const helpText = `命令:
   /exit       退出
 
 快捷键:
-  Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考过程
+  Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考过程 · Ctrl+T 任务清单
   PgUp/PgDn 滚动 · Esc 取消审批/取消生成 · Ctrl+C 取消或退出
   名单外 run_command：Y 允许 · N/Esc 拒绝
   [ / ] 左侧会话（一期预留）`
@@ -92,6 +92,9 @@ func (m *Model) view() string {
 	if m.paletteOpen() {
 		parts = append(parts, m.paletteView())
 	} else {
+		if p := m.todoPanelView(); p != "" {
+			parts = append(parts, p)
+		}
 		parts = append(parts, m.activityView())
 	}
 	if m.approval != nil {
@@ -207,9 +210,9 @@ func (m *Model) approvalView() string {
 		lines = append(lines, style.Render(truncateWidth(l, innerW)))
 	}
 	cmd := strings.Join(lines, "\n")
-	hint := "Y 允许 · N 拒绝 · Esc 取消"
+	hint := "Y 允许 · A 本会话总是允许 · N 拒绝 · Esc 取消"
 	if isFileEdit(m.approval.toolName) {
-		hint = "Y 写入 · N 拒绝 · Esc 取消"
+		hint = "Y 写入 · A 本会话总是允许 · N 拒绝 · Esc 取消"
 	}
 	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
@@ -220,6 +223,7 @@ const keymapText = `键位表
   Enter     发送
   Ctrl+J    换行
   Ctrl+R    显示/隐藏思考过程
+  Shift+Tab 切换权限模式
   Esc       取消生成
   PgUp/PgDn 滚动对话
   ?         显示本表（输入框为空时）
@@ -229,7 +233,7 @@ const keymapText = `键位表
 func (m *Model) barKeys() string {
 	switch {
 	case m.approval != nil:
-		return "Y 允许  N 拒绝  Esc 取消"
+		return "Y 允许  A 总是  N 拒绝  Esc 取消"
 	case m.streaming:
 		return "Esc 取消"
 	default:
@@ -280,7 +284,8 @@ func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	if showPath {
 		left = mutedStyle.Render(strings.TrimPrefix(m.workspaceLabel(), "⌂ "))
 	}
-	parts := []string{m.statusDot(), lipgloss.NewStyle().Foreground(accentColor).Render(m.modelName)}
+	parts := []string{m.statusDot() + " " + mutedStyle.Render(m.ag.Mode().String())}
+	parts = append(parts, lipgloss.NewStyle().Foreground(accentColor).Render(m.modelName))
 	if showUsage {
 		if u := m.usageText(); u != "" {
 			parts = append(parts, mutedStyle.Render(u))
@@ -673,6 +678,9 @@ func (m *Model) activityView() string {
 	bar := bg.Foreground(toolColor).Render("▏")
 	padL := lipgloss.NewStyle().MarginLeft(m.columnMargin())
 
+	if v, ok := m.todoActivityView(w); ok {
+		return padL.Render(v)
+	}
 	rows := m.activityRows()
 	if len(rows) == 0 {
 		idle := " " + mutedStyle.Render("┈ 工具待命")

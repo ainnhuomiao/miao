@@ -59,6 +59,7 @@ type Agent struct {
 	history []llm.Message
 
 	agentsMD bool // 启动时是否加载了 AGENTS.md
+	perm     permissions
 }
 
 // New 创建 Agent。registry 可为 nil（无工具）。
@@ -152,13 +153,14 @@ func (a *Agent) requestMessages() []llm.Message {
 // SetApprover 把审批回调交给工具注册表（例如 TUI 确认卡）。
 func (a *Agent) SetApprover(fn tools.Approver) {
 	if a.tools != nil {
-		a.tools.SetApprover(fn)
+		a.tools.SetApprover(a.wrapApprover(fn))
 	}
 }
 
 // Reset 清空对话历史，开启一个新会话。
 func (a *Agent) Reset() {
 	a.history = a.history[:0]
+	a.ClearSessionAllows()
 }
 
 // History 返回历史记录的副本。

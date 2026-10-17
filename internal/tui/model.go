@@ -71,6 +71,7 @@ type streamEventMsg struct {
 type approvalRequestMsg struct {
 	toolName string
 	display  string
+	args     json.RawMessage
 	resp     chan bool
 }
 
@@ -79,6 +80,7 @@ type approvalClearMsg struct{}
 type approvalState struct {
 	toolName string
 	display  string
+	args     json.RawMessage
 	resp     chan bool
 }
 
@@ -113,6 +115,8 @@ type Model struct {
 	approval *approvalState
 	palette  paletteState
 	models   modelListState
+
+	todoPanel bool // Ctrl+T 展开任务清单
 
 	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
 	usage      *llm.Usage
@@ -234,6 +238,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.approval = &approvalState{
 			toolName: msg.toolName,
 			display:  msg.display,
+			args:     msg.args,
 			resp:     msg.resp,
 		}
 		m.layout()
@@ -279,6 +284,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			}
 			return m, nil
 		case "y", "Y":
+			m.resolveApproval(true)
+			return m, nil
+		case "a", "A": // 本会话总是允许
+			m.ag.AllowForSession(m.approval.toolName, m.approval.args)
 			m.resolveApproval(true)
 			return m, nil
 		case "esc":
@@ -335,6 +344,11 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		return m, nil // 工具状态条常驻，不再有抽屉
 
+	case "shift+tab":
+		mode := m.ag.CycleMode()
+		m.notice("权限模式：" + mode.String())
+		return m, nil
+
 	case "?":
 		// 输入框为空时 ? 弹出键位表；有内容时照常输入问号。
 		if m.input.Value() == "" {
@@ -348,6 +362,9 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		_ = m.sidebarReserved
 		return m, nil
 
+	case "ctrl+t":
+		m.toggleTodoPanel()
+		return m, nil
 	case "ctrl+r":
 		m.showReasoning = !m.showReasoning
 		m.refreshViewport(false)
@@ -737,6 +754,7 @@ func (m *Model) loadSession(id string) {
 	}
 	m.sess = sess
 	m.syncSnapshotDir()
+	m.ag.ClearSessionAllows()
 	m.ag.SetHistory(sess.Messages)
 	if sess.Model != "" && sess.Model != m.modelName {
 		m.applyModel(sess.Model)
@@ -865,6 +883,7 @@ func (m *Model) layout() {
 	} else {
 		vh -= activityMaxRows // 工具状态条常驻占位
 	}
+	vh -= m.todoPanelHeight()
 	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())
