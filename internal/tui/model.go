@@ -17,6 +17,7 @@ import (
 	"github.com/charmbracelet/lipgloss"
 
 	"agnet/internal/agent"
+	"agnet/internal/llm"
 )
 
 type role int
@@ -59,6 +60,7 @@ type streamEventMsg struct {
 	toolResult string
 	toolError  bool
 	toolDur    time.Duration
+	usage      *llm.Usage
 	done       bool
 	err        error
 }
@@ -106,6 +108,9 @@ type Model struct {
 	sidebarReserved bool
 
 	approval *approvalState
+
+	// usage 是最近一次模型请求的用量，底栏显示上下文大小与缓存命中。
+	usage *llm.Usage
 }
 
 // New 创建 TUI 模型。
@@ -375,6 +380,7 @@ func (m *Model) submit() tea.Cmd {
 				toolResult: e.ToolResult,
 				toolError:  e.ToolError,
 				toolDur:    e.Duration,
+				usage:      e.Usage,
 			}
 			select {
 			case events <- msg:
@@ -431,6 +437,11 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.kind {
+	case agent.EventUsage:
+		if msg.usage != nil {
+			m.usage = msg.usage
+		}
+		return m, waitForEvent(m.events)
 	case agent.EventDelta:
 		last := m.lastAssistant()
 		if last == nil || last.done {

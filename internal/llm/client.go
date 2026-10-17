@@ -44,8 +44,8 @@ type Message struct {
 
 // ToolDef 描述可供模型调用的工具（OpenAI tools 字段）。
 type ToolDef struct {
-	Type     string       `json:"type"`
-	Function FunctionDef  `json:"function"`
+	Type     string      `json:"type"`
+	Function FunctionDef `json:"function"`
 }
 
 // FunctionDef 是工具的函数定义。
@@ -78,6 +78,17 @@ type ChatResult struct {
 	Reasoning    string
 	ToolCalls    []ToolCall
 	FinishReason string
+	// Usage 是服务端在流末尾返回的用量；服务端不支持时为 nil。
+	Usage *Usage
+}
+
+// Usage 是一次请求的 token 用量。
+type Usage struct {
+	PromptTokens     int `json:"prompt_tokens"`
+	CompletionTokens int `json:"completion_tokens"`
+	TotalTokens      int `json:"total_tokens"`
+	// PromptCacheHitTokens 是 DeepSeek 扩展字段：命中上下文缓存的输入 token 数。
+	PromptCacheHitTokens int `json:"prompt_cache_hit_tokens"`
 }
 
 // Client 是模型客户端的能力抽象。

@@ -37,10 +37,11 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 	}
 
 	payload, err := json.Marshal(chatRequest{
-		Model:    c.model,
-		Messages: req.Messages,
-		Tools:    req.Tools,
-		Stream:   true,
+		Model:         c.model,
+		Messages:      req.Messages,
+		Tools:         req.Tools,
+		Stream:        true,
+		StreamOptions: &streamOptions{IncludeUsage: true},
 	})
 	if err != nil {
 		return ChatResult{}, fmt.Errorf("编码请求失败: %w", err)
@@ -73,6 +74,7 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 		reasoning strings.Builder
 		acc       = newToolCallAccumulator()
 		finish    string
+		usage     *Usage
 	)
 
 	for scanner.Scan() {
@@ -95,6 +97,11 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 		}
 		if chunk.Error != nil {
 			return ChatResult{}, fmt.Errorf("模型返回错误: %s", chunk.Error.Message)
+		}
+
+		// 开启 include_usage 后，最后一个 chunk 的 choices 为空、只带 usage。
+		if chunk.Usage != nil {
+			usage = chunk.Usage
 		}
 
 		for _, choice := range chunk.Choices {
@@ -134,6 +141,7 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 		Reasoning:    reasoning.String(),
 		ToolCalls:    acc.Result(),
 		FinishReason: finish,
+		Usage:        usage,
 	}, nil
 }
 
@@ -217,10 +225,15 @@ func parseAPIError(resp *http.Response) error {
 }
 
 type chatRequest struct {
-	Model    string    `json:"model"`
-	Messages []Message `json:"messages"`
-	Tools    []ToolDef `json:"tools,omitempty"`
-	Stream   bool      `json:"stream"`
+	Model         string         `json:"model"`
+	Messages      []Message      `json:"messages"`
+	Tools         []ToolDef      `json:"tools,omitempty"`
+	Stream        bool           `json:"stream"`
+	StreamOptions *streamOptions `json:"stream_options,omitempty"`
+}
+
+type streamOptions struct {
+	IncludeUsage bool `json:"include_usage"`
 }
 
 type toolCallDelta struct {
@@ -242,6 +255,7 @@ type streamResponse struct {
 		} `json:"delta"`
 		FinishReason string `json:"finish_reason"`
 	} `json:"choices"`
+	Usage *Usage `json:"usage"`
 	Error *struct {
 		Message string `json:"message"`
 	} `json:"error"`

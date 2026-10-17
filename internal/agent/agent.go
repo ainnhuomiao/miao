@@ -27,6 +27,8 @@ const (
 	EventDelta EventKind = iota
 	EventToolStart
 	EventToolEnd
+	// EventUsage 在每次模型请求结束后推送本次用量（服务端返回时）。
+	EventUsage
 )
 
 // Event 是 Agent 向 UI 推送的进度。
@@ -39,6 +41,7 @@ type Event struct {
 	ToolResult string
 	ToolError  bool
 	Duration   time.Duration
+	Usage      *llm.Usage
 }
 
 // EventHandler 处理进度事件；返回错误会中止本轮。
@@ -95,6 +98,12 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 		if err != nil {
 			rollback()
 			return err
+		}
+		if result.Usage != nil {
+			if err := onEvent(Event{Kind: EventUsage, Usage: result.Usage}); err != nil {
+				rollback()
+				return err
+			}
 		}
 
 		assistant := llm.Message{

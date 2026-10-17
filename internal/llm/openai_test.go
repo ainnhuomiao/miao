@@ -131,3 +131,50 @@ func writeSSE(w http.ResponseWriter, f http.Flusher, data string) {
 	_, _ = w.Write([]byte("data: " + data + "\n\n"))
 	f.Flush()
 }
+
+func TestStreamChatUsageChunk(t *testing.T) {
+	var gotBody map[string]any
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_ = json.NewDecoder(r.Body).Decode(&gotBody)
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}`)
+		writeSSE(w, flusher, `{"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_cache_hit_tokens":64}}`)
+		writeSSE(w, flusher, `[DONE]`)
+	}))
+	defer srv.Close()
+
+	res, err := NewOpenAI("k", srv.URL, "m").StreamChat(context.Background(), ChatRequest{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	opts, _ := gotBody["stream_options"].(map[string]any)
+	if opts["include_usage"] != true {
+		t.Fatalf("请求未带 stream_options.include_usage: %v", gotBody["stream_options"])
+	}
+	if res.Content != "hi" {
+		t.Fatalf("content = %q", res.Content)
+	}
+	want := Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120, PromptCacheHitTokens: 64}
+	if res.Usage == nil || *res.Usage != want {
+		t.Fatalf("usage = %+v, want %+v", res.Usage, want)
+	}
+}
+
+func TestStreamChatNoUsage(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}`)
+		writeSSE(w, flusher, `[DONE]`)
+	}))
+	defer srv.Close()
+
+	res, err := NewOpenAI("k", srv.URL, "m").StreamChat(context.Background(), ChatRequest{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Usage != nil {
+		t.Fatalf("usage = %+v, want nil", res.Usage)
+	}
+}

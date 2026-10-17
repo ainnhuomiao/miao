@@ -3,6 +3,7 @@ package tui
 import (
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -215,6 +216,9 @@ func (m *Model) hintView() string {
 	if ws := m.workspaceLabel(); ws != "" {
 		segs = append(segs, seg{ws, surface0Color, segStyle})
 	}
+	if u := m.usageLabel(); u != "" {
+		segs = append(segs, seg{u, surface0Color, segStyle})
+	}
 	segs = append(segs, seg{"", surface0Color, segStyle}) // 状态段，内容单独上色
 
 	var b strings.Builder
@@ -242,6 +246,33 @@ func (m *Model) hintView() string {
 		return left
 	}
 	return left + " " + mutedStyle.Render(truncateWidth(m.hintText(), room))
+}
+
+// usageLabel 显示最近一次请求的上下文 token 数，及 DeepSeek 缓存命中比例。
+func (m *Model) usageLabel() string {
+	u := m.usage
+	if u == nil || u.TotalTokens <= 0 {
+		return ""
+	}
+	label := formatTokens(u.TotalTokens) + " tok"
+	if u.PromptCacheHitTokens > 0 && u.PromptTokens > 0 {
+		label += fmt.Sprintf(" · 缓存 %d%%", u.PromptCacheHitTokens*100/u.PromptTokens)
+	}
+	return label
+}
+
+// formatTokens 把 token 数缩写成 980 / 1.2k / 15k / 1.3M。
+func formatTokens(n int) string {
+	switch {
+	case n < 1000:
+		return strconv.Itoa(n)
+	case n < 10_000:
+		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1000), ".0") + "k"
+	case n < 1_000_000:
+		return strconv.Itoa(n/1000) + "k"
+	default:
+		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000_000), ".0") + "M"
+	}
 }
 
 // barStatus 是底栏状态段：就绪，或生成时 spinner + 状态 + 计时。
