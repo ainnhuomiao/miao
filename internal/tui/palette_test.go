@@ -197,3 +197,15 @@ func TestPaletteScrollKeepsSelectionVisible(t *testing.T) {
 		t.Fatalf("渲染 %d 行，想要 14", n)
 	}
 }
+
+func TestPaletteTabCompleteClosesMenu(t *testing.T) {
+	m := newTestModel(t, 80, 20, "ok")
+	typeText(m, "/hel")
+	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	if v := m.input.Value(); v != "/help" && v != "/help " {
+		t.Fatalf("补全后=%q，想要 \"/help\"", v)
+	}
+	if m.paletteOpen() {
+		t.Fatal("补全后菜单应关闭")
+	}
+}
