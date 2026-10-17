@@ -37,6 +37,7 @@ func Run(ag *agent.Agent, modelName string) error {
 	})
 
 	_, err := p.Run()
+	m.ag.KillJobs()
 	m.Close()
 	return err
 }

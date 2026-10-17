@@ -286,6 +286,9 @@ func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	}
 	parts := []string{m.statusDot() + " " + mutedStyle.Render(m.ag.Mode().String())}
 	parts = append(parts, lipgloss.NewStyle().Foreground(accentColor).Render(m.modelName))
+	if n := m.ag.RunningJobs(); n > 0 {
+		parts = append(parts, mutedStyle.Render(fmt.Sprintf("后台 %d", n)))
+	}
 	if showUsage {
 		if u := m.usageText(); u != "" {
 			parts = append(parts, mutedStyle.Render(u))

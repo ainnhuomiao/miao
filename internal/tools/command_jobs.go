@@ -7,6 +7,7 @@ import (
 	"os/exec"
 	"strings"
 	"sync"
+	"syscall"
 	"time"
 )
 
@@ -58,6 +59,7 @@ func (r *Registry) startBackground(name string, args []string, display string) R
 	cmd.Dir = r.Workspace()
 	out := &liveBuffer{progress: func(string) {}}
 	cmd.Stdout, cmd.Stderr = out, out
+	setProcessGroup(cmd)
 	if err := cmd.Start(); err != nil {
 		return Result{Content: "启动失败: " + err.Error(), IsError: true}
 	}
@@ -94,16 +96,48 @@ func (j *bgJob) status() string {
 	return "状态：" + state + "\n" + text
 }
 
-// KillJobs 结束所有后台任务（程序退出时调用）。
+// KillJobs 结束所有后台任务（程序退出时调用），连同子进程一起。
 func (r *Registry) KillJobs() {
 	t := r.jobs()
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for _, j := range t.jobs {
-		if j.cmd.Process != nil {
-			j.cmd.Process.Kill()
+		killGroup(j.cmd)
+	}
+}
+
+// RunningJobs 返回仍在运行的后台任务数。
+func (r *Registry) RunningJobs() int {
+	t := r.jobs()
+	t.mu.Lock()
+	defer t.mu.Unlock()
+	n := 0
+	for _, j := range t.jobs {
+		select {
+		case <-j.done:
+		default:
+			n++
 		}
 	}
+	return n
+}
+
+// setProcessGroup 让命令自成进程组，超时/kill 时能连子进程一起结束。
+func setProcessGroup(cmd *exec.Cmd) {
+	cmd.SysProcAttr = &syscall.SysProcAttr{Setpgid: true}
+	if cmd.Cancel != nil { // 只有 CommandContext 创建的命令才能设 Cancel
+		cmd.Cancel = func() error { return killGroup(cmd) }
+	}
+}
+
+func killGroup(cmd *exec.Cmd) error {
+	if cmd.Process == nil {
+		return nil
+	}
+	if err := syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL); err != nil {
+		return cmd.Process.Kill()
+	}
+	return nil
 }
 
 // registerCommandOutput 注册 command_output：查看或结束后台任务。
@@ -150,7 +184,7 @@ func registerCommandOutput(r *Registry) {
 				select {
 				case <-j.done:
 				default:
-					j.cmd.Process.Kill()
+					killGroup(j.cmd)
 					select {
 					case <-j.done:
 					case <-time.After(2 * time.Second):

@@ -67,3 +67,11 @@ func TestBackgroundJob(t *testing.T) {
 		t.Fatalf("kill: %+v", out)
 	}
 }
+
+func TestTimeoutKillsChildren(t *testing.T) {
+	start := time.Now()
+	res := execCommandStream(context.Background(), t.TempDir(), "sh", []string{"-c", "sleep 30 & sleep 30; wait"}, 300*time.Millisecond)
+	if !res.IsError || time.Since(start) > 2*time.Second {
+		t.Fatalf("子进程没被一起结束: %v %+v", time.Since(start), res)
+	}
+}

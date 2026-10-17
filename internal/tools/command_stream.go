@@ -68,6 +68,7 @@ func execCommandStream(ctx context.Context, dir, name string, args []string, tim
 	cmd.Dir = dir
 	out := &liveBuffer{progress: progressFrom(ctx)}
 	cmd.Stdout, cmd.Stderr = out, out
+	setProcessGroup(cmd)
 	cmd.WaitDelay = 2 * time.Second
 
 	err := cmd.Run()
