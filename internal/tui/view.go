@@ -12,11 +12,12 @@ import (
 )
 
 const (
-	headerHeight       = 2
-	inputLines         = 2
-	inputFrameHeight   = 2
-	hintHeight         = 1
-	approvalCardHeight = 5 // 边框2 + 标题/命令/提示 3
+	headerHeight     = 2
+	inputLines       = 2
+	inputFrameHeight = 2
+	hintHeight       = 1
+	approvalCardBase = 4 // 边框2 + 标题1 + 提示1，另加 display 行数
+	approvalMaxLines = 8
 )
 
 var (
@@ -43,10 +44,9 @@ var (
 			Padding(0, 1)
 
 	approvalBoxStyle = lipgloss.NewStyle().
-			Border(lipgloss.RoundedBorder()).
-			BorderForeground(accentColor).
-			Padding(0, 1)
-
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(accentColor).
+				Padding(0, 1)
 )
 
 const helpText = `命令:
@@ -139,7 +139,14 @@ func (m *Model) approvalView() string {
 	}
 	innerW := max(20, m.width-6)
 	title := "确认执行 " + m.approval.toolName
-	cmd := truncateWidth(m.approval.display, innerW)
+	if m.approval.toolName == "write_file" {
+		title = "确认写入文件"
+	}
+	var lines []string
+	for _, l := range m.approval.displayLines() {
+		lines = append(lines, truncateWidth(l, innerW))
+	}
+	cmd := strings.Join(lines, "\n")
 	hint := "Y 允许 · N 拒绝 · Esc 取消"
 	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)

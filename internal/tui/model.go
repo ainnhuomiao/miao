@@ -58,7 +58,6 @@ type streamEventMsg struct {
 	err        error
 }
 
-
 // approvalRequestMsg 由工具 goroutine 经 Program.Send 投递，请求用户确认。
 type approvalRequestMsg struct {
 	toolName string
@@ -511,7 +510,6 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	return nil
 }
 
-
 func (m *Model) resolveApproval(allow bool) {
 	if m.approval == nil {
 		return
@@ -551,7 +549,7 @@ func (m *Model) Close() {
 func (m *Model) layout() {
 	vh := m.height - headerHeight - (inputLines + inputFrameHeight) - hintHeight
 	if m.approval != nil {
-		vh -= approvalCardHeight
+		vh -= approvalCardBase + len(m.approval.displayLines())
 	}
 	if vh < 3 {
 		vh = 3
@@ -664,4 +662,13 @@ func compact(s string, maxRunes int) string {
 		return s
 	}
 	return string([]rune(s)[:maxRunes]) + "…"
+}
+
+// displayLines 把审批内容切成行，最多 approvalMaxLines 行。
+func (a *approvalState) displayLines() []string {
+	lines := strings.Split(strings.TrimRight(a.display, "\n"), "\n")
+	if len(lines) > approvalMaxLines {
+		lines = append(lines[:approvalMaxLines-1], "…")
+	}
+	return lines
 }
