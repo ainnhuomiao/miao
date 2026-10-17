@@ -57,6 +57,9 @@ func (m *Model) view() string {
 	}
 
 	main := m.viewport.View()
+	if m.isEmptySession() {
+		main = m.welcomeView(m.viewport.Width, m.viewport.Height)
+	}
 
 	header := m.headerView()
 	side := m.sidebarCols()
@@ -109,8 +112,15 @@ func (m *Model) drawerBoxView() string {
 }
 
 func (m *Model) headerView() string {
-	left := " " + titleStyle.Render("miao")
 	suffix := " · " + m.modelName
+	// 先按 猫+miao → 只有猫 → 都不要 降级，再走吃豆人自己的降级。
+	left := m.catLogo(0)
+	for lv := 2; lv >= 0; lv-- {
+		left = m.catLogo(lv)
+		if m.width-lipgloss.Width(left)-lipgloss.Width(suffix)-lipgloss.Width(m.contextViewCells(16))-5 >= 0 {
+			break
+		}
+	}
 	// 豆子轨道铺满标题与数字之间的整段空白。
 	right := m.contextViewCells(16) + " "
 	if extra := m.width - lipgloss.Width(left) - lipgloss.Width(suffix) - lipgloss.Width(right) - 4; extra > 0 {
