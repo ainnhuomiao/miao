@@ -30,7 +30,7 @@ func checkOrder(t *testing.T, calls []llm.ToolCall, msgs []llm.Message) {
 func noopEvents(Event) error { return nil }
 
 func TestParallelReadOnlyFast(t *testing.T) {
-	calls := []llm.ToolCall{mkCall("a", "read_file"), mkCall("b", "grep"), mkCall("c", "web_fetch")}
+	calls := []llm.ToolCall{mkCall("a", "read_file"), mkCall("b", "grep"), mkCall("c", "glob")}
 	caller := func(ctx context.Context, name, args string) tools.Result {
 		time.Sleep(100 * time.Millisecond)
 		return tools.Result{Content: "ok:" + name}

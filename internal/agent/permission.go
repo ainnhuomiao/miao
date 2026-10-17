@@ -135,6 +135,9 @@ func sessionKey(toolName string, args json.RawMessage) string {
 	if toolName == "run_command" {
 		return "run_command:" + commandLine(args)
 	}
+	if toolName == "web_fetch" {
+		return webHostKey(webFetchURLHost(args))
+	}
 	return toolName
 }
 
@@ -185,7 +188,13 @@ func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool)
 
 // wrapApprover 在用户审批前先按权限模式、会话放行和白名单自动决定。
 func (a *Agent) wrapApprover(fn tools.Approver) tools.Approver {
+	if a.tools != nil {
+		a.tools.SetWebPolicy(a.webURLAllowed)
+	}
 	return func(ctx context.Context, toolName, display string, args json.RawMessage) (bool, error) {
+		if toolName == "web_fetch" {
+			return a.approveWebFetch(ctx, fn, display, args)
+		}
 		if decided, allow := a.perm.decide(toolName, args); decided {
 			return allow, nil
 		}

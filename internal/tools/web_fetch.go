@@ -44,7 +44,10 @@ var webFetchClient = &http.Client{
 		if req.URL.Scheme != "http" && req.URL.Scheme != "https" {
 			return fmt.Errorf("重定向到不支持的协议 %s", req.URL.Scheme)
 		}
-		return checkHostPublic(req.Context(), req.URL.Hostname())
+		if err := checkHostPublic(req.Context(), req.URL.Hostname()); err != nil {
+			return err
+		}
+		return checkRedirectPolicy(req)
 	},
 }
 
@@ -129,7 +132,12 @@ func registerWebFetch(r *Registry) {
 			if err := json.Unmarshal(args, &in); err != nil {
 				return Result{Content: "参数解析失败: " + err.Error(), IsError: true}
 			}
-			out, err := webFetch(ctx, strings.TrimSpace(in.URL))
+			raw := strings.TrimSpace(in.URL)
+			ctx, res, ok := r.gateWebFetch(ctx, raw, args)
+			if !ok {
+				return res
+			}
+			out, err := webFetch(ctx, raw)
 			if err != nil {
 				return Result{Content: err.Error(), IsError: true}
 			}

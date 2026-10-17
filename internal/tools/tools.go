@@ -35,6 +35,7 @@ type Registry struct {
 	tools     map[string]Tool
 	order     []string
 	approver  Approver
+	webPolicy WebPolicy // web_fetch 免审批/重定向放行规则，见 web_policy.go
 }
 
 // NewRegistry 创建工具注册表。workspace 必须是绝对路径。

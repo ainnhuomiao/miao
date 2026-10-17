@@ -23,8 +23,8 @@ var readOnlyTools = map[string]bool{
 	"list_dir":  true,
 	"grep":      true,
 	"glob":      true,
-	"web_fetch": true,
-	"task":      true, // 只读子代理；并发数由 subagent.Manager 的信号量限制
+	// web_fetch 不在此列：域名未放行时要弹审批卡，必须串行，避免一批里同时弹多张卡。
+	"task": true, // 只读子代理；并发数由 subagent.Manager 的信号量限制
 }
 
 // isReadOnlyTool 报告工具是否可并发执行。
