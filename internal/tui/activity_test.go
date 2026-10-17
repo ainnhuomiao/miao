@@ -108,3 +108,15 @@ func TestMinimalBarsHaveNoBackground(t *testing.T) {
 		t.Fatalf("跑工具时应出现竖线：%q", v)
 	}
 }
+
+func TestThinkingViewOnlyWhileStreaming(t *testing.T) {
+	m := newTestModel(t, 100, 30, "")
+	if m.thinkingView() != "" {
+		t.Fatal("空闲时不应显示思考动画")
+	}
+	m.streaming = true
+	m.streamStart = time.Now()
+	if v := m.activityView(); !strings.Contains(v, "中") || !strings.Contains(v, "工具待命") {
+		t.Fatalf("生成时工具行右侧应有思考动画：%q", v)
+	}
+}

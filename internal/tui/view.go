@@ -659,7 +659,12 @@ func (m *Model) activityView() string {
 
 	rows := m.activityRows()
 	if len(rows) == 0 {
-		return padL.Render(" " + mutedStyle.Render("┈ 工具待命"))
+		idle := " " + mutedStyle.Render("┈ 工具待命")
+		if th := m.thinkingView(); th != "" {
+			gap := max(1, w-lipgloss.Width(idle)-lipgloss.Width(th)-1)
+			idle += strings.Repeat(" ", gap) + th
+		}
+		return padL.Render(idle)
 	}
 	t := rows[0]
 	var icon string
@@ -691,9 +696,31 @@ func (m *Model) activityView() string {
 	name := bg.Foreground(toolColor).Bold(true).Render(t.toolName)
 	left := bar + iconStyle.Render(icon) + bg.Render(" ") + name + bg.Render(" ")
 	right := bg.Foreground(mutedColor).Render(dur)
+	if th := m.thinkingView(); th != "" {
+		right = th + mutedStyle.Render(" · ") + right
+	}
 	room := w - lipgloss.Width(left) - lipgloss.Width(right) - 1
 	detail = truncateWidth(strings.TrimPrefix(detail, " · "), max(1, room))
 	gap := max(0, room-lipgloss.Width(detail))
 	line := left + bg.Foreground(mutedColor).Render(detail) + bg.Render(strings.Repeat(" ", gap+1)) + right
 	return padL.Render(line)
+}
+
+// thinkingGlyphs 是 Claude Code 风格的思考星号，来回往返播放。
+var thinkingGlyphs = []string{"·", "✢", "✳", "✶", "✻", "✽", "✻", "✶", "✳", "✢"}
+
+// thinkingVerbs 每隔几秒换一个动词，模仿 Claude Code 的趣味状态词。
+var thinkingVerbs = []string{"思考中", "琢磨中", "推敲中", "酝酿中", "构思中", "盘算中"}
+
+// thinkingView 渲染工具行右侧的思考动画：✻ 琢磨中… 3.2s；不在生成时返回空串。
+func (m *Model) thinkingView() string {
+	if !m.streaming {
+		return ""
+	}
+	el := time.Since(m.streamStart)
+	glyph := thinkingGlyphs[int(el/(120*time.Millisecond))%len(thinkingGlyphs)]
+	verb := thinkingVerbs[int(el/(3*time.Second))%len(thinkingVerbs)]
+	dots := strings.Repeat(".", int(el/(400*time.Millisecond))%3+1)
+	return lipgloss.NewStyle().Foreground(accentColor).Render(glyph+" ") +
+		gradientText(verb) + mutedStyle.Render(fmt.Sprintf("%-3s %.1fs", dots, el.Seconds()))
 }
