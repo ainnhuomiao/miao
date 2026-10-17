@@ -59,8 +59,20 @@ func TestHintViewFitsWidth(t *testing.T) {
 		if w >= 100 && ansi.StringWidth(got) != w {
 			t.Errorf("width %d: 宽屏时底栏应铺满整行，实际 %d", w, ansi.StringWidth(got))
 		}
-		if w >= 100 && !strings.Contains(ansi.Strip(got), "⏎ 发送") {
-			t.Errorf("width %d: 宽屏应显示快捷键: %q", w, ansi.Strip(got))
+		if w >= 100 && !strings.Contains(ansi.Strip(got), "? 帮助") {
+			t.Errorf("width %d: 宽屏应显示 ? 帮助: %q", w, ansi.Strip(got))
 		}
+	}
+}
+
+func TestHintViewNarrowKeepsModelAndStatus(t *testing.T) {
+	m := &Model{ag: agent.New(nil, "", nil), modelName: "deepseek-flash", width: 30,
+		usage: &llm.Usage{PromptTokens: 7700, CompletionTokens: 939, PromptCacheHitTokens: 2700}}
+	got := ansi.Strip(m.hintView())
+	if !strings.Contains(got, "deepseek-flash") || !strings.Contains(got, "就绪") {
+		t.Fatalf("窄屏应保留模型名和状态: %q", got)
+	}
+	if strings.Contains(got, "帮助") || strings.Contains(got, "缓存") {
+		t.Fatalf("窄屏应先藏帮助和缓存: %q", got)
 	}
 }

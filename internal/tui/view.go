@@ -194,105 +194,130 @@ func (m *Model) approvalView() string {
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
 }
 
-// hintKey 是底栏右侧的一条快捷键提示。
-type hintKey struct{ key, desc string }
+// keymapText 是按 ? 时列出的完整键位表。
+const keymapText = `键位表
+  Enter     发送
+  Ctrl+J    换行
+  Ctrl+R    显示/隐藏思考过程
+  Esc       取消生成
+  PgUp/PgDn 滚动对话
+  ?         显示本表（输入框为空时）
+  Ctrl+C    退出`
 
-// hintKeys 按当前状态返回快捷键提示，越靠前越重要，空间不够时从后往前丢。
-func (m *Model) hintKeys() []hintKey {
-	switch {
-	case m.approval != nil:
-		return []hintKey{{"Y", "允许"}, {"N", "拒绝"}, {"Esc", "取消"}}
-	case m.streaming:
-		return []hintKey{{"Esc", "取消"}, {"PgUp/PgDn", "滚动"}, {"^C", "退出"}}
-	default:
-		return []hintKey{{"⏎", "发送"}, {"^J", "换行"}, {"^R", "思考"}, {"^C", "退出"}}
-	}
+// barSeg 是底栏的一段：已渲染的内容和它的底色（用于箭头过渡）。
+type barSeg struct {
+	text string
+	bg   lipgloss.AdaptiveColor
 }
 
-// hintText 是纯文本版提示（测试与窄屏回退用）。
-func (m *Model) hintText() string {
-	parts := make([]string, 0, 4)
-	for _, k := range m.hintKeys() {
-		parts = append(parts, k.key+" "+k.desc)
-	}
-	return strings.Join(parts, " · ")
-}
-
-// renderHints 在 maxW 宽度内渲染尽量多的快捷键：按键 mauve，说明灰字，mantle 底。
-func (m *Model) renderHints(maxW int) string {
-	bg := lipgloss.NewStyle().Background(mantleColor)
-	keySt := bg.Foreground(accentColor).Bold(true)
-	descSt := bg.Foreground(mutedColor)
-	keys := m.hintKeys()
-	for n := len(keys); n > 0; n-- {
-		var b strings.Builder
-		for i, k := range keys[:n] {
-			if i > 0 {
-				b.WriteString(bg.Render("  "))
-			}
-			b.WriteString(keySt.Render(k.key) + descSt.Render(" "+k.desc))
-		}
-		b.WriteString(bg.Render(" "))
-		if out := b.String(); lipgloss.Width(out) <= maxW {
-			return out
-		}
-	}
-	return ""
-}
-
-// hintView 是底栏：左边分段（模型  工作区  用量  状态），右边快捷键，
-// 中间用 mantle 底色铺满整行。终端太窄时先藏缓存率，再藏用量段，再丢快捷键。
-func (m *Model) hintView() string {
-	left := m.segmentsView(true, true)
-	if lipgloss.Width(left) > m.width {
-		left = m.segmentsView(true, false)
-	}
-	if lipgloss.Width(left) > m.width {
-		left = m.segmentsView(false, false)
-	}
-	lw := lipgloss.Width(left)
-	if lw >= m.width {
-		return left
-	}
-	right := m.renderHints(m.width - lw - 1)
-	gap := m.width - lw - lipgloss.Width(right)
-	if gap < 0 {
-		gap, right = m.width-lw, ""
-	}
-	fill := lipgloss.NewStyle().Background(mantleColor).Render(strings.Repeat(" ", gap))
-	return left + fill + right
-}
-
-func (m *Model) segmentsView(showUsage, showCache bool) string {
-	type seg struct {
-		text string // 已渲染好的段内容
-		bg   lipgloss.AdaptiveColor
-	}
-	segs := []seg{{segAccentStyle.Render(m.modelName), accentColor}}
-	if ws := m.workspaceLabel(); ws != "" {
-		segs = append(segs, seg{segStyle.Render(ws), surface0Color})
-	}
-	if showUsage {
-		if u := m.usageLabel(showCache); u != "" {
-			segs = append(segs, seg{u, surface0Color})
-		}
-	}
-	segs = append(segs, seg{segStyle.Render(m.barStatus()), surface0Color})
-
+// joinSegs 把若干段连起来；装了 Nerd Font 用  箭头过渡，否则用 mantle 空格分隔。
+// edge 是这一组左右两侧的底色（整条的 mantle）。
+func joinSegs(segs []barSeg, rightAligned bool) string {
 	var b strings.Builder
 	for i, sg := range segs {
-		b.WriteString(sg.text)
-		if nerdFont {
-			fg := lipgloss.NewStyle().Foreground(sg.bg)
-			if i+1 < len(segs) {
-				fg = fg.Background(segs[i+1].bg)
+		if rightAligned {
+			prev := mantleColor
+			if i > 0 {
+				prev = segs[i-1].bg
 			}
-			b.WriteString(fg.Render("\ue0b0"))
+			if nerdFont {
+				b.WriteString(lipgloss.NewStyle().Foreground(sg.bg).Background(prev).Render("\ue0b2"))
+			} else if i > 0 {
+				b.WriteString(lipgloss.NewStyle().Background(mantleColor).Render(" "))
+			}
+			b.WriteString(sg.text)
+			continue
+		}
+		b.WriteString(sg.text)
+		next := mantleColor
+		if i+1 < len(segs) {
+			next = segs[i+1].bg
+		}
+		if nerdFont {
+			b.WriteString(lipgloss.NewStyle().Foreground(sg.bg).Background(next).Render("\ue0b0"))
 		} else if i+1 < len(segs) {
-			b.WriteString(segStyle.Render(""))
+			b.WriteString(lipgloss.NewStyle().Background(mantleColor).Render(" "))
 		}
 	}
 	return b.String()
+}
+
+// statusPill 是右侧状态胶囊：空闲 green，思考 mauve + spinner，跑工具 peach + 计时。
+func (m *Model) statusPill() barSeg {
+	bg, label := agentColor, "● 就绪"
+	if m.streaming {
+		label = "思考中"
+		bg = accentColor
+		for i := len(m.messages) - 1; i >= 0; i-- {
+			if m.messages[i].role == roleTool && !m.messages[i].done {
+				label, bg = "工具中", toolColor
+				break
+			}
+		}
+		if label == "思考中" && m.lastAssistantContent() != "" {
+			label = "生成中"
+		}
+		elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
+		sp := m.spinner
+		sp.Style = lipgloss.NewStyle().Foreground(crustColor).Background(bg)
+		st := lipgloss.NewStyle().Foreground(crustColor).Background(bg)
+		return barSeg{st.Render(" ") + sp.View() + st.Render(fmt.Sprintf("%s %.1fs ", label, elapsed.Seconds())), bg}
+	}
+	return barSeg{lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(crustColor).Background(bg).Render(label), bg}
+}
+
+// barView 按显示开关拼出整条底栏；宽度不足时返回 ok=false。
+func (m *Model) barView(showPath, showUsage, showCache, showHelp bool) (string, bool) {
+	left := []barSeg{{segAccentStyle.Render(m.modelName), accentColor}}
+	if showPath {
+		if ws := m.workspaceLabel(); ws != "" {
+			st := lipgloss.NewStyle().Padding(0, 1).Foreground(textColor).Background(surface1Color)
+			left = append(left, barSeg{st.Render(ws), surface1Color})
+		}
+	}
+	var right []barSeg
+	if showUsage {
+		if u := m.usageLabel(showCache); u != "" {
+			right = append(right, barSeg{u, surface0Color})
+		}
+	}
+	right = append(right, m.statusPill())
+
+	l := joinSegs(left, false)
+	r := joinSegs(right, true)
+	mantle := lipgloss.NewStyle().Background(mantleColor)
+	if showHelp {
+		r += mantle.Render(" ") + mantle.Foreground(accentColor).Bold(true).Render("?") + mantle.Foreground(mutedColor).Render(" 帮助 ")
+	} else {
+		r += mantle.Render(" ")
+	}
+	gap := m.width - lipgloss.Width(l) - lipgloss.Width(r)
+	if gap < 1 {
+		return "", false
+	}
+	return l + mantle.Render(strings.Repeat(" ", gap)) + r, true
+}
+
+// hintView 是底栏：左边模型和路径，右边用量、状态胶囊和「? 帮助」，整条 mantle 底。
+// 窄屏时依次藏：帮助 → 缓存 → 路径 → 用量；模型名和状态始终保留。
+func (m *Model) hintView() string {
+	tries := [][4]bool{
+		{true, true, true, true},
+		{true, true, true, false},
+		{true, true, false, false},
+		{false, true, false, false},
+		{false, false, false, false},
+	}
+	for _, t := range tries {
+		if out, ok := m.barView(t[0], t[1], t[2], t[3]); ok {
+			return out
+		}
+	}
+	out, _ := m.barView(false, false, false, false)
+	if out == "" {
+		return truncateWidth(m.modelName, m.width)
+	}
+	return out
 }
 
 // usageLabel 渲染用量段：↑输入 ↓输出，接口返回缓存数据时再加 green 色缓存率。

@@ -293,6 +293,14 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	case "tab":
 		return m, nil // 工具状态条常驻，不再有抽屉
 
+	case "?":
+		// 输入框为空时 ? 弹出键位表；有内容时照常输入问号。
+		if m.input.Value() == "" {
+			m.messages = append(m.messages, chatMessage{role: roleNotice, content: keymapText, done: true})
+			m.refreshViewport(true)
+			return m, nil
+		}
+
 	case "[", "]":
 		// 一期：左侧会话侧栏接口预留，暂 noop
 		_ = m.sidebarReserved

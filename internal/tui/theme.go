@@ -25,6 +25,7 @@ var (
 	surface0Color = ctp(catppuccin.Flavor.Surface0)
 	crustColor    = ctp(catppuccin.Flavor.Crust)
 	mantleColor   = ctp(catppuccin.Flavor.Mantle)
+	surface1Color = ctp(catppuccin.Flavor.Surface1)
 
 	// nerdFont 为真时底栏用 powerline 箭头分段；设置 AGNET_NERD_FONT=1 开启。
 	nerdFont = os.Getenv("AGNET_NERD_FONT") == "1"
