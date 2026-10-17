@@ -93,6 +93,9 @@ func registerWriteFile(r *Registry) {
 				return Result{Content: "用户拒绝写入 " + rel, IsError: true}
 			}
 
+			if err := r.saveSnapshot(full); err != nil {
+				return Result{Content: "保存撤销快照失败: " + err.Error(), IsError: true}
+			}
 			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 				return Result{Content: "创建目录失败: " + err.Error(), IsError: true}
 			}

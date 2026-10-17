@@ -188,6 +188,7 @@ func (m *Model) initSessionStore() {
 	}
 	m.store = store
 	m.sess = store.New(m.modelName, m.ag.Workspace())
+	m.syncSnapshotDir()
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -607,6 +608,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		}
 		m.switchModel(fields[1])
 
+	case "/undo":
+		m.undo()
+
 	case "/compact":
 		return m.startCompact(false)
 
@@ -668,6 +672,7 @@ func (m *Model) beginNewSession(notice string) {
 	m.usageFresh = false
 	if m.store != nil {
 		m.sess = m.store.New(m.modelName, m.ag.Workspace())
+		m.syncSnapshotDir()
 	} else {
 		m.sess = nil
 	}
@@ -723,6 +728,7 @@ func (m *Model) loadSession(id string) {
 		return
 	}
 	m.sess = sess
+	m.syncSnapshotDir()
 	m.ag.SetHistory(sess.Messages)
 	if sess.Model != "" && sess.Model != m.modelName {
 		m.applyModel(sess.Model)

@@ -96,6 +96,9 @@ func registerEditFile(r *Registry) {
 			if !allow {
 				return Result{Content: "用户拒绝修改 " + rel, IsError: true}
 			}
+			if err := r.saveSnapshot(full); err != nil {
+				return Result{Content: "保存撤销快照失败: " + err.Error(), IsError: true}
+			}
 			if err := atomicWrite(full, updated, info.Mode().Perm()); err != nil {
 				return Result{Content: "写入失败: " + err.Error(), IsError: true}
 			}

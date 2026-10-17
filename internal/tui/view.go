@@ -64,6 +64,7 @@ const helpText = `命令:
   /sessions   列出已保存会话
   /load <id>  加载会话
   /clear      清空对话并换新会话
+  /undo       撤销最近一次文件修改（可连续撤销）
   /compact    压缩上下文（用量到 80% 时自动触发）
   /model      切换模型（/model <名字>）
   /reasoning  展开或收起思考过程
