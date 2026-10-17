@@ -104,3 +104,25 @@ func TestContextViewUnknownAndOverflow(t *testing.T) {
 		t.Fatalf("顶栏加吃豆人后渲染 %d 行，想要 30", n)
 	}
 }
+
+func TestHeaderTrackFillsWidth(t *testing.T) {
+	t.Setenv("AGNET_CONTEXT_WINDOW", "")
+	for _, w := range []int{60, 100, 160} {
+		m := newTestModel(t, w, 30, "ok")
+		m.modelName = "deepseek-flash"
+		m.ctxTokens = 0 // 0% 时豆子数 = 轨道长度 - 1
+		h := strings.Split(m.headerView(), "\n")[0]
+		if lw := lipgloss.Width(h); lw > w {
+			t.Errorf("宽 %d：顶栏宽 %d 超出", w, lw)
+		}
+		beans := strings.Count(stripANSI(h), "•")
+		if w >= 100 {
+			if beans < 15 {
+				t.Errorf("宽 %d：轨道 %d 格，少于 16 格保底", w, beans+1)
+			}
+			if beans+1 < w/2 {
+				t.Errorf("宽 %d：轨道 %d 格，没有铺满顶栏", w, beans+1)
+			}
+		}
+	}
+}
