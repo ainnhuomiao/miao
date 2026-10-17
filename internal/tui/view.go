@@ -67,6 +67,7 @@ const helpText = `命令:
   /undo       撤销最近一次文件修改（可连续撤销）
   /compact    压缩上下文（用量到 80% 时自动触发）
   /model      切换模型（/model <名字>）
+  /mcp        查看 MCP 服务器状态与工具数
   /reasoning  展开或收起思考过程
   /exit       退出
 

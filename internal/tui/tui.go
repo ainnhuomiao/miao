@@ -8,6 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 
 	"agnet/internal/agent"
+	"agnet/internal/mcp"
 )
 
 // Run 启动 TUI，直到用户退出。
@@ -36,8 +37,10 @@ func Run(ag *agent.Agent, modelName string) error {
 		}
 	})
 
+	forwardMCPNotices(p)
 	_, err := p.Run()
 	m.ag.KillJobs()
+	mcp.Default().Close()
 	m.Close()
 	return err
 }

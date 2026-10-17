@@ -261,6 +261,10 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case compactDoneMsg:
 		return m.handleCompactDone(msg)
 
+	case mcpNoticeMsg:
+		m.notice(string(msg))
+		return m, nil
+
 	case approvalClearMsg:
 		m.clearApproval(false)
 		m.layout()
@@ -654,6 +658,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 			role: roleNotice, content: helpText, done: true,
 		})
 		m.refreshViewport(true)
+
+	case "/mcp":
+		m.notice(mcpSummary())
 
 	case "/reasoning":
 		m.showReasoning = !m.showReasoning

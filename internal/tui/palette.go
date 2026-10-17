@@ -41,6 +41,7 @@ func (m *Model) paletteCommands() []paletteCmd {
 		{name: "/undo", desc: "撤销最近一次文件修改"},
 		{name: "/compact", desc: "压缩上下文：把早期对话总结成摘要"},
 		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
+		{name: "/mcp", desc: "查看 MCP 服务器状态与工具"},
 		{name: "/reasoning", desc: "思考过程：展开/收起（当前：" + reasoning + "）"},
 		{name: "/exit", desc: "退出"},
 	}

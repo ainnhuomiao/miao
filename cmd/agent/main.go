@@ -10,6 +10,7 @@ import (
 	"agnet/internal/agent"
 	"agnet/internal/config"
 	"agnet/internal/llm"
+	"agnet/internal/mcp"
 	"agnet/internal/repl"
 	"agnet/internal/tools"
 	"agnet/internal/tui"
@@ -36,6 +37,8 @@ func run() error {
 		return err
 	}
 	tools.RegisterBuiltins(reg)
+	mcpMgr := mcp.Start(reg) // 后台连接 MCP 服务器，不阻塞启动
+	defer mcpMgr.Close()
 
 	client := llm.NewOpenAI(cfg.APIKey, cfg.BaseURL, cfg.Model)
 	system := fmt.Sprintf(

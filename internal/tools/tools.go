@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"path/filepath"
 	"strings"
+	"sync"
 
 	"agnet/internal/llm"
 )
@@ -29,6 +30,7 @@ type Approver func(ctx context.Context, toolName, display string, args json.RawM
 
 // Registry 管理工具集合与工作区路径约束。
 type Registry struct {
+	mu        sync.RWMutex // 保护 tools/order：MCP 工具会在启动后动态注册
 	workspace string
 	tools     map[string]Tool
 	order     []string
@@ -59,6 +61,8 @@ func (r *Registry) Approver() Approver { return r.approver }
 // Register 注册工具；同名覆盖并保持顺序。
 func (r *Registry) Register(t Tool) {
 	name := t.Def.Function.Name
+	r.mu.Lock()
+	defer r.mu.Unlock()
 	if _, ok := r.tools[name]; !ok {
 		r.order = append(r.order, name)
 	}
@@ -67,6 +71,8 @@ func (r *Registry) Register(t Tool) {
 
 // Definitions 返回发给模型的工具定义列表。
 func (r *Registry) Definitions() []llm.ToolDef {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
 	out := make([]llm.ToolDef, 0, len(r.order))
 	for _, name := range r.order {
 		out = append(out, r.tools[name].Def)
@@ -76,7 +82,9 @@ func (r *Registry) Definitions() []llm.ToolDef {
 
 // Call 按名称执行工具。
 func (r *Registry) Call(ctx context.Context, name string, argsJSON string) Result {
+	r.mu.RLock()
 	t, ok := r.tools[name]
+	r.mu.RUnlock()
 	if !ok {
 		return Result{Content: fmt.Sprintf("未知工具: %s", name), IsError: true}
 	}
