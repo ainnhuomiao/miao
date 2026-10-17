@@ -1,6 +1,6 @@
 # miao
 
-终端里的 AI 编程助手，用 Go 编写，支持任何 OpenAI Chat Completions 兼容的模型服务（原名 agnet）。
+终端里的 AI 编程助手，用 Go 编写，支持任何 OpenAI Chat Completions 兼容的模型服务。
 
 <!-- TODO: 替换为 docs/screenshot.png -->
 
