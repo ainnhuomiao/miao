@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+	"github.com/muesli/termenv"
 )
 
 func toolMsg(name, args, result string, done, isErr bool) chatMessage {
@@ -81,5 +82,29 @@ func TestActivityFitsWidthAndLayout(t *testing.T) {
 		if n := len(strings.Split(m.View(), "\n")); n != 24 {
 			t.Errorf("宽 %d：有状态条时渲染 %d 行，想要 24", w, n)
 		}
+	}
+}
+
+func TestMinimalBarsHaveNoBackground(t *testing.T) {
+	prev := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
+
+	m := newTestModel(t, 120, 30, "ok")
+	idle := m.activityView()
+	if !strings.Contains(idle, "工具待命") {
+		t.Fatalf("空闲时应显示 工具待命：%q", idle)
+	}
+	if strings.Contains(idle, "▏") {
+		t.Fatalf("空闲时不应有竖线：%q", idle)
+	}
+	for name, s := range map[string]string{"工具行": idle, "底栏": m.hintView()} {
+		if strings.Contains(s, "\x1b[48;") {
+			t.Errorf("%s 不应带背景色：%q", name, s)
+		}
+	}
+	m.messages = append(m.messages, toolMsg("list_dir", `{"path":"."}`, "a", false, false))
+	if v := m.activityView(); !strings.Contains(v, "▏") {
+		t.Fatalf("跑工具时应出现竖线：%q", v)
 	}
 }
