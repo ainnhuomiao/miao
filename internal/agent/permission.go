@@ -105,6 +105,17 @@ func AllowedCommandsFromEnv() []string {
 	return strings.Split(v, ",")
 }
 
+func parseCommand(args json.RawMessage) (string, []string, bool) {
+	var in struct {
+		Command string   `json:"command"`
+		Args    []string `json:"args"`
+	}
+	if json.Unmarshal(args, &in) != nil {
+		return "", nil, false
+	}
+	return in.Command, in.Args, true
+}
+
 func commandLine(args json.RawMessage) string {
 	var in struct {
 		Command string   `json:"command"`
@@ -144,9 +155,15 @@ func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool)
 		return true, true
 	}
 	if toolName == "run_command" {
+		name, cargs, ok := parseCommand(args)
+		raw := strings.Join(append([]string{name}, cargs...), " ")
+		// 危险参数（-exec、-toolexec、-o…）和 shell 元字符、换行一律交给用户确认，白名单不放行。
+		if !ok || tools.HasDangerousFlag(name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
+			return false, false
+		}
 		line := commandLine(args)
 		for _, pre := range p.allowCmds {
-			if line != "" && matchPrefix(line, pre) && !strings.ContainsAny(line, ";&|`$<>") {
+			if line != "" && matchPrefix(line, pre) {
 				return true, true
 			}
 		}

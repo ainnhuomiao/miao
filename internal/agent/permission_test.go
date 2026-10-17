@@ -37,6 +37,11 @@ func TestPermissionDecisions(t *testing.T) {
 		{name: "白名单前缀", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", "./..."), wantAllowed: true},
 		{name: "白名单按词边界", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "testx"), wantAsked: true, wantAllowed: true},
 		{name: "白名单拒绝 shell 元字符", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", ";rm"), wantAsked: true, wantAllowed: true},
+		{name: "白名单不放行 -exec", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", "-exec", "./evil"), wantAsked: true, wantAllowed: true},
+		{name: "白名单不放行 -toolexec=", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", "-toolexec=./evil"), wantAsked: true, wantAllowed: true},
+		{name: "白名单不放行 &&", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", "&&", "rm", "-rf", "x"), wantAsked: true, wantAllowed: true},
+		{name: "白名单不放行换行", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test\nrm"), wantAsked: true, wantAllowed: true},
+		{name: "白名单不放行反引号和重定向", allow: []string{"go test"}, tool: "run_command", args: cmd("go", "test", "`id`", ">x"), wantAsked: true, wantAllowed: true},
 		{name: "会话放行编辑整类", session: []struct {
 			tool string
 			args json.RawMessage
