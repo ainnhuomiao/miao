@@ -57,3 +57,39 @@ func TestReadFileAndListDir(t *testing.T) {
 		t.Fatalf("list_dir content = %q", res.Content)
 	}
 }
+
+func TestRunCommand_AllowlistAndExec(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewRegistry(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterBuiltins(r)
+
+	blocked := r.Call(context.Background(), "run_command", `{"command":"rm","args":["-rf","."]}`)
+	if !blocked.IsError || !strings.Contains(blocked.Content, "白名单") {
+		t.Fatalf("expected allowlist error, got %+v", blocked)
+	}
+
+	pathBlocked := r.Call(context.Background(), "run_command", `{"command":"/bin/ls"}`)
+	if !pathBlocked.IsError {
+		t.Fatalf("expected path reject: %+v", pathBlocked)
+	}
+
+	ok := r.Call(context.Background(), "run_command", `{"command":"echo","args":["hello-agnet"]}`)
+	if ok.IsError {
+		t.Fatalf("echo failed: %+v", ok)
+	}
+	if !strings.Contains(ok.Content, "hello-agnet") {
+		t.Fatalf("output = %q", ok.Content)
+	}
+
+	// cwd 应是工作区
+	pwd := r.Call(context.Background(), "run_command", `{"command":"pwd"}`)
+	if pwd.IsError {
+		t.Fatalf("pwd: %+v", pwd)
+	}
+	if strings.TrimSpace(pwd.Content) != dir {
+		t.Fatalf("pwd = %q want %q", pwd.Content, dir)
+	}
+}

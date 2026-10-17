@@ -11,7 +11,7 @@ import (
 
 const maxReadBytes = 256 << 10 // 256 KiB
 
-// RegisterBuiltins 注册一期工具：read_file、list_dir。
+// RegisterBuiltins 注册内置工具：read_file、list_dir、run_command。
 func RegisterBuiltins(r *Registry) {
 	r.Register(Tool{
 		Def: toolDef("read_file", "读取工作区内的文本文件。", map[string]any{
@@ -95,6 +95,8 @@ func RegisterBuiltins(r *Registry) {
 			return Result{Content: strings.TrimSuffix(b.String(), "\n")}
 		},
 	})
+
+	registerRunCommand(r)
 }
 
 func toolDef(name, desc string, params map[string]any) llm.ToolDef {
@@ -108,3 +110,4 @@ func toolDef(name, desc string, params map[string]any) llm.ToolDef {
 		},
 	}
 }
+
