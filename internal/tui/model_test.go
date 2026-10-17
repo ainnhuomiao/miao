@@ -2,6 +2,7 @@ package tui
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strings"
 	"testing"
@@ -12,6 +13,7 @@ import (
 
 	"agnet/internal/agent"
 	"agnet/internal/llm"
+	"agnet/internal/session"
 )
 
 type fakeClient struct {
@@ -57,6 +59,7 @@ func (b *blockingClient) StreamChat(ctx context.Context, _ llm.ChatRequest, _ ll
 
 func newTestModel(t *testing.T, width, height int, reply string) *Model {
 	t.Helper()
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	ag := agent.New(&fakeClient{deltas: []llm.Delta{{Content: reply}}}, "测试助手", nil)
 	m := New(ag, "test-model")
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
@@ -144,6 +147,7 @@ func TestSubmitStreamsIntoTranscript(t *testing.T) {
 }
 
 func TestEscCancelsStream(t *testing.T) {
+	t.Setenv("XDG_DATA_HOME", t.TempDir())
 	fc := &blockingClient{started: make(chan struct{})}
 	m := New(agent.New(fc, "", nil), "test-model")
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -283,5 +287,144 @@ func TestApprovalOverlayKeys(t *testing.T) {
 		}
 	default:
 		t.Fatal("no reject response")
+	}
+}
+
+func TestSessionAutoSaveAndCommands(t *testing.T) {
+	m := newTestModel(t, 80, 24, "你好！")
+	if m.store == nil || m.sess == nil {
+		t.Fatal("启动时应创建 Store 与空会话")
+	}
+	oldID := m.sess.ID
+
+	m.input.SetValue("hi")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	collectStream(t, m)
+
+	loaded, err := m.store.Load(oldID)
+	if err != nil {
+		t.Fatalf("流结束后应自动保存: %v", err)
+	}
+	if len(loaded.Messages) != 2 || loaded.Messages[0].Content != "hi" {
+		t.Fatalf("保存内容不符: %+v", loaded.Messages)
+	}
+
+	m.input.SetValue("/sessions")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if !strings.Contains(m.messages[len(m.messages)-1].content, oldID) {
+		t.Fatalf("/sessions 应列出 id，得到: %q", m.messages[len(m.messages)-1].content)
+	}
+
+	m.input.SetValue("/new")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.sess.ID == oldID {
+		t.Fatal("/new 应换新会话 id")
+	}
+	if len(m.ag.History()) != 0 {
+		t.Fatal("/new 应清空 Agent 历史")
+	}
+	if len(m.messages) != 1 || !strings.Contains(m.messages[0].content, "新建") {
+		t.Fatalf("/new 提示不符: %+v", m.messages)
+	}
+
+	m.input.SetValue("/load " + oldID)
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.sess.ID != oldID {
+		t.Fatalf("加载后 id = %s, 想要 %s", m.sess.ID, oldID)
+	}
+	if got := len(m.ag.History()); got != 2 {
+		t.Fatalf("加载后历史长度 = %d, 想要 2", got)
+	}
+	var sawUser, sawAsst bool
+	for _, cm := range m.messages {
+		if cm.role == roleUser && cm.content == "hi" {
+			sawUser = true
+		}
+		if cm.role == roleAssistant && cm.content == "你好！" {
+			sawAsst = true
+		}
+	}
+	if !sawUser || !sawAsst {
+		t.Fatalf("加载后界面应还原对话: %+v", m.messages)
+	}
+}
+
+func TestLoadMissingAndEmptySessions(t *testing.T) {
+	m := newTestModel(t, 80, 24, "")
+	m.input.SetValue("/load nosuch-id-zzz")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	last := m.messages[len(m.messages)-1].content
+	if !strings.Contains(last, "不存在") {
+		t.Fatalf("缺失会话提示不符: %q", last)
+	}
+
+	m.input.SetValue("/sessions")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	last = m.messages[len(m.messages)-1].content
+	if !strings.Contains(last, "暂无") {
+		t.Fatalf("空列表提示不符: %q", last)
+	}
+
+	m.input.SetValue("/load")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	last = m.messages[len(m.messages)-1].content
+	if !strings.Contains(last, "用法") {
+		t.Fatalf("/load 无参提示不符: %q", last)
+	}
+}
+
+func TestClearRotatesSessionID(t *testing.T) {
+	m := newTestModel(t, 80, 24, "回答")
+	oldID := m.sess.ID
+	m.input.SetValue("问题")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	collectStream(t, m)
+
+	m.input.SetValue("/clear")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	if m.sess.ID == oldID {
+		t.Fatal("/clear 应换新 id，避免覆盖已保存会话")
+	}
+	if _, err := m.store.Load(oldID); err != nil {
+		t.Fatalf("旧会话文件应仍在: %v", err)
+	}
+	if !errors.Is(func() error {
+		_, err := m.store.Load(m.sess.ID)
+		return err
+	}(), session.ErrNotFound) {
+		t.Fatal("新空会话不应落盘")
+	}
+}
+
+func TestChatMessagesFromHistoryWithTools(t *testing.T) {
+	sess := &session.Session{
+		ID:    "abc",
+		Title: "工具回合",
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "读文件"},
+			{
+				Role:    llm.RoleAssistant,
+				Content: "好的",
+				ToolCalls: []llm.ToolCall{{
+					ID: "c1", Type: "function",
+					Function: llm.FunctionCall{Name: "read_file", Arguments: `{"path":"a.go"}`},
+				}},
+			},
+			{Role: llm.RoleTool, ToolCallID: "c1", Name: "read_file", Content: "package main"},
+			{Role: llm.RoleAssistant, Content: "这是 main 包"},
+		},
+	}
+	msgs := chatMessagesFromHistory(sess)
+	var tools int
+	for _, cm := range msgs {
+		if cm.role == roleTool {
+			tools++
+			if !cm.done || cm.toolResult != "package main" || cm.toolName != "read_file" {
+				t.Fatalf("工具卡不符: %+v", cm)
+			}
+		}
+	}
+	if tools != 1 {
+		t.Fatalf("工具卡数 = %d", tools)
 	}
 }

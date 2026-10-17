@@ -195,6 +195,12 @@ func (a *Agent) History() []llm.Message {
 	return out
 }
 
+// SetHistory 用给定消息替换对话历史（例如从会话文件恢复）。
+func (a *Agent) SetHistory(msgs []llm.Message) {
+	a.history = make([]llm.Message, len(msgs))
+	copy(a.history, msgs)
+}
+
 // Workspace 返回工具工作区根目录；没有工具时为空。
 func (a *Agent) Workspace() string {
 	if a == nil || a.tools == nil {

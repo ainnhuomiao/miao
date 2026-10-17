@@ -18,6 +18,7 @@ import (
 
 	"agnet/internal/agent"
 	"agnet/internal/llm"
+	"agnet/internal/session"
 )
 
 type role int
@@ -112,6 +113,9 @@ type Model struct {
 	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
 	usage      *llm.Usage
 	usageFresh bool // 新一轮开始后的第一份用量覆盖旧值，之后累加
+
+	store *session.Store
+	sess  *session.Session
 }
 
 // New 创建 TUI 模型。
@@ -147,7 +151,7 @@ func New(ag *agent.Agent, modelName string) *Model {
 	dvp := viewport.New(0, 0)
 	dvp.MouseWheelEnabled = true
 
-	return &Model{
+	m := &Model{
 		ag:             ag,
 		modelName:      modelName,
 		input:          ta,
@@ -160,6 +164,23 @@ func New(ag *agent.Agent, modelName string) *Model {
 			done:    true,
 		}},
 	}
+	m.initSessionStore()
+	return m
+}
+
+// initSessionStore 打开默认会话目录并创建空会话；失败时静默降级（不持久化）。
+// 启动不自动加载最近会话，避免打断空对话欢迎态。
+func (m *Model) initSessionStore() {
+	dir, err := session.DefaultDir()
+	if err != nil {
+		return
+	}
+	store, err := session.NewStore(dir)
+	if err != nil {
+		return
+	}
+	m.store = store
+	m.sess = store.New(m.modelName, m.ag.Workspace())
 }
 
 func (m *Model) Init() tea.Cmd {
@@ -431,6 +452,8 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 			})
 		}
 
+		m.saveCurrentSession()
+
 		m.refreshViewport(false)
 		m.refreshDrawer()
 		return m, nil
@@ -537,12 +560,20 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		return tea.Quit
 
 	case "/clear":
-		m.ag.Reset()
-		m.messages = []chatMessage{{
-			role: roleNotice, content: "对话已清空，开始新会话。", done: true,
-		}}
-		m.refreshViewport(true)
-		m.refreshDrawer()
+		m.beginNewSession("对话已清空，开始新会话。")
+
+	case "/new":
+		m.beginNewSession("已新建会话。")
+
+	case "/sessions":
+		m.listSessions()
+
+	case "/load":
+		if len(fields) < 2 {
+			m.notice("用法：/load <会话 id>（先用 /sessions 查看）")
+		} else {
+			m.loadSession(fields[1])
+		}
 
 	case "/help":
 		m.messages = append(m.messages, chatMessage{
@@ -570,6 +601,164 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		m.refreshViewport(false)
 	}
 	return nil
+}
+
+func (m *Model) notice(content string) {
+	m.messages = append(m.messages, chatMessage{role: roleNotice, content: content, done: true})
+	m.refreshViewport(true)
+}
+
+// saveCurrentSession 把 Agent 历史写入当前会话文件；空会话不落盘。
+func (m *Model) saveCurrentSession() {
+	if m.store == nil || m.sess == nil {
+		return
+	}
+	m.sess.Messages = m.ag.History()
+	m.sess.Model = m.modelName
+	if ws := m.ag.Workspace(); ws != "" {
+		m.sess.Workspace = ws
+	}
+	if err := m.store.Save(m.sess); err != nil {
+		m.messages = append(m.messages, chatMessage{
+			role: roleError, content: "保存会话失败: " + err.Error(), done: true,
+		})
+	}
+}
+
+// beginNewSession 清空 Agent 历史与界面，并换新会话 id（旧文件保留）。
+func (m *Model) beginNewSession(notice string) {
+	m.ag.Reset()
+	m.usage = nil
+	m.usageFresh = false
+	if m.store != nil {
+		m.sess = m.store.New(m.modelName, m.ag.Workspace())
+	} else {
+		m.sess = nil
+	}
+	m.messages = []chatMessage{{role: roleNotice, content: notice, done: true}}
+	m.refreshViewport(true)
+	m.refreshDrawer()
+}
+
+func (m *Model) listSessions() {
+	if m.store == nil {
+		m.notice("会话存储不可用。")
+		return
+	}
+	list, err := m.store.List()
+	if err != nil {
+		m.notice("列出会话失败: " + err.Error())
+		return
+	}
+	if len(list) == 0 {
+		m.notice("暂无已保存会话。")
+		return
+	}
+	var b strings.Builder
+	b.WriteString("已保存会话（最近在前）：\n")
+	for _, meta := range list {
+		title := meta.Title
+		if title == "" {
+			title = "（无标题）"
+		}
+		b.WriteString(fmt.Sprintf("  %s  %s  %s  (%d 条)\n",
+			meta.ID,
+			meta.Updated.Local().Format("2006-01-02 15:04"),
+			title,
+			meta.MsgCount,
+		))
+	}
+	b.WriteString("加载：/load <id>")
+	m.notice(strings.TrimRight(b.String(), "\n"))
+}
+
+func (m *Model) loadSession(id string) {
+	if m.store == nil {
+		m.notice("会话存储不可用。")
+		return
+	}
+	sess, err := m.store.Load(id)
+	if err != nil {
+		if errors.Is(err, session.ErrNotFound) {
+			m.notice("会话不存在: " + id)
+			return
+		}
+		m.notice("加载会话失败: " + err.Error())
+		return
+	}
+	m.sess = sess
+	m.ag.SetHistory(sess.Messages)
+	m.usage = nil
+	m.usageFresh = false
+	m.messages = chatMessagesFromHistory(sess)
+	m.refreshViewport(true)
+	m.refreshDrawer()
+}
+
+// chatMessagesFromHistory 把持久化的 llm 消息还原为界面气泡（含工具卡）。
+func chatMessagesFromHistory(sess *session.Session) []chatMessage {
+	title := sess.Title
+	if title == "" {
+		title = session.TitleFrom(sess.Messages)
+	}
+	out := []chatMessage{{
+		role:    roleNotice,
+		content: fmt.Sprintf("已加载会话 %s · %s", sess.ID, title),
+		done:    true,
+	}}
+	for _, msg := range sess.Messages {
+		switch msg.Role {
+		case llm.RoleUser:
+			out = append(out, chatMessage{role: roleUser, content: msg.Content, done: true})
+		case llm.RoleAssistant:
+			out = append(out, chatMessage{role: roleAssistant, content: msg.Content, done: true})
+			for _, tc := range msg.ToolCalls {
+				out = append(out, chatMessage{
+					role:       roleTool,
+					toolCallID: tc.ID,
+					toolName:   tc.Function.Name,
+					toolArgs:   tc.Function.Arguments,
+					done:       false,
+				})
+			}
+		case llm.RoleTool:
+			updated := false
+			for i := len(out) - 1; i >= 0; i-- {
+				cm := &out[i]
+				if cm.role == roleTool && !cm.done &&
+					(cm.toolCallID == msg.ToolCallID || (msg.ToolCallID == "" && cm.toolName == msg.Name)) {
+					cm.toolResult = msg.Content
+					cm.toolName = firstNonEmpty(cm.toolName, msg.Name)
+					cm.done = true
+					updated = true
+					break
+				}
+			}
+			if !updated {
+				out = append(out, chatMessage{
+					role:       roleTool,
+					toolCallID: msg.ToolCallID,
+					toolName:   msg.Name,
+					toolResult: msg.Content,
+					done:       true,
+				})
+			}
+		}
+	}
+	// 未匹配到结果的工具卡仍标为完成，避免界面一直显示运行中。
+	for i := range out {
+		if out[i].role == roleTool {
+			out[i].done = true
+		}
+	}
+	return out
+}
+
+func firstNonEmpty(a, b string) string {
+	if a != "" {
+		return a
+	}
+	return b
 }
 
 func (m *Model) resolveApproval(allow bool) {

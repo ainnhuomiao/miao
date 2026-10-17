@@ -60,7 +60,10 @@ var (
 
 const helpText = `命令:
   /help       显示帮助
-  /clear      清空对话历史
+  /new        新建会话
+  /sessions   列出已保存会话
+  /load <id>  加载会话
+  /clear      清空对话并换新会话
   /reasoning  展开或收起思考过程
   /exit       退出
 
