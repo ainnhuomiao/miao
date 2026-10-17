@@ -7,15 +7,15 @@ import (
 	"strings"
 	"time"
 
-	"agnet/internal/hooks"
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/hooks"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 const maxToolRounds = 8
 
 // DefaultSystemPrompt 是每次请求都会放在最前面的系统提示词。
-const DefaultSystemPrompt = `你是一个运行在用户终端里的个人 AI 助手，名字叫 GoAgent。
+const DefaultSystemPrompt = `你是一个运行在用户终端里的个人 AI 助手，名字叫 miao。
 回答默认使用简体中文，除非用户要求其他语言。
 保持回答简洁、准确、可操作；涉及代码时给出可以直接运行的示例。
 不确定的事情要直说，不要编造。

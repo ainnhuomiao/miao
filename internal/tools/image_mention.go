@@ -5,7 +5,7 @@ import (
 	"os"
 	"strings"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 func isImageMention(data []byte) bool {

@@ -6,7 +6,7 @@ import (
 	"os"
 	"strings"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 const maxReadBytes = 256 << 10 // 256 KiB

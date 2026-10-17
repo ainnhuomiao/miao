@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 // ErrModelUnsupported 表示客户端不支持该操作。

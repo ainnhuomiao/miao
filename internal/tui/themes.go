@@ -10,6 +10,8 @@ import (
 
 	catppuccin "github.com/catppuccin/go"
 	"github.com/charmbracelet/lipgloss"
+
+	"miao/internal/appdir"
 )
 
 // theme 是一套主题：界面代码只引用这些配色槽，不直接写颜色名。
@@ -204,14 +206,14 @@ func themeSwatch(t theme) string {
 	return b.String()
 }
 
-// ---- 持久化：~/.config/agnet/config.json 里的 "theme" 字段 ----
+// ---- 持久化：~/.config/miao/config.json 里的 "theme" 字段 ----
 
 func configPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := appdir.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "agnet", "config.json"), nil
+	return filepath.Join(dir, "config.json"), nil
 }
 
 // loadSavedTheme 启动时应用保存的主题；文件缺失或主题无效时保持 auto。

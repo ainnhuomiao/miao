@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+
+	"miao/internal/appdir"
 )
 
 // 并发上限的默认值与范围。
@@ -39,13 +41,13 @@ func (c Config) Normalize() Config {
 	return c
 }
 
-// ConfigPath 返回 $XDG_CONFIG_HOME/agnet/config.json（与 /theme 同一个文件）。
+// ConfigPath 返回 $XDG_CONFIG_HOME/miao/config.json（与 /theme 同一个文件）。
 func ConfigPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := appdir.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "agnet", "config.json"), nil
+	return filepath.Join(dir, "config.json"), nil
 }
 
 // LoadConfig 读取 subagents 字段；文件或字段缺失时返回默认值。

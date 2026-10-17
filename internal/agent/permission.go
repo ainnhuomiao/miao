@@ -3,12 +3,12 @@ package agent
 import (
 	"context"
 	"encoding/json"
-	"os"
 	"path/filepath"
 	"strings"
 	"sync"
 
-	"agnet/internal/tools"
+	"miao/internal/config"
+	"miao/internal/tools"
 )
 
 // PermissionMode 是审批策略，Shift+Tab 在三种模式间循环切换。
@@ -32,7 +32,7 @@ func (m PermissionMode) String() string {
 }
 
 // AllowCommandsEnv 是命令白名单环境变量，逗号分隔，按前缀匹配，如 "go test,git status,make"。
-const AllowCommandsEnv = "AGNET_ALLOW_COMMANDS"
+const AllowCommandsEnv = config.EnvPrefix + "ALLOW_COMMANDS"
 
 const planModeNote = "\n\n当前处于「只读规划」模式：只能读取和搜索文件、给出方案，不要尝试写文件或执行有副作用的命令（这类调用会被直接拒绝）。等用户切回其他模式后再动手修改。"
 
@@ -97,9 +97,9 @@ func (a *Agent) SetAllowedCommands(prefixes []string) {
 	a.perm.mu.Unlock()
 }
 
-// AllowedCommandsFromEnv 读取 AGNET_ALLOW_COMMANDS。
+// AllowedCommandsFromEnv 读取 MIAO_ALLOW_COMMANDS（旧名 AGNET_ALLOW_COMMANDS 作回退）。
 func AllowedCommandsFromEnv() []string {
-	v := os.Getenv(AllowCommandsEnv)
+	v := config.Getenv(strings.TrimPrefix(AllowCommandsEnv, config.EnvPrefix))
 	if strings.TrimSpace(v) == "" {
 		return nil
 	}

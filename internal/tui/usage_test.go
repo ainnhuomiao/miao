@@ -6,8 +6,8 @@ import (
 
 	"github.com/charmbracelet/x/ansi"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
+	"miao/internal/agent"
+	"miao/internal/llm"
 )
 
 func TestFormatTokens(t *testing.T) {

@@ -9,15 +9,15 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/x/ansi"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
+	"miao/internal/agent"
+	"miao/internal/llm"
 )
 
 func newOpenAIModel(t *testing.T, srvURL, model string) (*Model, *llm.OpenAIClient) {
 	t.Helper()
 	t.Setenv("XDG_DATA_HOME", t.TempDir())
-	t.Setenv("AGNET_MODELS", "")
-	t.Setenv("AGNET_CONTEXT_WINDOW", "")
+	t.Setenv("MIAO_MODELS", "")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	c := llm.NewOpenAI("k", srvURL, model)
 	m := New(agent.New(c, "测试助手", nil), model)
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
@@ -97,7 +97,7 @@ func TestModelSecondLevelFetchFilterAndSwitch(t *testing.T) {
 
 func TestModelDirectSwitchUpdatesWindow(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
-	t.Setenv("AGNET_CONTEXT_WINDOW", "")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	before := ansi.Strip(m.contextView())
 	typeText(m, "/model claude-x")
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
@@ -111,7 +111,7 @@ func TestModelDirectSwitchUpdatesWindow(t *testing.T) {
 	if !strings.Contains(ansi.Strip(m.View()), "claude-x") {
 		t.Fatal("顶栏应显示新模型名")
 	}
-	t.Setenv("AGNET_CONTEXT_WINDOW", "5000")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "5000")
 	if !strings.Contains(ansi.Strip(m.contextView()), "5k") && !strings.Contains(ansi.Strip(m.contextView()), "5.0k") {
 		t.Fatalf("环境变量应优先: %q", ansi.Strip(m.contextView()))
 	}
@@ -136,13 +136,13 @@ func TestModelFetchFailureFallsBack(t *testing.T) {
 
 func TestModelEnvOverride(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
-	t.Setenv("AGNET_MODELS", "a-1, b-2")
+	t.Setenv("MIAO_MODELS", "a-1, b-2")
 	if m.fetchModelsCmd() != nil {
-		t.Fatal("设置 AGNET_MODELS 时不应拉取")
+		t.Fatal("设置 MIAO_MODELS 时不应拉取")
 	}
 	typeText(m, "/model ")
 	if got := paletteNames(m); len(got) != 3 || got[1] != "a-1" || got[2] != "b-2" {
-		t.Fatalf("AGNET_MODELS 列表 %v", got)
+		t.Fatalf("MIAO_MODELS 列表 %v", got)
 	}
 }
 

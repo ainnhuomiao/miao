@@ -1,4 +1,4 @@
-# GoAgent（agnet）
+# miao
 
 用 Go 写的终端 AI Agent，同时也是我的 Go 语言学习项目。
 
@@ -8,22 +8,31 @@
 - **默认：全屏 TUI**（基于 Bubble Tea 生态），带对话区、输入框、滚动和状态栏
 - **`-plain`：逐行 REPL**（纯标准库），适合管道、脚本和阅读最小实现
 
+## 从 agnet 改名
+
+程序原名 agnet，现在叫 miao：
+
+- 环境变量 `AGNET_*` 改为 `MIAO_*`（如 `MIAO_MODELS`、`MIAO_CONTEXT_WINDOW`、`MIAO_VISION`、`MIAO_ALLOW_COMMANDS`、`MIAO_NERD_FONT`）；旧名仍会读取，两个都设置时新名优先。
+- 用户目录 `~/.config/agnet`、`~/.local/share/agnet`、`~/.local/state/agnet`（遵循 XDG 变量）首次启动时自动迁移到 `miao`，新目录已存在则不动。
+- 项目目录 `.agnet/`（commands、hooks.json）改为 `.miao/`；没有 `.miao/` 时仍读 `.agnet/`，不会自动移动。已信任的项目 hook 迁移后保持信任。
+- hook 脚本里的 `MIAO_EVENT` 等变量同时提供旧名 `AGNET_*`。
+
 ## 界面
 
 ```text
- GoAgent · deepseek-chat                                             ● 就绪
+ miao · deepseek-chat                                                ● 就绪
  ────────────────────────────────────────────────────────────────────────────
   · 已就绪。输入消息开始对话，输入 /help 查看命令。
   ▌ 你
   用一句话解释 goroutine
 
-  ▌ GoAgent
+  ▌ miao
   思考 128 字 · Ctrl+R 展开
   Goroutine 是 Go 运行时调度的轻量级执行单元，比操作系统线程便宜得多……
 
   ▌ 你
   再举一个并发的例子
-  ▌ GoAgent
+  ▌ miao
   下面是一个用 channel 汇总结果的例子……
 
 ╭────────────────────────────────────────────────────────────────────────────╮
@@ -62,14 +71,14 @@ cp .env.example .env
 ### 3. 运行
 
 ```bash
-go run ./cmd/agent
+go run ./cmd/miao
 ```
 
 也可以不用 `.env`，直接通过环境变量启动：
 
 ```bash
 export AGENT_API_KEY=sk-xxxx
-go run ./cmd/agent
+go run ./cmd/miao
 ```
 
 > 如果下载依赖很慢，可以使用 Go 模块镜像：
@@ -81,13 +90,13 @@ go run ./cmd/agent
 ### 纯文本模式
 
 ```bash
-go run ./cmd/agent -plain
+go run ./cmd/miao -plain
 ```
 
 或者在管道 / 重定向场景下自动启用：
 
 ```bash
-printf '用一句话解释 goroutine\n' | go run ./cmd/agent
+printf '用一句话解释 goroutine\n' | go run ./cmd/miao
 ```
 
 ### 换其他模型服务
@@ -131,8 +140,8 @@ Ollama 不需要真正的 Key，`AGENT_API_KEY` 随便填一个非空值（例�
 ### 开发命令
 
 ```bash
-make run     # go run ./cmd/agent
-make build   # 构建到 bin/agent
+make run     # go run ./cmd/miao
+make build   # 构建到 bin/miao
 make test    # 运行全部测试
 make check   # go fmt + go vet + go test
 ```
@@ -140,8 +149,8 @@ make check   # go fmt + go vet + go test
 ## 项目结构
 
 ```text
-agnet/
-├── cmd/agent/main.go        # 入口：flag、TTY 检测、组装依赖
+agnet/                       # 仓库目录（名字没改）
+├── cmd/miao/main.go        # 入口：flag、TTY 检测、组装依赖
 ├── internal/
 │   ├── config/config.go     # 环境变量 + .env 读取
 │   ├── llm/
@@ -167,7 +176,7 @@ agnet/
 
 ```text
               ┌──────────────┐
-              │ cmd/agent    │
+              │ cmd/miao     │
               └──┬────────┬──┘
                  │        │
         ┌────────▼──┐  ┌──▼─────────┐
@@ -227,7 +236,7 @@ type Client interface {
 
 | 文件 | 知识点 |
 | --- | --- |
-| `cmd/agent/main.go` | `flag`、TTY 检测、依赖组装、`os.Exit` |
+| `cmd/miao/main.go` | `flag`、TTY 检测、依赖组装、`os.Exit` |
 | `internal/config` | 环境变量、文件读取、`bufio.Scanner`、`strings.Cut`、`defer` |
 | `internal/llm/client.go` | 类型定义、常量、接口、函数类型 |
 | `internal/llm/openai.go` | `net/http`、`encoding/json`、SSE、`context`、`%w` 错误包装 |
@@ -263,7 +272,7 @@ TUI 引入了 Charm 生态的依赖：
 
 ### 建议的阅读顺序
 
-1. `cmd/agent/main.go` —— 程序从哪里开始
+1. `cmd/miao/main.go` —— 程序从哪里开始
 2. `internal/config/config.go` —— 配置怎么来的
 3. `internal/llm/client.go` —— 接口定义了哪些能力
 4. `internal/llm/openai.go` —— 最核心的 HTTP + SSE

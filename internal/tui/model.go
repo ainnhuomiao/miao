@@ -16,9 +16,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
-	"agnet/internal/session"
+	"miao/internal/agent"
+	"miao/internal/llm"
+	"miao/internal/session"
 )
 
 type role int
@@ -186,9 +186,19 @@ func New(ag *agent.Agent, modelName string) *Model {
 	if ag.AgentsMDLoaded() {
 		m.messages = append(m.messages, chatMessage{role: roleNotice, content: "已加载 AGENTS.md", done: true})
 	}
+	for _, n := range startupNotices {
+		m.messages = append(m.messages, chatMessage{role: roleNotice, content: n, done: true})
+	}
+	startupNotices = nil // 只显示一次
 	m.initSessionStore()
 	return m
 }
+
+// startupNotices 是启动时要显示一次的灰色提示（例如目录迁移）。
+var startupNotices []string
+
+// SetStartupNotices 设置启动时显示一次的提示。
+func SetStartupNotices(notes []string) { startupNotices = notes }
 
 // initSessionStore 打开默认会话目录并创建空会话；失败时静默降级（不持久化）。
 // 启动不自动加载最近会话，避免打断空对话欢迎态。

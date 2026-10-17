@@ -1,5 +1,5 @@
 {
-  description = "agnet：终端里的 AI 编程助手（Go + Bubble Tea）";
+  description = "miao：终端里的 AI 编程助手（Go + Bubble Tea）";
 
   inputs.nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
 
@@ -17,33 +17,30 @@
     in
     {
       packages = forAllSystems (pkgs: {
-        agnet = pkgs.buildGoModule {
-          pname = "agnet";
+        miao = pkgs.buildGoModule {
+          pname = "miao";
           inherit version;
           src = self;
           # go.mod / go.sum 一变就要更新：先改成 pkgs.lib.fakeHash，nix build 报出的 got 填回来
           vendorHash = "sha256-2d30SCGEYiSHdQpYBq37RGFBPQUu/jUkpEOWe3qDGNU=";
-          subPackages = [ "cmd/agent" ];
+          subPackages = [ "cmd/miao" ];
           env.CGO_ENABLED = 0;
           ldflags = [
             "-s"
             "-w"
           ];
-          # 只构建 cmd/agent，这里不跑测试；完整测试用 make check
-          postInstall = ''
-            mv $out/bin/agent $out/bin/agnet
-          '';
+          # 只构建 cmd/miao（产物就是 bin/miao），这里不跑测试；完整测试用 make check
           meta = {
             description = "终端里的 AI 编程助手";
-            mainProgram = "agnet";
+            mainProgram = "miao";
             platforms = systems;
           };
         };
-        default = self.packages.${pkgs.stdenv.hostPlatform.system}.agnet;
+        default = self.packages.${pkgs.stdenv.hostPlatform.system}.miao;
       });
 
       overlays.default = final: _prev: {
-        agnet = self.packages.${final.stdenv.hostPlatform.system}.agnet;
+        miao = self.packages.${final.stdenv.hostPlatform.system}.miao;
       };
 
       devShells = forAllSystems (pkgs: {

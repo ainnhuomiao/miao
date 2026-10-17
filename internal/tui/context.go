@@ -2,12 +2,13 @@ package tui
 
 import (
 	"fmt"
-	"os"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/charmbracelet/lipgloss"
+
+	"miao/internal/config"
 )
 
 // contextWindows 是常见模型的上下文窗口（token），按模型名包含关系匹配，越具体越靠前。
@@ -25,9 +26,9 @@ var contextWindows = []struct {
 	{"glm", 128_000},
 }
 
-// contextWindow 返回模型上下文窗口；AGNET_CONTEXT_WINDOW 优先，查不到返回 0。
+// contextWindow 返回模型上下文窗口；MIAO_CONTEXT_WINDOW 优先，查不到返回 0。
 func contextWindow(model string) int {
-	if n, err := strconv.Atoi(strings.TrimSpace(os.Getenv("AGNET_CONTEXT_WINDOW"))); err == nil && n > 0 {
+	if n, err := strconv.Atoi(strings.TrimSpace(config.Getenv("CONTEXT_WINDOW"))); err == nil && n > 0 {
 		return n
 	}
 	name := strings.ToLower(model)

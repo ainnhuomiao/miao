@@ -6,7 +6,7 @@ import (
 	"strings"
 	"unicode/utf8"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 // SummaryPrefix 标记由压缩生成的摘要消息，会话恢复和 UI 可据此识别。

@@ -160,7 +160,7 @@ func webFetch(ctx context.Context, raw string) (string, error) {
 	if err != nil {
 		return "", err
 	}
-	req.Header.Set("User-Agent", "agnet/1.0 (+web_fetch)")
+	req.Header.Set("User-Agent", "miao/1.0 (+web_fetch)")
 	req.Header.Set("Accept", "text/html,text/markdown,text/plain,application/json;q=0.9,*/*;q=0.5")
 	resp, err := webFetchClient.Do(req)
 	if err != nil {

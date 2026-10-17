@@ -1,12 +1,12 @@
-BINARY := bin/agent
+BINARY := bin/miao
 
 .PHONY: run build fmt fmt-check vet test race check clean
 
 run:
-	go run ./cmd/agent
+	go run ./cmd/miao
 
 build:
-	go build -trimpath -o $(BINARY) ./cmd/agent
+	go build -trimpath -o $(BINARY) ./cmd/miao
 
 fmt:
 	go fmt ./...

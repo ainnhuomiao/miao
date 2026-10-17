@@ -6,7 +6,7 @@ import (
 	"testing"
 	"time"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 func newTestStore(t *testing.T) *Store {

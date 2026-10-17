@@ -6,9 +6,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"agnet/internal/llm"
-	"agnet/internal/subagent"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/subagent"
+	"miao/internal/tools"
 )
 
 // toggleClient 记录每次请求的工具名，第一轮后开启子代理。

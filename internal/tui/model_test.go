@@ -11,9 +11,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
-	"agnet/internal/session"
+	"miao/internal/agent"
+	"miao/internal/llm"
+	"miao/internal/session"
 )
 
 type fakeClient struct {

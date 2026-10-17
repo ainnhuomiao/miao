@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 func TestSessionEditedFiles(t *testing.T) {

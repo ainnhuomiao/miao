@@ -1,4 +1,4 @@
-// Command agent 是 GoAgent 的程序入口。
+// Command miao 是 miao 的程序入口。
 package main
 
 import (
@@ -10,16 +10,17 @@ import (
 	"os/signal"
 	"syscall"
 
-	"agnet/internal/agent"
-	"agnet/internal/config"
-	"agnet/internal/headless"
-	"agnet/internal/hooks"
-	"agnet/internal/llm"
-	"agnet/internal/mcp"
-	"agnet/internal/repl"
-	"agnet/internal/subagent"
-	"agnet/internal/tools"
-	"agnet/internal/tui"
+	"miao/internal/agent"
+	"miao/internal/appdir"
+	"miao/internal/config"
+	"miao/internal/headless"
+	"miao/internal/hooks"
+	"miao/internal/llm"
+	"miao/internal/mcp"
+	"miao/internal/repl"
+	"miao/internal/subagent"
+	"miao/internal/tools"
+	"miao/internal/tui"
 )
 
 func main() {
@@ -36,6 +37,9 @@ func run() error {
 	verbose := flag.Bool("v", false, "非交互模式下把工具调用过程打印到 stderr")
 	flag.Parse()
 	headlessMode := isFlagSet("p")
+
+	// 改名迁移：~/.config/agnet 等旧目录搬到新名字下（新目录已存在则不动）
+	notes := appdir.Migrate()
 
 	cfg, err := config.Load()
 	if err != nil {
@@ -71,6 +75,12 @@ func run() error {
 		fmt.Fprintf(os.Stderr, "读取子代理配置失败：%v\n", err)
 	}
 
+	if headlessMode || *plain || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
+		for _, n := range notes {
+			fmt.Fprintf(os.Stderr, "\x1b[90m%s\x1b[0m\n", n)
+		}
+	}
+
 	if headlessMode {
 		mode, err := headless.ParseMode(*modeFlag)
 		if err != nil {
@@ -94,6 +104,7 @@ func run() error {
 	if *plain || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 		return repl.New(ag, cfg.Model).Run(context.Background())
 	}
+	tui.SetStartupNotices(notes)
 	return tui.Run(ag, cfg.Model)
 }
 

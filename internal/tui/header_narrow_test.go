@@ -8,7 +8,7 @@ import (
 )
 
 func TestHeaderNarrowKeepsPercent(t *testing.T) {
-	t.Setenv("AGNET_CONTEXT_WINDOW", "")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	for w := 30; w <= 90; w++ {
 		m := &Model{modelName: "deepseek-flash", width: w, ctxTokens: 54000}
 		line := strings.SplitN(m.headerView(), "\n", 2)[0]

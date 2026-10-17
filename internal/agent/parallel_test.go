@@ -7,8 +7,8 @@ import (
 	"testing"
 	"time"
 
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 func mkCall(id, name string) llm.ToolCall {

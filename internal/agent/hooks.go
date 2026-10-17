@@ -5,8 +5,8 @@ import (
 	"encoding/json"
 	"fmt"
 
-	"agnet/internal/hooks"
-	"agnet/internal/tools"
+	"miao/internal/hooks"
+	"miao/internal/tools"
 )
 
 // maxStopHookRetries 是回合结束 hook 失败后让模型继续修的最多次数，防止来回死循环。

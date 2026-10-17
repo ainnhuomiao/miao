@@ -6,10 +6,10 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
-	"agnet/internal/subagent"
-	"agnet/internal/tools"
+	"miao/internal/agent"
+	"miao/internal/llm"
+	"miao/internal/subagent"
+	"miao/internal/tools"
 )
 
 func setupSubMgr(t *testing.T, cfg subagent.Config) (*subagent.Manager, *tools.Registry) {

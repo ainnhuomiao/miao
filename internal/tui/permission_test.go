@@ -7,7 +7,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"agnet/internal/agent"
+	"miao/internal/agent"
 )
 
 func TestShiftTabCyclesModeAndBarShowsIt(t *testing.T) {

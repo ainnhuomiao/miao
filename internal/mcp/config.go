@@ -1,5 +1,5 @@
 // Package mcp 实现 Model Context Protocol 客户端（stdio 传输，JSON-RPC 2.0），
-// 把 MCP 服务器提供的工具注册进 agnet 的工具注册表。只用标准库。
+// 把 MCP 服务器提供的工具注册进 miao 的工具注册表。只用标准库。
 package mcp
 
 import (
@@ -10,6 +10,8 @@ import (
 	"path/filepath"
 	"sort"
 	"strings"
+
+	"miao/internal/appdir"
 )
 
 // ServerConfig 是 mcp.json 中一个服务器的配置（兼容 Claude Desktop / Cursor 格式）。
@@ -26,17 +28,13 @@ type fileConfig struct {
 	MCPServers map[string]ServerConfig `json:"mcpServers"`
 }
 
-// ConfigPath 返回 $XDG_CONFIG_HOME/agnet/mcp.json（默认 ~/.config/agnet/mcp.json）。
+// ConfigPath 返回 $XDG_CONFIG_HOME/miao/mcp.json（默认 ~/.config/miao/mcp.json）。
 func ConfigPath() string {
-	dir := os.Getenv("XDG_CONFIG_HOME")
-	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return ""
-		}
-		dir = filepath.Join(home, ".config")
+	dir, err := appdir.ConfigDir()
+	if err != nil {
+		return ""
 	}
-	return filepath.Join(dir, "agnet", "mcp.json")
+	return filepath.Join(dir, "mcp.json")
 }
 
 // LoadConfig 读取配置；文件不存在时返回空列表。结果按名称排序（含 disabled 的服务器）。

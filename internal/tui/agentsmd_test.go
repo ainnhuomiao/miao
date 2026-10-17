@@ -5,8 +5,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
+	"miao/internal/agent"
+	"miao/internal/llm"
 )
 
 func TestAgentsMDNotice(t *testing.T) {

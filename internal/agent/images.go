@@ -1,6 +1,6 @@
 package agent
 
-import "agnet/internal/llm"
+import "miao/internal/llm"
 
 // AttachImages 设置下一次 Send 的用户消息要附带的图片（发送后清空）。
 func (a *Agent) AttachImages(imgs []llm.Image) { a.pendingImages = imgs }

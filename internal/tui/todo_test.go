@@ -129,10 +129,10 @@ func TestActivityThreeStates(t *testing.T) {
 		t.Fatalf("应显示清单进度 + 右侧思考：%q", v)
 	}
 	run := toolMsg("run_command", `{"command":"go test ./..."}`, "", false, false)
-	run.toolLive = "ok  agnet/internal/tui  0.1s"
+	run.toolLive = "ok  miao/internal/tui  0.1s"
 	m.messages = append(m.messages, run)
 	v := m.activityView()
-	if !strings.Contains(v, "▎") || !strings.Contains(v, "ok  agnet/internal/tui") || strings.Contains(v, "☐") {
+	if !strings.Contains(v, "▎") || !strings.Contains(v, "ok  miao/internal/tui") || strings.Contains(v, "☐") {
 		t.Fatalf("运行中应显示实时输出且隐藏清单：%q", v)
 	}
 	if !strings.Contains(v, "工具 2") {

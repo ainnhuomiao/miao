@@ -109,7 +109,7 @@ func registerEditFile(r *Registry) {
 
 // atomicWrite 先写同目录临时文件再 rename，保留原权限。
 func atomicWrite(full, content string, perm os.FileMode) error {
-	tmp, err := os.CreateTemp(filepath.Dir(full), ".agnet-*")
+	tmp, err := os.CreateTemp(filepath.Dir(full), ".miao-*")
 	if err != nil {
 		return err
 	}

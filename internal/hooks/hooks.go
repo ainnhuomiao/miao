@@ -1,8 +1,8 @@
 // Package hooks 在工具调用前后、回合结束时执行用户配置的 shell 命令。
 //
 // 配置来源：
-//   - 用户级：~/.config/agnet/config.json 的 "hooks" 字段，直接生效；
-//   - 项目级：<工作区>/.agnet/hooks.json，第一次运行前要用户确认，确认过的按文件哈希记住，
+//   - 用户级：~/.config/miao/config.json 的 "hooks" 字段，直接生效；
+//   - 项目级：<工作区>/.miao/hooks.json（没有 .miao 时读 .agnet），第一次运行前要用户确认，确认过的按文件哈希记住，
 //     文件内容一变就重新确认（防止克隆陌生仓库后自动执行别人的命令）。
 //
 // 格式：{"pre_tool": [{"match": "edit_file|write_file", "command": "...", "timeout": 60}],
@@ -10,7 +10,7 @@
 //	"post_tool": [...], "stop": [...]}
 //
 // match 是工具名正则（留空匹配全部，stop 忽略）。命令用 sh -c 在工作区里执行，
-// 环境变量 AGNET_EVENT、AGNET_TOOL、AGNET_TOOL_ARGS 描述触发点，stdin 是同样内容的 JSON。
+// 环境变量 MIAO_EVENT、MIAO_TOOL、MIAO_TOOL_ARGS 描述触发点（同时提供旧名 AGNET_* 以兼容），stdin 是同样内容的 JSON。
 // 退出码非 0 视为失败：pre_tool 失败会阻止这次工具调用，post_tool 失败把输出附在工具结果后，
 // stop 失败把输出作为新消息交给模型继续处理。
 package hooks
@@ -31,6 +31,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"miao/internal/appdir"
 )
 
 const (
@@ -129,7 +131,7 @@ func Load(workspace string, approve func() ApproveFunc) (*Runner, error) {
 		}
 	}
 	if workspace != "" {
-		p := filepath.Join(workspace, ".agnet", "hooks.json")
+		p := filepath.Join(appdir.ProjectDir(workspace), "hooks.json")
 		if data, err := os.ReadFile(p); err == nil {
 			var s Set
 			if err := json.Unmarshal(data, &s); err != nil {
@@ -151,7 +153,7 @@ func (r *Runner) Empty() bool { return r == nil || (r.user.empty() && r.project.
 // Summary 用于 /hooks 显示。
 func (r *Runner) Summary() string {
 	if r.Empty() {
-		return "没有配置 hook。用户级写在 ~/.config/agnet/config.json 的 \"hooks\" 里，项目级写在 .agnet/hooks.json。"
+		return "没有配置 hook。用户级写在 ~/.config/miao/config.json 的 \"hooks\" 里，项目级写在 .miao/hooks.json。"
 	}
 	var b strings.Builder
 	b.WriteString("Hooks：")
@@ -285,7 +287,7 @@ func (r *Runner) projectAllowed(ctx context.Context) bool {
 
 func (r *Runner) trustPrompt() string {
 	var b strings.Builder
-	b.WriteString("项目里的 .agnet/hooks.json 想在你的电脑上自动执行以下命令：")
+	b.WriteString("项目里的 hooks.json 想在你的电脑上自动执行以下命令：")
 	for _, e := range []struct {
 		name string
 		list []Hook
@@ -313,6 +315,11 @@ func (r *Runner) exec(ctx context.Context, h Hook, event, tool, args, result str
 	cmd.Dir = r.workspace
 	cmd.Stdin = bytes.NewReader(payload)
 	cmd.Env = append(os.Environ(),
+		"MIAO_EVENT="+event,
+		"MIAO_TOOL="+tool,
+		"MIAO_TOOL_ARGS="+truncate(args, maxEnvArgs),
+		"MIAO_WORKSPACE="+r.workspace,
+		// 旧名保留，兼容改名前写的 hook 脚本
 		"AGNET_EVENT="+event,
 		"AGNET_TOOL="+tool,
 		"AGNET_TOOL_ARGS="+truncate(args, maxEnvArgs),
@@ -348,22 +355,22 @@ func truncate(s string, n int) string {
 	return s[:n] + "\n…（已截断）"
 }
 
-// ---- 信任记录：~/.config/agnet/trusted_hooks.json，{"<hooks.json 绝对路径>": "<sha256>"} ----
+// ---- 信任记录：~/.config/miao/trusted_hooks.json，{"<hooks.json 绝对路径>": "<sha256>"} ----
 
 func userConfigPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := appdir.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "agnet", "config.json"), nil
+	return filepath.Join(dir, "config.json"), nil
 }
 
 func trustPath() (string, error) {
-	dir, err := os.UserConfigDir()
+	dir, err := appdir.ConfigDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(dir, "agnet", "trusted_hooks.json"), nil
+	return filepath.Join(dir, "trusted_hooks.json"), nil
 }
 
 var trustMu sync.Mutex
@@ -381,7 +388,27 @@ func readTrust() map[string]string {
 func isTrusted(path, hash string) bool {
 	trustMu.Lock()
 	defer trustMu.Unlock()
-	return path != "" && readTrust()[path] == hash
+	if path == "" {
+		return false
+	}
+	m := readTrust()
+	if m[path] == hash {
+		return true
+	}
+	// 改名兼容：项目从 .agnet/hooks.json 挪到 .miao/hooks.json 后，内容没变就仍算已信任
+	if alt, ok := oldProjectPath(path); ok && m[alt] == hash {
+		return true
+	}
+	return false
+}
+
+// oldProjectPath 把 <ws>/.miao/hooks.json 换成对应的旧路径 <ws>/.agnet/hooks.json。
+func oldProjectPath(path string) (string, bool) {
+	dir := filepath.Dir(path)
+	if filepath.Base(dir) != appdir.ProjectDirName {
+		return "", false
+	}
+	return filepath.Join(filepath.Dir(dir), appdir.OldProjectDirName, filepath.Base(path)), true
 }
 
 func saveTrust(path, hash string) error {

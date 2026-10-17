@@ -12,7 +12,7 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 const (
@@ -43,7 +43,7 @@ const helpText = `命令:
   /subagents  子代理设置（开关、并发上限、模型）
   /mcp        查看 MCP 服务器状态与工具数
   /hooks      查看已配置的 hook（工具调用前后、回合结束自动执行的命令）
-  自定义命令  .agnet/commands/*.md 或 ~/.config/agnet/commands/*.md，模板里用 $ARGS 接参数
+  自定义命令  .miao/commands/*.md 或 ~/.config/miao/commands/*.md，模板里用 $ARGS 接参数
   /reasoning  展开或收起思考过程
   /exit       退出`
 
@@ -109,7 +109,7 @@ func (m *Model) drawerBoxView() string {
 }
 
 func (m *Model) headerView() string {
-	left := " " + titleStyle.Render("GoAgent")
+	left := " " + titleStyle.Render("miao")
 	suffix := " · " + m.modelName
 	// 豆子轨道铺满标题与数字之间的整段空白。
 	right := m.contextViewCells(16) + " "
@@ -252,7 +252,7 @@ func (m *Model) statusDot() string {
 
 // barView 拼出极简底栏：不铺底色、没有色块，只有状态点带颜色，其余灰字，宽度对齐对话列。
 //
-//	~/agnet            ● 就绪 · deepseek-flash · ↑703 ↓78 · 缓存72% · ? 帮助
+//	~/miao             ● 就绪 · deepseek-flash · ↑703 ↓78 · 缓存72% · ? 帮助
 func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	w := m.columnWidth()
 	sep := mutedStyle.Render(" · ")
@@ -355,7 +355,7 @@ func (m *Model) renderTranscript() string {
 	width := m.contentWidth()
 	pad := lipgloss.NewStyle().Padding(0, 1)
 
-	// 一轮回答（用户消息之后的若干助手气泡与工具卡）合成一组，只显示一次 GoAgent 标签。
+	// 一轮回答（用户消息之后的若干助手气泡与工具卡）合成一组，只显示一次 miao 标签。
 	inGroup := false
 	var group strings.Builder
 	reasoning := 0
@@ -366,7 +366,7 @@ func (m *Model) renderTranscript() string {
 		if !inGroup {
 			return
 		}
-		label := agentTagStyle.Render("GoAgent")
+		label := agentTagStyle.Render("miao")
 		if reasoning > 0 && !m.showReasoning {
 			label += " " + mutedStyle.Render(fmt.Sprintf("思考 %d 字 · Ctrl+R", reasoning))
 		}

@@ -8,8 +8,8 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"agnet/internal/agent"
-	"agnet/internal/mcp"
+	"miao/internal/agent"
+	"miao/internal/mcp"
 )
 
 // Run 启动 TUI，直到用户退出。

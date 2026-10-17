@@ -2,11 +2,12 @@ package tui
 
 import (
 	"context"
-	"os"
 	"strings"
 	"time"
 
 	tea "github.com/charmbracelet/bubbletea"
+
+	"miao/internal/config"
 )
 
 // modelsFetchTimeout 是 GET /models 的超时。
@@ -38,10 +39,10 @@ type modelsMsg struct {
 	err  error
 }
 
-// envModels 解析 AGNET_MODELS（逗号分隔），未设置返回 nil。
+// envModels 解析 MIAO_MODELS（逗号分隔），未设置返回 nil。
 func envModels() []string {
 	var out []string
-	for _, s := range strings.Split(os.Getenv("AGNET_MODELS"), ",") {
+	for _, s := range strings.Split(config.Getenv("MODELS"), ",") {
 		if s = strings.TrimSpace(s); s != "" {
 			out = append(out, s)
 		}
@@ -49,7 +50,7 @@ func envModels() []string {
 	return out
 }
 
-// fetchModelsCmd 异步拉取模型列表；已拉取、正在拉取或 AGNET_MODELS 已设置时返回 nil。
+// fetchModelsCmd 异步拉取模型列表；已拉取、正在拉取或 MIAO_MODELS 已设置时返回 nil。
 func (m *Model) fetchModelsCmd() tea.Cmd {
 	if m.models.done || m.models.fetching || envModels() != nil {
 		return nil
@@ -73,7 +74,7 @@ func (m *Model) handleModelsMsg(msg modelsMsg) {
 	m.syncPalette()
 }
 
-// availableModels 返回候选模型：AGNET_MODELS > 服务端列表 > 兜底列表；当前模型总在其中。
+// availableModels 返回候选模型：MIAO_MODELS > 服务端列表 > 兜底列表；当前模型总在其中。
 func (m *Model) availableModels() []string {
 	base := envModels()
 	if base == nil {

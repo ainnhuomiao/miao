@@ -15,8 +15,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
+	"miao/internal/agent"
+	"miao/internal/llm"
 )
 
 const (
@@ -211,7 +211,7 @@ func (r *REPL) handleCommand(input string) (quit bool, err error) {
 }
 
 func (r *REPL) printBanner() {
-	fmt.Fprintf(r.out, "%sGoAgent%s · 用 Go 写的终端 AI 助手\n", colorCyan, colorReset)
+	fmt.Fprintf(r.out, "%smiao%s · 用 Go 写的终端 AI 助手\n", colorCyan, colorReset)
 	fmt.Fprintf(r.out, "%s模型: %s%s\n", colorDim, r.model, colorReset)
 	fmt.Fprintf(r.out, "%s输入 /help 查看命令；等待输入时按 Ctrl+C 退出%s\n", colorDim, colorReset)
 }

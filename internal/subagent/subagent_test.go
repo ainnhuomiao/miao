@@ -11,15 +11,15 @@ import (
 	"testing"
 	"time"
 
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 func tempXDG(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", dir)
-	return filepath.Join(dir, "agnet", "config.json")
+	return filepath.Join(dir, "miao", "config.json")
 }
 
 func TestConfigLoadSavePreservesKeysAndClamps(t *testing.T) {

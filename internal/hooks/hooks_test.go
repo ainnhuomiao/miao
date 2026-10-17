@@ -15,19 +15,19 @@ func setup(t *testing.T, user, project string) string {
 	t.Setenv("XDG_CONFIG_HOME", cfg)
 	ws := t.TempDir()
 	if user != "" {
-		os.MkdirAll(filepath.Join(cfg, "agnet"), 0o755)
-		os.WriteFile(filepath.Join(cfg, "agnet", "config.json"), []byte(user), 0o644)
+		os.MkdirAll(filepath.Join(cfg, "miao"), 0o755)
+		os.WriteFile(filepath.Join(cfg, "miao", "config.json"), []byte(user), 0o644)
 	}
 	if project != "" {
-		os.MkdirAll(filepath.Join(ws, ".agnet"), 0o755)
-		os.WriteFile(filepath.Join(ws, ".agnet", "hooks.json"), []byte(project), 0o644)
+		os.MkdirAll(filepath.Join(ws, ".miao"), 0o755)
+		os.WriteFile(filepath.Join(ws, ".miao", "hooks.json"), []byte(project), 0o644)
 	}
 	return ws
 }
 
 func TestUserHooksRunWithoutApproval(t *testing.T) {
 	ws := setup(t, `{"theme":"nord","hooks":{
-		"pre_tool":[{"match":"run_command","command":"echo 不许跑 $AGNET_TOOL; exit 3"}],
+		"pre_tool":[{"match":"run_command","command":"echo 不许跑 $MIAO_TOOL; exit 3"}],
 		"post_tool":[{"match":"edit_file|write_file","command":"cat > seen.json; echo gofmt 报错; exit 1"}],
 		"stop":[{"command":"true"}]}}`, "")
 	r, err := Load(ws, nil)
@@ -86,7 +86,7 @@ func TestProjectHooksNeedTrustAndRememberHash(t *testing.T) {
 	if asked != 2 {
 		t.Fatal("同一份文件已信任，不应再问")
 	}
-	os.WriteFile(filepath.Join(ws, ".agnet", "hooks.json"), []byte(`{"stop":[{"command":"touch ran2"}]}`), 0o644)
+	os.WriteFile(filepath.Join(ws, ".miao", "hooks.json"), []byte(`{"stop":[{"command":"touch ran2"}]}`), 0o644)
 	answer = false
 	r, _ = Load(ws, approve)
 	r.Stop(context.Background())
@@ -122,3 +122,52 @@ func TestBadConfigReportsError(t *testing.T) {
 }
 
 func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
+
+func TestProjectHooksOldDirAndTrustSurvivesRename(t *testing.T) {
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("XDG_CONFIG_HOME", "")
+	ws := t.TempDir()
+	content := []byte(`{"stop":[{"command":"touch ran"}]}`)
+	oldHooks := filepath.Join(ws, ".agnet", "hooks.json")
+	os.MkdirAll(filepath.Dir(oldHooks), 0o755)
+	os.WriteFile(oldHooks, content, 0o644)
+	// 改名前的信任记录：~/.config/agnet/trusted_hooks.json，按旧路径记的哈希
+	r, _ := Load(ws, nil)
+	trust := `{"` + oldHooks + `": "` + r.projectHash + `"}`
+	os.MkdirAll(filepath.Join(home, ".config", "agnet"), 0o755)
+	os.WriteFile(filepath.Join(home, ".config", "agnet", "trusted_hooks.json"), []byte(trust), 0o600)
+	// 模拟启动迁移
+	if err := os.Rename(filepath.Join(home, ".config", "agnet"), filepath.Join(home, ".config", "miao")); err != nil {
+		t.Fatal(err)
+	}
+
+	asked := 0
+	approve := func() ApproveFunc {
+		return func(context.Context, string) (bool, error) { asked++; return false, nil }
+	}
+	r, _ = Load(ws, approve)
+	r.Stop(context.Background())
+	if asked != 0 || !fileExists(filepath.Join(ws, "ran")) {
+		t.Fatalf("回退读 .agnet 且已信任，不应再问：asked=%d", asked)
+	}
+
+	// 用户把 .agnet 改名成 .miao，内容不变仍算已信任
+	os.Remove(filepath.Join(ws, "ran"))
+	if err := os.Rename(filepath.Join(ws, ".agnet"), filepath.Join(ws, ".miao")); err != nil {
+		t.Fatal(err)
+	}
+	r, _ = Load(ws, approve)
+	r.Stop(context.Background())
+	if asked != 0 || !fileExists(filepath.Join(ws, "ran")) {
+		t.Fatalf("挪到 .miao 后应仍信任：asked=%d", asked)
+	}
+
+	// 内容变了就要重新确认
+	os.WriteFile(filepath.Join(ws, ".miao", "hooks.json"), []byte(`{"stop":[{"command":"touch ran3"}]}`), 0o644)
+	r, _ = Load(ws, approve)
+	r.Stop(context.Background())
+	if asked != 1 || fileExists(filepath.Join(ws, "ran3")) {
+		t.Fatalf("内容变化应重新确认：asked=%d", asked)
+	}
+}

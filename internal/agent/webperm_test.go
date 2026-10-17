@@ -6,8 +6,8 @@ import (
 	"net/url"
 	"testing"
 
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 func webAgent(t *testing.T, userMsgs ...string) (*Agent, *int) {

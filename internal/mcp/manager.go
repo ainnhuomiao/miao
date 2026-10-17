@@ -9,8 +9,8 @@ import (
 	"sync"
 	"time"
 
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 // 默认超时。
@@ -34,7 +34,7 @@ const (
 type Status struct {
 	Name  string
 	State string
-	Tools []string // 注册到 agnet 的工具名
+	Tools []string // 注册到 miao 的工具名
 	Err   string
 }
 
@@ -67,7 +67,7 @@ func Default() *Manager {
 }
 
 // Start 读取默认配置，后台并行连接全部服务器，连上后把工具注册进 reg。
-// 不阻塞；失败只产生提示，不影响 agnet 运行。
+// 不阻塞；失败只产生提示，不影响 miao 运行。
 func Start(reg *tools.Registry) *Manager {
 	m := StartWithConfig(reg, ConfigPath())
 	defMu.Lock()

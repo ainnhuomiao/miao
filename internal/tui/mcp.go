@@ -3,7 +3,7 @@ package tui
 import (
 	tea "github.com/charmbracelet/bubbletea"
 
-	"agnet/internal/mcp"
+	"miao/internal/mcp"
 )
 
 // mcpNoticeMsg 是 MCP 后台连接产生的灰色提示。

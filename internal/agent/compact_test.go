@@ -5,7 +5,7 @@ import (
 	"strings"
 	"testing"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 type summaryClient struct {
@@ -19,7 +19,7 @@ func (f *summaryClient) StreamChat(ctx context.Context, req llm.ChatRequest, on 
 }
 
 func TestCompactKeepsToolPairsAndRecentTurns(t *testing.T) {
-	fc := &summaryClient{reply: "- 用户在改 agnet"}
+	fc := &summaryClient{reply: "- 用户在改 miao"}
 	a := New(fc, "sys", nil)
 	a.SetHistory([]llm.Message{
 		{Role: llm.RoleUser, Content: "第一轮"},

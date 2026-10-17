@@ -8,17 +8,17 @@ import (
 	"strings"
 	"testing"
 
-	"agnet/internal/hooks"
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/hooks"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 func hookAgent(t *testing.T, userHooks string, scripts []llm.ChatResult) (*Agent, *scriptClient, string) {
 	t.Helper()
 	cfg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfg)
-	os.MkdirAll(filepath.Join(cfg, "agnet"), 0o755)
-	os.WriteFile(filepath.Join(cfg, "agnet", "config.json"), []byte(`{"hooks":`+userHooks+`}`), 0o644)
+	os.MkdirAll(filepath.Join(cfg, "miao"), 0o755)
+	os.WriteFile(filepath.Join(cfg, "miao", "config.json"), []byte(`{"hooks":`+userHooks+`}`), 0o644)
 	ws := t.TempDir()
 	os.WriteFile(filepath.Join(ws, "a.txt"), []byte("hello"), 0o644)
 	reg, err := tools.NewRegistry(ws)
@@ -106,8 +106,8 @@ func TestStopHookFeedsBackAndIsBounded(t *testing.T) {
 
 func TestProjectHookTrustUsesRawApprover(t *testing.T) {
 	a, _, ws := hookAgent(t, `{}`, []llm.ChatResult{{Content: "ok", FinishReason: "stop"}})
-	os.MkdirAll(filepath.Join(ws, ".agnet"), 0o755)
-	os.WriteFile(filepath.Join(ws, ".agnet", "hooks.json"), []byte(`{"stop":[{"command":"touch ran"}]}`), 0o644)
+	os.MkdirAll(filepath.Join(ws, ".miao"), 0o755)
+	os.WriteFile(filepath.Join(ws, ".miao", "hooks.json"), []byte(`{"stop":[{"command":"touch ran"}]}`), 0o644)
 	r, _ := hooks.Load(ws, a.HookApprover())
 	a.SetHooks(r)
 	a.SetMode(ModeAcceptEdits) // 自动同意编辑的模式也不能跳过 hook 确认

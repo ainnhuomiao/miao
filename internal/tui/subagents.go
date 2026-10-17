@@ -8,8 +8,8 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"agnet/internal/llm"
-	"agnet/internal/subagent"
+	"miao/internal/llm"
+	"miao/internal/subagent"
 )
 
 const subagentsPrefix = "/subagents "

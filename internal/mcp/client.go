@@ -14,6 +14,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"miao/internal/appdir"
 )
 
 // ProtocolVersion 是 initialize 时声明的 MCP 协议版本。
@@ -69,17 +71,13 @@ type Tool struct {
 	InputSchema json.RawMessage `json:"inputSchema"`
 }
 
-// stderrLog 打开 $XDG_STATE_HOME/agnet/mcp/<name>.log；失败则返回 nil（丢弃 stderr）。
+// stderrLog 打开 $XDG_STATE_HOME/miao/mcp/<name>.log；失败则返回 nil（丢弃 stderr）。
 func stderrLog(name string) *os.File {
-	dir := os.Getenv("XDG_STATE_HOME")
-	if dir == "" {
-		home, err := os.UserHomeDir()
-		if err != nil {
-			return nil
-		}
-		dir = filepath.Join(home, ".local", "state")
+	dir, err := appdir.StateDir()
+	if err != nil {
+		return nil
 	}
-	dir = filepath.Join(dir, "agnet", "mcp")
+	dir = filepath.Join(dir, "mcp")
 	if os.MkdirAll(dir, 0o700) != nil {
 		return nil
 	}
@@ -276,7 +274,7 @@ func (c *Client) Initialize(ctx context.Context) error {
 	_, err := c.Call(ctx, "initialize", map[string]any{
 		"protocolVersion": ProtocolVersion,
 		"capabilities":    map[string]any{},
-		"clientInfo":      map[string]any{"name": "agnet", "version": "0.1.0"},
+		"clientInfo":      map[string]any{"name": appdir.Name, "version": "0.1.0"},
 	})
 	if err != nil {
 		return err

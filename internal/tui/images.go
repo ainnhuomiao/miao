@@ -13,7 +13,7 @@ import (
 
 	tea "github.com/charmbracelet/bubbletea"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 // imageState 是输入框上方待发送的图片（Ctrl+V 粘贴的）。

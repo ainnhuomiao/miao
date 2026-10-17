@@ -1,6 +1,6 @@
 // Package usercmd 加载用户自定义斜杠命令：一个 Markdown 文件就是一条命令。
 //
-// 目录：~/.config/agnet/commands/*.md（用户级）和 <工作区>/.agnet/commands/*.md（项目级，同名覆盖用户级）。
+// 目录：~/.config/miao/commands/*.md（用户级）和 <工作区>/.miao/commands/*.md（项目级；没有 .miao 时读 .agnet，同名覆盖用户级）。
 // 文件名（去掉 .md）就是命令名；可选的 frontmatter 里写 description；正文是提示词模板，
 // 其中的 $ARGS 替换成命令后面的参数。模板里没有 $ARGS 而用户给了参数时，参数接在末尾。
 package usercmd
@@ -11,6 +11,8 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+
+	"miao/internal/appdir"
 )
 
 // Command 是一条自定义命令。
@@ -44,11 +46,11 @@ const maxTemplateBytes = 64 << 10
 
 // UserDir 返回用户级命令目录。
 func UserDir() string {
-	dir, err := os.UserConfigDir()
+	dir, err := appdir.ConfigDir()
 	if err != nil {
 		return ""
 	}
-	return filepath.Join(dir, "agnet", "commands")
+	return filepath.Join(dir, "commands")
 }
 
 // Load 读取用户级和项目级命令，按名字排序；reserved 里的名字（内置命令）被跳过。
@@ -58,7 +60,7 @@ func Load(workspace string, reserved map[string]bool) []Command {
 		loadDir(d, "用户", byName, reserved)
 	}
 	if workspace != "" {
-		loadDir(filepath.Join(workspace, ".agnet", "commands"), "项目", byName, reserved)
+		loadDir(filepath.Join(appdir.ProjectDir(workspace), "commands"), "项目", byName, reserved)
 	}
 	out := make([]Command, 0, len(byName))
 	for _, c := range byName {

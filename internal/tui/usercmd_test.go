@@ -12,7 +12,7 @@ import (
 func TestUserCommandInPaletteAndSend(t *testing.T) {
 	cfg := t.TempDir()
 	t.Setenv("XDG_CONFIG_HOME", cfg)
-	dir := filepath.Join(cfg, "agnet", "commands")
+	dir := filepath.Join(cfg, "miao", "commands")
 	os.MkdirAll(dir, 0o755)
 	os.WriteFile(filepath.Join(dir, "review.md"), []byte("---\ndescription: 审查代码\n---\n请审查 $ARGS"), 0o644)
 	os.WriteFile(filepath.Join(dir, "help.md"), []byte("不能覆盖内置"), 0o644)

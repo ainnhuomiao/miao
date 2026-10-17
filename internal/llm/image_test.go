@@ -60,19 +60,19 @@ func TestNewImageLimits(t *testing.T) {
 }
 
 func TestSupportsVision(t *testing.T) {
-	t.Setenv("AGNET_VISION", "")
+	t.Setenv("MIAO_VISION", "")
 	for m, want := range map[string]bool{"deepseek-chat": false, "deepseek-reasoner": false, "deepseek/deepseek-chat": false, "gpt-4o": true, "unknown-x": true} {
 		if SupportsVision(m) != want {
 			t.Fatalf("%s 期望 %v", m, want)
 		}
 	}
-	t.Setenv("AGNET_VISION", "1")
+	t.Setenv("MIAO_VISION", "1")
 	if !SupportsVision("deepseek-chat") {
-		t.Fatal("AGNET_VISION=1 应强制开启")
+		t.Fatal("MIAO_VISION=1 应强制开启")
 	}
-	t.Setenv("AGNET_VISION", "0")
+	t.Setenv("MIAO_VISION", "0")
 	if SupportsVision("gpt-4o") {
-		t.Fatal("AGNET_VISION=0 应强制关闭")
+		t.Fatal("MIAO_VISION=0 应强制关闭")
 	}
 }
 

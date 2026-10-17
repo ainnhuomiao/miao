@@ -4,7 +4,7 @@ import (
 	"context"
 	"testing"
 
-	"agnet/internal/llm"
+	"miao/internal/llm"
 )
 
 type captureClient struct {
@@ -20,7 +20,7 @@ func (c *captureClient) Model() string     { return c.model }
 func (c *captureClient) SetModel(n string) { c.model = n }
 
 func TestSendAttachesImagesAndFiltersBlindModel(t *testing.T) {
-	t.Setenv("AGNET_VISION", "")
+	t.Setenv("MIAO_VISION", "")
 	c := &captureClient{model: "gpt-4o"}
 	a := New(c, "sys", nil)
 	a.AttachImages([]llm.Image{{MIME: "image/png", Name: "a.png", Data: []byte("x")}})

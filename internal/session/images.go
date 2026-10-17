@@ -9,7 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 
-	"agnet/internal/llm"
+	"miao/internal/appdir"
+	"miao/internal/llm"
 )
 
 // 会话里的图片不把 base64 写进 JSON，而是存成会话目录下的 images/<sha256>.<ext>，
@@ -77,6 +78,26 @@ func (s *Store) storeImage(img llm.Image) (imageRef, error) {
 	return imageRef{Path: rel, MIME: img.MIME, Name: img.Name}, nil
 }
 
+// relImagePath 兼容旧会话里的绝对路径：位于本会话目录或旧数据目录（改名前的
+// $XDG_DATA_HOME/agnet/sessions）下的绝对路径改写成相对会话目录的路径，其余原样返回，
+// 交给调用方做越界检查。
+func (s *Store) relImagePath(p string) string {
+	if !filepath.IsAbs(p) {
+		return p
+	}
+	p = filepath.Clean(p)
+	bases := []string{s.dir}
+	if old, err := appdir.OldDataDir(); err == nil {
+		bases = append(bases, filepath.Join(old, "sessions"))
+	}
+	for _, b := range bases {
+		if rel, err := filepath.Rel(filepath.Clean(b), p); err == nil && !strings.HasPrefix(rel, "..") && !filepath.IsAbs(rel) {
+			return filepath.ToSlash(rel)
+		}
+	}
+	return p
+}
+
 // loadImages 按引用读回图片；文件缺失或路径不合法的引用跳过。
 func (s *Store) loadImages(sess *Session, data []byte) {
 	var raw struct {
@@ -92,7 +113,7 @@ func (s *Store) loadImages(sess *Session, data []byte) {
 			break
 		}
 		for _, ref := range m.Images {
-			clean := path.Clean(ref.Path)
+			clean := path.Clean(s.relImagePath(ref.Path))
 			if !strings.HasPrefix(clean, imagesDir+"/") || strings.Contains(clean, "..") {
 				continue
 			}

@@ -8,9 +8,9 @@ import (
 	"strings"
 	"testing"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/agent"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 // scriptClient 第一次返回预设的工具调用，之后返回文本。

@@ -7,3 +7,4 @@ bin/
 *.test
 *.out
 /agent
+/miao

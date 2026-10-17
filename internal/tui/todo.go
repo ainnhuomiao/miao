@@ -6,7 +6,7 @@ import (
 
 	"github.com/charmbracelet/lipgloss"
 
-	"agnet/internal/tools"
+	"miao/internal/tools"
 )
 
 // todoPanelMaxLines 是 Ctrl+T 清单面板最多显示的行数（含溢出提示）。

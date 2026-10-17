@@ -10,8 +10,8 @@ import (
 	"sync/atomic"
 	"time"
 
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 // ToolName 是暴露给主代理的工具名。

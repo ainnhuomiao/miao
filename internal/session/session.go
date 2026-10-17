@@ -13,7 +13,8 @@ import (
 	"strings"
 	"time"
 
-	"agnet/internal/llm"
+	"miao/internal/appdir"
+	"miao/internal/llm"
 )
 
 // ErrNotFound 表示会话不存在。
@@ -44,16 +45,13 @@ type Store struct {
 	now func() time.Time
 }
 
-// DefaultDir 返回默认目录：$XDG_DATA_HOME/agnet/sessions，或 ~/.local/share/agnet/sessions。
+// DefaultDir 返回默认目录：$XDG_DATA_HOME/miao/sessions，或 ~/.local/share/miao/sessions。
 func DefaultDir() (string, error) {
-	if x := os.Getenv("XDG_DATA_HOME"); x != "" {
-		return filepath.Join(x, "agnet", "sessions"), nil
-	}
-	home, err := os.UserHomeDir()
+	dir, err := appdir.DataDir()
 	if err != nil {
 		return "", err
 	}
-	return filepath.Join(home, ".local", "share", "agnet", "sessions"), nil
+	return filepath.Join(dir, "sessions"), nil
 }
 
 // NewStore 打开（必要时创建）会话目录。

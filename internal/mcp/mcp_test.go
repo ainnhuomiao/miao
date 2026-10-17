@@ -12,8 +12,8 @@ import (
 	"testing"
 	"time"
 
-	"agnet/internal/agent"
-	"agnet/internal/tools"
+	"miao/internal/agent"
+	"miao/internal/tools"
 )
 
 const fakeEnv = "MCP_FAKE_SERVER"
@@ -194,7 +194,7 @@ func TestChildEnvFiltered(t *testing.T) {
 }
 
 func TestBuildEnv(t *testing.T) {
-	env := buildEnv([]string{"PATH=/bin", "GITHUB_TOKEN=x", "AGNET_MODEL=m", "LC_ALL=C", "XDG_DATA_HOME=/d", "RANDOM=1", "HOME=/h"},
+	env := buildEnv([]string{"PATH=/bin", "GITHUB_TOKEN=x", "MIAO_MODEL=m", "LC_ALL=C", "XDG_DATA_HOME=/d", "RANDOM=1", "HOME=/h"},
 		map[string]string{"GITHUB_TOKEN": "explicit", "HOME": "/o"})
 	got := strings.Join(env, " ")
 	for _, want := range []string{"PATH=/bin", "LC_ALL=C", "XDG_DATA_HOME=/d", "GITHUB_TOKEN=explicit", "HOME=/o"} {
@@ -202,7 +202,7 @@ func TestBuildEnv(t *testing.T) {
 			t.Errorf("missing %s in %s", want, got)
 		}
 	}
-	for _, bad := range []string{"GITHUB_TOKEN=x", "AGNET_MODEL", "RANDOM", "HOME=/h"} {
+	for _, bad := range []string{"GITHUB_TOKEN=x", "MIAO_MODEL", "RANDOM", "HOME=/h"} {
 		if strings.Contains(got, bad) {
 			t.Errorf("leaked %s in %s", bad, got)
 		}
@@ -243,7 +243,7 @@ func TestParseConfig(t *testing.T) {
 		t.Fatal("want error")
 	}
 	t.Setenv("XDG_CONFIG_HOME", "/cfg")
-	if ConfigPath() != "/cfg/agnet/mcp.json" {
+	if ConfigPath() != "/cfg/miao/mcp.json" {
 		t.Fatal(ConfigPath())
 	}
 }
@@ -263,7 +263,7 @@ func TestManagerRegistry(t *testing.T) {
 	cfg := map[string]any{"mcpServers": map[string]any{
 		"fake":   map[string]any{"command": os.Args[0], "env": map[string]string{fakeEnv: "1"}},
 		"off":    map[string]any{"command": "nonexistent", "disabled": true},
-		"broken": map[string]any{"command": "/nonexistent/agnet-mcp"},
+		"broken": map[string]any{"command": "/nonexistent/miao-mcp"},
 		"web":    map[string]any{"url": "http://localhost:1"},
 	}}
 	data, _ := json.Marshal(cfg)

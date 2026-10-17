@@ -12,9 +12,9 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"agnet/internal/agent"
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/agent"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 var tuiPNG = append([]byte("\x89PNG\r\n\x1a\n"), bytes.Repeat([]byte{3}, 2048)...)
@@ -121,7 +121,7 @@ func TestImageLimitsAndChipsWidth(t *testing.T) {
 }
 
 func TestSendWithImagesAndUnsupportedModel(t *testing.T) {
-	t.Setenv("AGNET_VISION", "")
+	t.Setenv("MIAO_VISION", "")
 	m := newTestModel(t, 100, 30, "ok")
 	m.addPendingImage("剪贴板.png", tuiPNG)
 	m.input.SetValue("这是什么")

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	"agnet/internal/tools"
+	"miao/internal/tools"
 )
 
 func TestPermissionDecisions(t *testing.T) {

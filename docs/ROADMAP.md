@@ -16,7 +16,7 @@
 
 交付物：
 
-- `go run ./cmd/agent` 可以和模型连续对话
+- `go run ./cmd/miao` 可以和模型连续对话
 - 回答逐字流式打印，而不是等全部生成完才显示
 - `/help`、`/clear`、`/history`、`/exit`
 - 生成中 Ctrl+C 只取消本次回答；等待输入时 Ctrl+C 退出
@@ -25,7 +25,7 @@
 
 涉及的文件：
 
-- `cmd/agent/main.go`
+- `cmd/miao/main.go`
 - `internal/config/config.go`
 - `internal/llm/client.go`、`internal/llm/openai.go`
 - `internal/agent/agent.go`
@@ -72,7 +72,7 @@ Go 知识点：
 
 涉及文件：
 
-- `cmd/agent/main.go`
+- `cmd/miao/main.go`
 - `internal/tui/tui.go`、`model.go`、`view.go`
 - `internal/tui/model_test.go`
 
@@ -106,7 +106,7 @@ Go / 工程知识点：
 1. **命令行参数**：`-plain` 和 TTY 自动回退已经完成；继续用 `flag`
    支持 `-model`、`-base-url`、`-system`、`-debug`，环境变量作为默认值。例如：
    ```bash
-   go run ./cmd/agent -model deepseek-reasoner -debug
+   go run ./cmd/miao -model deepseek-reasoner -debug
    ```
 2. **日志**：引入 `log/slog`。默认只输出错误；`-debug` 时输出请求耗时、
    状态码、分片数量。日志写到 stderr，不要污染对话输出。
@@ -280,7 +280,7 @@ Go 知识点：goroutine、channel、`select`、`sync.WaitGroup`、`sync.Mutex`�
 
 要做的事：
 
-1. 会话存到 `~/.local/share/goagent/sessions/<name>.jsonl`，
+1. 会话存到 `~/.local/share/miao/sessions/<name>.jsonl`，
    每行一条消息（JSONL 便于追加）。
 2. 命令：
    - `/save <name>` 保存当前会话

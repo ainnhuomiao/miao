@@ -7,8 +7,8 @@ import (
 	"regexp"
 	"strings"
 
-	"agnet/internal/llm"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/tools"
 )
 
 // mentionMarker 之后是 @ 引用附上的文件内容，不算用户亲手输入，不从中提取域名。

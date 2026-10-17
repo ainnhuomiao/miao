@@ -77,11 +77,11 @@ func TestRunCommand_AllowlistAndExec(t *testing.T) {
 		t.Fatalf("expected path reject: %+v", pathBlocked)
 	}
 
-	ok := r.Call(context.Background(), "run_command", `{"command":"echo","args":["hello-agnet"]}`)
+	ok := r.Call(context.Background(), "run_command", `{"command":"echo","args":["hello-miao"]}`)
 	if ok.IsError {
 		t.Fatalf("echo failed: %+v", ok)
 	}
-	if !strings.Contains(ok.Content, "hello-agnet") {
+	if !strings.Contains(ok.Content, "hello-miao") {
 		t.Fatalf("output = %q", ok.Content)
 	}
 

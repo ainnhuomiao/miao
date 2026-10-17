@@ -8,7 +8,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 
-	"agnet/internal/session"
+	"miao/internal/session"
 )
 
 const pickerMaxRows = 8

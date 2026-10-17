@@ -69,25 +69,25 @@ func TestPacmanMeterMouthAndInvalid(t *testing.T) {
 }
 
 func TestContextWindowLookup(t *testing.T) {
-	t.Setenv("AGNET_CONTEXT_WINDOW", "")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	if contextWindow("deepseek-flash") != 128_000 {
 		t.Fatal("deepseek 应按 128k")
 	}
 	if contextWindow("mystery-model") != 0 {
 		t.Fatal("未知模型应返回 0")
 	}
-	t.Setenv("AGNET_CONTEXT_WINDOW", "32000")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "32000")
 	if contextWindow("mystery-model") != 32000 {
-		t.Fatal("AGNET_CONTEXT_WINDOW 应覆盖")
+		t.Fatal("MIAO_CONTEXT_WINDOW 应覆盖")
 	}
-	t.Setenv("AGNET_CONTEXT_WINDOW", "abc")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "abc")
 	if contextWindow("deepseek-flash") != 128_000 {
 		t.Fatal("非法覆盖值应被忽略")
 	}
 }
 
 func TestContextViewUnknownAndOverflow(t *testing.T) {
-	t.Setenv("AGNET_CONTEXT_WINDOW", "")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	m := newTestModel(t, 120, 30, "ok")
 	m.modelName = "mystery-model"
 	m.ctxTokens = 54_000
@@ -106,7 +106,7 @@ func TestContextViewUnknownAndOverflow(t *testing.T) {
 }
 
 func TestHeaderTrackFillsWidth(t *testing.T) {
-	t.Setenv("AGNET_CONTEXT_WINDOW", "")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	for _, w := range []int{60, 100, 160} {
 		m := newTestModel(t, w, 30, "ok")
 		m.modelName = "deepseek-flash"

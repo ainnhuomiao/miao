@@ -1,6 +1,6 @@
-// Package headless 实现 `agnet -p "..."` 非交互模式：跑完一轮直接输出结果，方便写进脚本或 CI。
+// Package headless 实现 `miao -p "..."` 非交互模式：跑完一轮直接输出结果，方便写进脚本或 CI。
 //
-// 模型回复写到 stdout，工具调用过程写到 stderr，所以 `agnet -p ... > out.md` 只会拿到回答正文。
+// 模型回复写到 stdout，工具调用过程写到 stderr，所以 `miao -p ... > out.md` 只会拿到回答正文。
 package headless
 
 import (
@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"agnet/internal/agent"
+	"miao/internal/agent"
 )
 
 // MaxStdinBytes 是从管道读入的附加内容上限。
@@ -59,10 +59,10 @@ func BuildPrompt(prompt string, stdin io.Reader) (string, error) {
 }
 
 // Run 发送一轮对话并把结果写出。需要审批的工具一律拒绝（非交互模式没人按 Y），
-// 能否自动放行取决于权限模式和 AGNET_ALLOW_COMMANDS。
+// 能否自动放行取决于权限模式和 MIAO_ALLOW_COMMANDS。
 func Run(ctx context.Context, ag *agent.Agent, prompt string, stdout, stderr io.Writer, verbose bool) error {
 	ag.SetApprover(func(_ context.Context, toolName, display string, _ json.RawMessage) (bool, error) {
-		fmt.Fprintf(stderr, "✗ %s 需要审批，非交互模式下已拒绝：%s\n  （可用 -mode edits 自动同意编辑，或在 AGNET_ALLOW_COMMANDS 里放行命令）\n",
+		fmt.Fprintf(stderr, "✗ %s 需要审批，非交互模式下已拒绝：%s\n  （可用 -mode edits 自动同意编辑，或在 MIAO_ALLOW_COMMANDS 里放行命令）\n",
 			toolName, firstLine(display))
 		return false, nil
 	})

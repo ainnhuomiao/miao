@@ -6,9 +6,9 @@ import (
 	"sync"
 	"time"
 
-	"agnet/internal/llm"
-	"agnet/internal/subagent"
-	"agnet/internal/tools"
+	"miao/internal/llm"
+	"miao/internal/subagent"
+	"miao/internal/tools"
 )
 
 // maxParallelTools 是同一批只读工具的最大并发数。

@@ -99,7 +99,7 @@ func registerWriteFile(r *Registry) {
 			if err := os.MkdirAll(filepath.Dir(full), 0o755); err != nil {
 				return Result{Content: "创建目录失败: " + err.Error(), IsError: true}
 			}
-			tmp, err := os.CreateTemp(filepath.Dir(full), ".agnet-*")
+			tmp, err := os.CreateTemp(filepath.Dir(full), ".miao-*")
 			if err != nil {
 				return Result{Content: "写入失败: " + err.Error(), IsError: true}
 			}

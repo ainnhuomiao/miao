@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"agnet/internal/agent"
+	"miao/internal/agent"
 )
 
 func TestCompactDoneNotice(t *testing.T) {
@@ -20,7 +20,7 @@ func TestCompactDoneNotice(t *testing.T) {
 }
 
 func TestNeedAutoCompact(t *testing.T) {
-	t.Setenv("AGNET_CONTEXT_WINDOW", "100000")
+	t.Setenv("MIAO_CONTEXT_WINDOW", "100000")
 	m := newTestModel(t, 100, 30, "ok")
 	m.ctxTokens = 79000
 	if m.needAutoCompact() {

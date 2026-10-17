@@ -5,8 +5,9 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strings"
+
+	"miao/internal/config"
 )
 
 // 图片限制：单张 5 MiB，每条消息最多 5 张。
@@ -105,8 +106,8 @@ func (m Message) MarshalJSON() ([]byte, error) {
 	}{plain(m), parts})
 }
 
-// visionEnv 可强制开关图片支持：AGNET_VISION=1 / 0。
-const visionEnv = "AGNET_VISION"
+// visionEnv 可强制开关图片支持：MIAO_VISION=1 / 0（旧名 AGNET_VISION 仍可用）。
+const visionEnv = "VISION"
 
 // noVisionModels 是已知不支持图片输入的模型名前缀；不在表里的一律允许。
 var noVisionModels = []string{
@@ -117,7 +118,7 @@ var noVisionModels = []string{
 
 // SupportsVision 报告模型是否可以接收图片（未知模型视为支持）。
 func SupportsVision(model string) bool {
-	switch os.Getenv(visionEnv) {
+	switch config.Getenv(visionEnv) {
 	case "1":
 		return true
 	case "0":
