@@ -702,6 +702,9 @@ func (m *Model) activityView() string {
 	}
 	dur += fmt.Sprintf("工具 %d", m.toolCount())
 	detail := formatArgs(t.toolName, t.toolArgs)
+	if !t.done && t.toolLive != "" {
+		detail += " · " + t.toolLive
+	}
 	if t.done {
 		if t.toolError {
 			detail += " · " + firstLine(t.toolResult)

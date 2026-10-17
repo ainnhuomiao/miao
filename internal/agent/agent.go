@@ -29,6 +29,8 @@ const (
 	EventToolEnd
 	// EventUsage 在每次模型请求结束后推送本次用量（服务端返回时）。
 	EventUsage
+	// EventToolProgress 推送工具运行中的最新一行输出（放在 ToolResult）。
+	EventToolProgress
 )
 
 // Event 是 Agent 向 UI 推送的进度。

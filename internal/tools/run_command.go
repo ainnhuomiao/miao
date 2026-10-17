@@ -43,6 +43,14 @@ func registerRunCommand(r *Registry) {
 						"description": "命令行参数列表",
 						"items":       map[string]any{"type": "string"},
 					},
+					"timeout_seconds": map[string]any{
+						"type":        "integer",
+						"description": "超时秒数，默认 120，最多 600",
+					},
+					"background": map[string]any{
+						"type":        "boolean",
+						"description": "为 true 时放到后台运行（适合开发服务器、go run 等不会自己结束的命令），之后用 command_output 查看输出",
+					},
 				},
 				"required": []string{"command"},
 			}),
@@ -50,6 +58,8 @@ func registerRunCommand(r *Registry) {
 			var in struct {
 				Command string   `json:"command"`
 				Args    []string `json:"args"`
+				Timeout int      `json:"timeout_seconds"`
+				BG      bool     `json:"background"`
 			}
 			if err := json.Unmarshal(args, &in); err != nil {
 				return Result{Content: "参数解析失败: " + err.Error(), IsError: true}
@@ -80,7 +90,10 @@ func registerRunCommand(r *Registry) {
 				}
 			}
 
-			return execCommand(ctx, r.Workspace(), name, in.Args)
+			if in.BG {
+				return r.startBackground(name, in.Args, display)
+			}
+			return execCommandStream(ctx, r.Workspace(), name, in.Args, commandTimeoutFor(in.Timeout))
 		},
 	})
 }

@@ -76,7 +76,10 @@ func runToolCalls(ctx context.Context, calls []llm.ToolCall, call toolCaller, on
 		tc := calls[i]
 		name, args := tc.Function.Name, tc.Function.Arguments
 		start := time.Now()
-		res := safeCall(runCtx, call, name, args)
+		pctx := tools.WithProgress(runCtx, func(line string) {
+			emit(Event{Kind: EventToolProgress, ToolCallID: tc.ID, ToolName: name, ToolResult: line})
+		})
+		res := safeCall(pctx, call, name, args)
 		emit(Event{
 			Kind:       EventToolEnd,
 			ToolCallID: tc.ID,

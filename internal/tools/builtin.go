@@ -97,6 +97,7 @@ func RegisterBuiltins(r *Registry) {
 	})
 
 	registerRunCommand(r)
+	registerCommandOutput(r)
 	registerWriteFile(r)
 	registerSearchTools(r)
 	registerEditFile(r)

@@ -45,6 +45,7 @@ type chatMessage struct {
 	toolError  bool
 	toolDur    time.Duration
 	toolCallID string
+	toolLive   string // 运行中的最新一行输出
 
 	mdCache string // 完成后 Glamour 渲染结果缓存
 	mdW     int
@@ -520,6 +521,13 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 			toolArgs:   msg.toolArgs,
 			done:       false,
 		})
+	case agent.EventToolProgress:
+		for i := len(m.messages) - 1; i >= 0; i-- {
+			if cm := &m.messages[i]; cm.role == roleTool && !cm.done && cm.toolCallID == msg.toolCallID {
+				cm.toolLive = msg.toolResult
+				break
+			}
+		}
 	case agent.EventToolEnd:
 		updated := false
 		for i := len(m.messages) - 1; i >= 0; i-- {
