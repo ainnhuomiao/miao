@@ -86,6 +86,7 @@ type approvalState struct {
 
 // Model 是 TUI 的全部状态。
 type Model struct {
+	side      sidebarState // 左侧会话侧栏
 	ag        *agent.Agent
 	modelName string
 
@@ -211,6 +212,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case tea.KeyMsg:
+		if m.approval == nil {
+			if msg.String() == "ctrl+b" {
+				m.toggleSidebar()
+				return m, nil
+			}
+			if ok, cmd := m.sidebarKey(msg); ok {
+				return m, cmd
+			}
+		}
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
@@ -687,6 +697,7 @@ func (m *Model) saveCurrentSession() {
 			role: roleError, content: "保存会话失败: " + err.Error(), done: true,
 		})
 	}
+	m.refreshSidebar()
 }
 
 // beginNewSession 清空 Agent 历史与界面，并换新会话 id（旧文件保留）。
@@ -704,6 +715,7 @@ func (m *Model) beginNewSession(notice string) {
 	m.messages = []chatMessage{{role: roleNotice, content: notice, done: true}}
 	m.refreshViewport(true)
 	m.refreshDrawer()
+	m.refreshSidebar()
 }
 
 func (m *Model) listSessions() {
@@ -765,6 +777,7 @@ func (m *Model) loadSession(id string) {
 	m.messages = chatMessagesFromHistory(sess)
 	m.refreshViewport(true)
 	m.refreshDrawer()
+	m.refreshSidebar()
 }
 
 // chatMessagesFromHistory 把持久化的 llm 消息还原为界面气泡（含工具卡）。
@@ -877,7 +890,7 @@ func (m *Model) layout() {
 	if vh < 3 {
 		vh = 3
 	}
-	m.viewport.Width = m.width
+	m.viewport.Width = m.width - m.sidebarCols()
 	if h := m.paletteHeight(); h > 0 {
 		vh -= h // 命令菜单替代工具状态条
 	} else {

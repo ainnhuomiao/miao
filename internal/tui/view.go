@@ -87,7 +87,14 @@ func (m *Model) view() string {
 
 	main := m.viewport.View()
 
-	parts := []string{m.headerView(), main}
+	header := m.headerView()
+	side := m.sidebarCols()
+	if side > 0 { // 主体各部件按侧栏右边剩下的宽度渲染
+		w := m.width
+		m.width -= side
+		defer func() { m.width = w }()
+	}
+	parts := []string{header, main}
 	// 工具状态条常驻占一行（空闲显示待命文案），输入框不会上下跳
 	if m.paletteOpen() {
 		parts = append(parts, m.paletteView())
@@ -101,7 +108,7 @@ func (m *Model) view() string {
 		parts = append(parts, m.approvalView())
 	}
 	parts = append(parts, m.inputView(), m.hintView())
-	return strings.Join(parts, "\n")
+	return m.withSidebar(side, parts[0], strings.Join(parts[1:], "\n"))
 }
 
 func (m *Model) drawerBoxView() string {
