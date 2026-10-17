@@ -266,6 +266,18 @@ func (m *Model) statusPill() barSeg {
 	return barSeg{lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(crustColor).Background(bg).Render(label), bg}
 }
 
+// barKeys 是底栏右侧的提示：平时只有「? 帮助」，生成和审批时换成当下能用的键。
+func (m *Model) barKeys() [][2]string {
+	switch {
+	case m.approval != nil:
+		return [][2]string{{"Y", "允许"}, {"N", "拒绝"}, {"Esc", "取消"}}
+	case m.streaming:
+		return [][2]string{{"Esc", "取消"}}
+	default:
+		return [][2]string{{"?", "帮助"}}
+	}
+}
+
 // barView 按显示开关拼出整条底栏；宽度不足时返回 ok=false。
 func (m *Model) barView(showPath, showUsage, showCache, showHelp bool) (string, bool) {
 	left := []barSeg{{segAccentStyle.Render(m.modelName), accentColor}}
@@ -287,7 +299,10 @@ func (m *Model) barView(showPath, showUsage, showCache, showHelp bool) (string, 
 	r := joinSegs(right, true)
 	mantle := lipgloss.NewStyle().Background(mantleColor)
 	if showHelp {
-		r += mantle.Render(" ") + mantle.Foreground(accentColor).Bold(true).Render("?") + mantle.Foreground(mutedColor).Render(" 帮助 ")
+		for _, k := range m.barKeys() {
+			r += mantle.Render(" ") + mantle.Foreground(accentColor).Bold(true).Render(k[0]) + mantle.Foreground(mutedColor).Render(" "+k[1])
+		}
+		r += mantle.Render(" ")
 	} else {
 		r += mantle.Render(" ")
 	}
