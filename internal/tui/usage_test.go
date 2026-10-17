@@ -46,3 +46,21 @@ func TestUsageAccumulatesWithinTurn(t *testing.T) {
 		t.Fatalf("usage = %+v, want %+v", *m.usage, want)
 	}
 }
+
+func TestHintViewFitsWidth(t *testing.T) {
+	ag := agent.New(nil, "", nil)
+	for _, w := range []int{30, 60, 100, 160} {
+		m := &Model{ag: ag, modelName: "deepseek-flash", width: w,
+			usage: &llm.Usage{PromptTokens: 7700, CompletionTokens: 939, PromptCacheHitTokens: 2700}}
+		got := m.hintView()
+		if gw := ansi.StringWidth(got); gw > w {
+			t.Errorf("width %d: 底栏宽 %d 超出", w, gw)
+		}
+		if w >= 100 && ansi.StringWidth(got) != w {
+			t.Errorf("width %d: 宽屏时底栏应铺满整行，实际 %d", w, ansi.StringWidth(got))
+		}
+		if w >= 100 && !strings.Contains(ansi.Strip(got), "⏎ 发送") {
+			t.Errorf("width %d: 宽屏应显示快捷键: %q", w, ansi.Strip(got))
+		}
+	}
+}

@@ -194,22 +194,54 @@ func (m *Model) approvalView() string {
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
 }
 
-func (m *Model) hintText() string {
-	hint := "Enter 发送 · Ctrl+J 换行 · Ctrl+R 思考 · Ctrl+C 退出"
-	if m.drawerOpen {
-		hint = "PgUp/PgDn 滚动 · Ctrl+C 退出"
+// hintKey 是底栏右侧的一条快捷键提示。
+type hintKey struct{ key, desc string }
+
+// hintKeys 按当前状态返回快捷键提示，越靠前越重要，空间不够时从后往前丢。
+func (m *Model) hintKeys() []hintKey {
+	switch {
+	case m.approval != nil:
+		return []hintKey{{"Y", "允许"}, {"N", "拒绝"}, {"Esc", "取消"}}
+	case m.streaming:
+		return []hintKey{{"Esc", "取消"}, {"PgUp/PgDn", "滚动"}, {"^C", "退出"}}
+	default:
+		return []hintKey{{"⏎", "发送"}, {"^J", "换行"}, {"^R", "思考"}, {"^C", "退出"}}
 	}
-	if m.streaming {
-		hint = "生成中 · Esc 取消 · PgUp/PgDn · Ctrl+C 取消"
-	}
-	if m.approval != nil {
-		hint = "确认命令 · Y 允许 · N 拒绝 · Esc 取消"
-	}
-	return hint
 }
 
-// hintView 是分段底栏：模型  工作区  用量  状态，后接快捷键提示。
-// 终端太窄时先藏缓存率，再藏整个用量段；模型名和状态始终保留。
+// hintText 是纯文本版提示（测试与窄屏回退用）。
+func (m *Model) hintText() string {
+	parts := make([]string, 0, 4)
+	for _, k := range m.hintKeys() {
+		parts = append(parts, k.key+" "+k.desc)
+	}
+	return strings.Join(parts, " · ")
+}
+
+// renderHints 在 maxW 宽度内渲染尽量多的快捷键：按键 mauve，说明灰字，mantle 底。
+func (m *Model) renderHints(maxW int) string {
+	bg := lipgloss.NewStyle().Background(mantleColor)
+	keySt := bg.Foreground(accentColor).Bold(true)
+	descSt := bg.Foreground(mutedColor)
+	keys := m.hintKeys()
+	for n := len(keys); n > 0; n-- {
+		var b strings.Builder
+		for i, k := range keys[:n] {
+			if i > 0 {
+				b.WriteString(bg.Render("  "))
+			}
+			b.WriteString(keySt.Render(k.key) + descSt.Render(" "+k.desc))
+		}
+		b.WriteString(bg.Render(" "))
+		if out := b.String(); lipgloss.Width(out) <= maxW {
+			return out
+		}
+	}
+	return ""
+}
+
+// hintView 是底栏：左边分段（模型  工作区  用量  状态），右边快捷键，
+// 中间用 mantle 底色铺满整行。终端太窄时先藏缓存率，再藏用量段，再丢快捷键。
 func (m *Model) hintView() string {
 	left := m.segmentsView(true, true)
 	if lipgloss.Width(left) > m.width {
@@ -218,11 +250,17 @@ func (m *Model) hintView() string {
 	if lipgloss.Width(left) > m.width {
 		left = m.segmentsView(false, false)
 	}
-	room := m.width - lipgloss.Width(left) - 2
-	if room < 8 {
+	lw := lipgloss.Width(left)
+	if lw >= m.width {
 		return left
 	}
-	return left + " " + mutedStyle.Render(truncateWidth(m.hintText(), room))
+	right := m.renderHints(m.width - lw - 1)
+	gap := m.width - lw - lipgloss.Width(right)
+	if gap < 0 {
+		gap, right = m.width-lw, ""
+	}
+	fill := lipgloss.NewStyle().Background(mantleColor).Render(strings.Repeat(" ", gap))
+	return left + fill + right
 }
 
 func (m *Model) segmentsView(showUsage, showCache bool) string {
