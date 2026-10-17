@@ -12,10 +12,11 @@ import (
 )
 
 const (
-	headerHeight     = 2
-	inputLines       = 2
-	inputFrameHeight = 2
-	hintHeight       = 1
+	headerHeight       = 2
+	inputLines         = 2
+	inputFrameHeight   = 2
+	hintHeight         = 1
+	approvalCardHeight = 5 // 边框2 + 标题/命令/提示 3
 )
 
 var (
@@ -41,6 +42,11 @@ var (
 			BorderForeground(accentColor).
 			Padding(0, 1)
 
+	approvalBoxStyle = lipgloss.NewStyle().
+			Border(lipgloss.RoundedBorder()).
+			BorderForeground(accentColor).
+			Padding(0, 1)
+
 )
 
 const helpText = `命令:
@@ -51,7 +57,8 @@ const helpText = `命令:
 
 快捷键:
   Enter 发送 · Ctrl+J 换行 · Tab 工具抽屉 · Ctrl+R 思考过程
-  PgUp/PgDn 滚动 · Esc 关抽屉/取消生成 · Ctrl+C 取消或退出
+  PgUp/PgDn 滚动 · Esc 关抽屉/取消审批/取消生成 · Ctrl+C 取消或退出
+  名单外 run_command：Y 允许 · N/Esc 拒绝
   [ / ] 左侧会话（一期预留）`
 
 func (m *Model) view() string {
@@ -69,12 +76,12 @@ func (m *Model) view() string {
 		main = lipgloss.JoinHorizontal(lipgloss.Top, main, sep, m.drawerViewport.View())
 	}
 
-	return strings.Join([]string{
-		m.headerView(),
-		main,
-		m.inputView(),
-		m.hintView(),
-	}, "\n")
+	parts := []string{m.headerView(), main}
+	if m.approval != nil {
+		parts = append(parts, m.approvalView())
+	}
+	parts = append(parts, m.inputView(), m.hintView())
+	return strings.Join(parts, "\n")
 }
 
 func (m *Model) headerView() string {
@@ -126,6 +133,18 @@ func (m *Model) inputView() string {
 	return inputBoxStyle.Render(m.input.View())
 }
 
+func (m *Model) approvalView() string {
+	if m.approval == nil {
+		return ""
+	}
+	innerW := max(20, m.width-6)
+	title := "确认执行 " + m.approval.toolName
+	cmd := truncateWidth(m.approval.display, innerW)
+	hint := "Y 允许 · N 拒绝 · Esc 取消"
+	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)
+	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
+}
+
 func (m *Model) hintView() string {
 	hint := "Enter 发送 · Ctrl+J 换行 · Tab 抽屉 · Ctrl+R 思考 · Ctrl+C 退出"
 	if m.drawerOpen {
@@ -133,6 +152,9 @@ func (m *Model) hintView() string {
 	}
 	if m.streaming {
 		hint = "生成中 · Esc 取消 · Tab 抽屉 · PgUp/PgDn · Ctrl+C 取消"
+	}
+	if m.approval != nil {
+		hint = "确认命令 · Y 允许 · N 拒绝 · Esc 取消"
 	}
 	if lipgloss.Width(hint)+1 > m.width {
 		hint = truncateWidth(hint, m.width-2)

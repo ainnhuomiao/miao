@@ -58,6 +58,22 @@ type streamEventMsg struct {
 	err        error
 }
 
+
+// approvalRequestMsg 由工具 goroutine 经 Program.Send 投递，请求用户确认。
+type approvalRequestMsg struct {
+	toolName string
+	display  string
+	resp     chan bool
+}
+
+type approvalClearMsg struct{}
+
+type approvalState struct {
+	toolName string
+	display  string
+	resp     chan bool
+}
+
 // Model 是 TUI 的全部状态。
 type Model struct {
 	ag        *agent.Agent
@@ -83,6 +99,8 @@ type Model struct {
 	drawerFocus   bool // 焦点在抽屉时滚轮/Pg 作用于抽屉
 	// 左侧会话侧栏：一期接口预留，按 [ ] 暂为 noop
 	sidebarReserved bool
+
+	approval *approvalState
 }
 
 // New 创建 TUI 模型。
@@ -164,6 +182,20 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamEventMsg:
 		return m.handleStreamEvent(msg)
+
+	case approvalRequestMsg:
+		m.approval = &approvalState{
+			toolName: msg.toolName,
+			display:  msg.display,
+			resp:     msg.resp,
+		}
+		m.layout()
+		return m, nil
+
+	case approvalClearMsg:
+		m.clearApproval(false)
+		m.layout()
+		return m, nil
 	}
 
 	var cmd tea.Cmd
@@ -176,6 +208,27 @@ func (m *Model) View() string {
 }
 
 func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+	// 审批叠层优先吃键。
+	if m.approval != nil {
+		switch msg.String() {
+		case "y", "Y":
+			m.resolveApproval(true)
+			return m, nil
+		case "n", "N", "esc":
+			m.resolveApproval(false)
+			return m, nil
+		case "ctrl+c":
+			m.resolveApproval(false)
+			if m.streaming {
+				m.cancelStream()
+				return m, nil
+			}
+			return m, tea.Quit
+		default:
+			return m, nil // 审批中忽略其它输入
+		}
+	}
+
 	switch msg.String() {
 	case "ctrl+c":
 		if m.streaming {
@@ -185,6 +238,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "esc":
+		// 定稿：关抽屉 → 取消审批（上面已处理）→ 取消生成
 		if m.drawerOpen {
 			m.drawerOpen = false
 			m.drawerFocus = false
@@ -457,6 +511,32 @@ func (m *Model) runCommand(text string) tea.Cmd {
 	return nil
 }
 
+
+func (m *Model) resolveApproval(allow bool) {
+	if m.approval == nil {
+		return
+	}
+	select {
+	case m.approval.resp <- allow:
+	default:
+	}
+	m.approval = nil
+	m.layout()
+}
+
+func (m *Model) clearApproval(sendReject bool) {
+	if m.approval == nil {
+		return
+	}
+	if sendReject {
+		select {
+		case m.approval.resp <- false:
+		default:
+		}
+	}
+	m.approval = nil
+}
+
 func (m *Model) cancelStream() {
 	if m.cancel != nil {
 		m.cancel()
@@ -464,11 +544,15 @@ func (m *Model) cancelStream() {
 }
 
 func (m *Model) Close() {
+	m.clearApproval(true)
 	m.cancelStream()
 }
 
 func (m *Model) layout() {
 	vh := m.height - headerHeight - (inputLines + inputFrameHeight) - hintHeight
+	if m.approval != nil {
+		vh -= approvalCardHeight
+	}
 	if vh < 3 {
 		vh = 3
 	}

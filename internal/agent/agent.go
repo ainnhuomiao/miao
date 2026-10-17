@@ -167,6 +167,13 @@ func (a *Agent) requestMessages() []llm.Message {
 	return out
 }
 
+// SetApprover 把审批回调交给工具注册表（例如 TUI 确认卡）。
+func (a *Agent) SetApprover(fn tools.Approver) {
+	if a.tools != nil {
+		a.tools.SetApprover(fn)
+	}
+}
+
 // Reset 清空对话历史，开启一个新会话。
 func (a *Agent) Reset() {
 	a.history = a.history[:0]

@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"encoding/json"
 	"os"
 	"path/filepath"
 	"strings"
@@ -67,8 +68,8 @@ func TestRunCommand_AllowlistAndExec(t *testing.T) {
 	RegisterBuiltins(r)
 
 	blocked := r.Call(context.Background(), "run_command", `{"command":"rm","args":["-rf","."]}`)
-	if !blocked.IsError || !strings.Contains(blocked.Content, "白名单") {
-		t.Fatalf("expected allowlist error, got %+v", blocked)
+	if !blocked.IsError || !(strings.Contains(blocked.Content, "白名单") || strings.Contains(blocked.Content, "审批")) {
+		t.Fatalf("expected allowlist/approval error, got %+v", blocked)
 	}
 
 	pathBlocked := r.Call(context.Background(), "run_command", `{"command":"/bin/ls"}`)
@@ -91,5 +92,47 @@ func TestRunCommand_AllowlistAndExec(t *testing.T) {
 	}
 	if strings.TrimSpace(pwd.Content) != dir {
 		t.Fatalf("pwd = %q want %q", pwd.Content, dir)
+	}
+}
+
+func TestRunCommand_ApprovalGate(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewRegistry(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterBuiltins(r)
+
+	// 无审批：名单外拒绝
+	res := r.Call(context.Background(), "run_command", `{"command":"sleep","args":["0"]}`)
+	if !res.IsError {
+		t.Fatalf("expected reject without approver: %+v", res)
+	}
+
+	// 拒绝
+	r.SetApprover(func(ctx context.Context, toolName, display string, args json.RawMessage) (bool, error) {
+		if toolName != "run_command" || display != "sleep 0" {
+			t.Fatalf("unexpected ask: %s %q", toolName, display)
+		}
+		return false, nil
+	})
+	res = r.Call(context.Background(), "run_command", `{"command":"sleep","args":["0"]}`)
+	if !res.IsError || !strings.Contains(res.Content, "用户拒绝") {
+		t.Fatalf("expected user reject: %+v", res)
+	}
+
+	// 允许
+	r.SetApprover(func(ctx context.Context, toolName, display string, args json.RawMessage) (bool, error) {
+		return true, nil
+	})
+	res = r.Call(context.Background(), "run_command", `{"command":"sleep","args":["0"]}`)
+	if res.IsError {
+		t.Fatalf("expected allow: %+v", res)
+	}
+
+	// 带路径始终拒绝
+	res = r.Call(context.Background(), "run_command", `{"command":"/bin/sleep","args":["0"]}`)
+	if !res.IsError || !strings.Contains(res.Content, "路径") {
+		t.Fatalf("expected path reject: %+v", res)
 	}
 }

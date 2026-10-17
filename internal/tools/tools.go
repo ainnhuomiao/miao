@@ -23,11 +23,16 @@ type Tool struct {
 	Run  func(ctx context.Context, args json.RawMessage) Result
 }
 
+// Approver 在执行需确认的工具前询问用户。
+// allow=false 表示拒绝；err 非 nil 表示取消/中断。
+type Approver func(ctx context.Context, toolName, display string, args json.RawMessage) (allow bool, err error)
+
 // Registry 管理工具集合与工作区路径约束。
 type Registry struct {
 	workspace string
 	tools     map[string]Tool
 	order     []string
+	approver  Approver
 }
 
 // NewRegistry 创建工具注册表。workspace 必须是绝对路径。
@@ -44,6 +49,12 @@ func NewRegistry(workspace string) (*Registry, error) {
 
 // Workspace 返回锁定的工作区根目录。
 func (r *Registry) Workspace() string { return r.workspace }
+
+// SetApprover 设置需确认工具的审批回调；nil 表示名单外一律拒绝。
+func (r *Registry) SetApprover(a Approver) { r.approver = a }
+
+// Approver 返回当前审批回调。
+func (r *Registry) Approver() Approver { return r.approver }
 
 // Register 注册工具；同名覆盖并保持顺序。
 func (r *Registry) Register(t Tool) {

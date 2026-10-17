@@ -17,8 +17,8 @@ const (
 	commandTimeout   = 30 * time.Second
 )
 
-// 一期白名单：只允许这些可执行文件名（不允许路径、不允许 shell）。
-// 人工确认 / 更细策略留给后续。
+// 白名单内静默执行；名单外需 Approver 确认后才跑。
+// 带路径的命令名始终拒绝（不允许绕过）。
 var commandAllowlist = map[string]struct{}{
 	"go": {}, "git": {}, "ls": {}, "cat": {}, "head": {}, "tail": {},
 	"wc": {}, "rg": {}, "grep": {}, "find": {}, "pwd": {}, "echo": {},
@@ -30,13 +30,13 @@ var commandAllowlist = map[string]struct{}{
 func registerRunCommand(r *Registry) {
 	r.Register(Tool{
 		Def: toolDef("run_command",
-			"在工作区根目录执行白名单内的命令（无 shell）。参数用独立字段传入，不要拼 shell 字符串。",
+			"在工作区根目录执行命令（无 shell）。白名单内直接执行；名单外需用户确认。参数用独立字段传入。",
 			map[string]any{
 				"type": "object",
 				"properties": map[string]any{
 					"command": map[string]any{
 						"type":        "string",
-						"description": "可执行文件名，必须在白名单内（如 go、git、ls），不能含路径",
+						"description": "可执行文件名（如 go、git、ls），不能含路径分隔符",
 					},
 					"args": map[string]any{
 						"type":        "array",
@@ -58,54 +58,85 @@ func registerRunCommand(r *Registry) {
 			if name == "" {
 				return Result{Content: "command 不能为空", IsError: true}
 			}
-			if err := validateCommandName(name); err != nil {
+			if err := validateBareCommandName(name); err != nil {
 				return Result{Content: err.Error(), IsError: true}
 			}
 
-			runCtx, cancel := context.WithTimeout(ctx, commandTimeout)
-			defer cancel()
-
-			cmd := exec.CommandContext(runCtx, name, in.Args...)
-			cmd.Dir = r.Workspace()
-			// 不继承全部敏感环境也可，这里先继承 PATH 等，便于找到 go/git。
-			var stdout, stderr bytes.Buffer
-			cmd.Stdout = &stdout
-			cmd.Stderr = &stderr
-
-			err := cmd.Run()
-			out := mergeOutputs(stdout.String(), stderr.String())
-			out = truncateOutput(out, maxCommandOutput)
-
-			if runCtx.Err() == context.DeadlineExceeded {
-				return Result{
-					Content: fmt.Sprintf("命令超时（>%s）\n%s", commandTimeout, out),
-					IsError: true,
+			display := formatCommandDisplay(name, in.Args)
+			if _, ok := commandAllowlist[name]; !ok {
+				approver := r.Approver()
+				if approver == nil {
+					return Result{
+						Content: fmt.Sprintf("命令不在白名单内且未配置审批: %s（允许: %s）", name, allowlistSummary()),
+						IsError: true,
+					}
+				}
+				allow, err := approver(ctx, "run_command", display, args)
+				if err != nil {
+					return Result{Content: "审批中断: " + err.Error(), IsError: true}
+				}
+				if !allow {
+					return Result{Content: "用户拒绝执行: " + display, IsError: true}
 				}
 			}
-			if err != nil {
-				if out == "" {
-					out = err.Error()
-				} else {
-					out = out + "\n(" + err.Error() + ")"
-				}
-				return Result{Content: out, IsError: true}
-			}
-			if out == "" {
-				out = "(无输出)"
-			}
-			return Result{Content: out}
+
+			return execCommand(ctx, r.Workspace(), name, in.Args)
 		},
 	})
 }
 
-func validateCommandName(name string) error {
-	if name != filepath.Base(name) || strings.Contains(name, "/") || strings.Contains(name, `\`) {
-		return fmt.Errorf("只允许白名单内的命令名，不允许路径: %q", name)
-	}
-	if _, ok := commandAllowlist[name]; !ok {
-		return fmt.Errorf("命令不在白名单内: %s（允许: %s）", name, allowlistSummary())
+func validateBareCommandName(name string) error {
+	if name != filepath.Base(name) || strings.ContainsAny(name, `/\:`) {
+		return fmt.Errorf("不允许带路径的命令名: %q", name)
 	}
 	return nil
+}
+
+func formatCommandDisplay(name string, args []string) string {
+	parts := make([]string, 0, 1+len(args))
+	parts = append(parts, name)
+	for _, a := range args {
+		if strings.ContainsAny(a, " \t\n\"'") {
+			parts = append(parts, fmt.Sprintf("%q", a))
+		} else {
+			parts = append(parts, a)
+		}
+	}
+	return strings.Join(parts, " ")
+}
+
+func execCommand(ctx context.Context, dir, name string, args []string) Result {
+	runCtx, cancel := context.WithTimeout(ctx, commandTimeout)
+	defer cancel()
+
+	cmd := exec.CommandContext(runCtx, name, args...)
+	cmd.Dir = dir
+	var stdout, stderr bytes.Buffer
+	cmd.Stdout = &stdout
+	cmd.Stderr = &stderr
+
+	err := cmd.Run()
+	out := mergeOutputs(stdout.String(), stderr.String())
+	out = truncateOutput(out, maxCommandOutput)
+
+	if runCtx.Err() == context.DeadlineExceeded {
+		return Result{
+			Content: fmt.Sprintf("命令超时（>%s）\n%s", commandTimeout, out),
+			IsError: true,
+		}
+	}
+	if err != nil {
+		if out == "" {
+			out = err.Error()
+		} else {
+			out = out + "\n(" + err.Error() + ")"
+		}
+		return Result{Content: out, IsError: true}
+	}
+	if out == "" {
+		out = "(无输出)"
+	}
+	return Result{Content: out}
 }
 
 func allowlistSummary() string {

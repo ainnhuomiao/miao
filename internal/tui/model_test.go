@@ -254,3 +254,43 @@ func TestWrapTextCJK(t *testing.T) {
 		t.Errorf("首行 = %q, 想要 5 组“中文”", lines[0])
 	}
 }
+
+func TestApprovalOverlayKeys(t *testing.T) {
+	m := newTestModel(t, 80, 24, "")
+	resp := make(chan bool, 1)
+	m.Update(approvalRequestMsg{
+		toolName: "run_command",
+		display:  "sleep 0",
+		resp:     resp,
+	})
+	if m.approval == nil {
+		t.Fatal("approval should be pending")
+	}
+	if !strings.Contains(m.View(), "确认执行") || !strings.Contains(m.View(), "sleep 0") {
+		t.Fatalf("view missing approval card:\n%s", m.View())
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	select {
+	case allow := <-resp:
+		if !allow {
+			t.Fatal("Y should allow")
+		}
+	default:
+		t.Fatal("no approval response")
+	}
+	if m.approval != nil {
+		t.Fatal("approval should clear after Y")
+	}
+
+	resp2 := make(chan bool, 1)
+	m.Update(approvalRequestMsg{toolName: "run_command", display: "rm -rf /", resp: resp2})
+	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	select {
+	case allow := <-resp2:
+		if allow {
+			t.Fatal("Esc should reject")
+		}
+	default:
+		t.Fatal("no reject response")
+	}
+}

@@ -3,6 +3,7 @@ package repl
 
 import (
 	"bufio"
+	"encoding/json"
 	"context"
 	"errors"
 	"fmt"
@@ -49,6 +50,7 @@ func New(ag *agent.Agent, model string) *REPL {
 
 // Run 启动交互循环。
 func (r *REPL) Run(ctx context.Context) error {
+	r.ag.SetApprover(r.askApproval)
 	r.printBanner()
 
 	sigCh := make(chan os.Signal, 1)
@@ -250,6 +252,32 @@ func truncate(s string, n int) string {
 		return s
 	}
 	return string(runes[:n]) + "…"
+}
+
+func (r *REPL) askApproval(ctx context.Context, toolName, display string, _ json.RawMessage) (bool, error) {
+	fmt.Fprintf(r.out, "\n%s确认执行 %s%s\n  %s\n%s[Y/n]%s ", colorYellow, toolName, colorReset, display, colorDim, colorReset)
+	lineCh := make(chan string, 1)
+	errCh := make(chan error, 1)
+	go func() {
+		line, err := r.in.ReadString('\n')
+		if err != nil {
+			errCh <- err
+			return
+		}
+		lineCh <- line
+	}()
+	select {
+	case <-ctx.Done():
+		return false, ctx.Err()
+	case err := <-errCh:
+		return false, err
+	case line := <-lineCh:
+		s := strings.TrimSpace(strings.ToLower(line))
+		if s == "" || s == "y" || s == "yes" {
+			return true, nil
+		}
+		return false, nil
+	}
 }
 
 func (r *REPL) printWarn(msg string) {
