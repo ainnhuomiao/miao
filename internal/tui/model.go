@@ -109,6 +109,7 @@ type Model struct {
 	sidebarReserved bool
 
 	approval *approvalState
+	palette  paletteState
 
 	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
 	usage      *llm.Usage
@@ -240,6 +241,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.fitInput()
+	m.syncPalette()
 	return m, cmd
 }
 
@@ -288,6 +290,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		default:
 			return m, nil // 审批中忽略其它输入
 		}
+	}
+
+	if ok, cmd := m.handlePaletteKey(msg); ok {
+		return m, cmd
 	}
 
 	switch msg.String() {
@@ -359,6 +365,7 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 	var cmd tea.Cmd
 	m.input, cmd = m.input.Update(msg)
 	m.fitInput()
+	m.syncPalette()
 	return m, cmd
 }
 
@@ -369,6 +376,7 @@ func (m *Model) submit() tea.Cmd {
 	}
 	m.input.Reset()
 	m.fitInput()
+	m.syncPalette()
 
 	if strings.HasPrefix(text, "/") {
 		return m.runCommand(text)
@@ -810,7 +818,11 @@ func (m *Model) layout() {
 		vh = 3
 	}
 	m.viewport.Width = m.width
-	vh -= activityMaxRows // 工具状态条常驻占位
+	if h := m.paletteHeight(); h > 0 {
+		vh -= h // 命令菜单替代工具状态条
+	} else {
+		vh -= activityMaxRows // 工具状态条常驻占位
+	}
 	m.viewport.Height = max(3, vh)
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())

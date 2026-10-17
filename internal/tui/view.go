@@ -86,7 +86,11 @@ func (m *Model) view() string {
 
 	parts := []string{m.headerView(), main}
 	// 工具状态条常驻占一行（空闲显示待命文案），输入框不会上下跳
-	parts = append(parts, m.activityView())
+	if m.paletteOpen() {
+		parts = append(parts, m.paletteView())
+	} else {
+		parts = append(parts, m.activityView())
+	}
 	if m.approval != nil {
 		parts = append(parts, m.approvalView())
 	}

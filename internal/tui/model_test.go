@@ -366,6 +366,10 @@ func TestLoadMissingAndEmptySessions(t *testing.T) {
 	}
 
 	m.input.SetValue("/load")
+	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // 菜单打开：无参 /load 先补全为 "/load "
+	if v := m.input.Value(); v != "/load " {
+		t.Fatalf("/load Enter 应补全，得到 %q", v)
+	}
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
 	last = m.messages[len(m.messages)-1].content
 	if !strings.Contains(last, "用法") {
