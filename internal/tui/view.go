@@ -43,6 +43,15 @@ var (
 			BorderForeground(accentColor).
 			Padding(0, 1)
 
+	drawerBorderStyle = lipgloss.NewStyle().Foreground(toolColor)
+	drawerBoxStyle    = lipgloss.NewStyle().
+				Border(lipgloss.RoundedBorder()).
+				BorderForeground(toolColor).
+				Padding(0, 1)
+
+	userTagStyle  = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(lipgloss.Color("#0B1020")).Background(userColor)
+	agentTagStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(lipgloss.Color("#0B1020")).Background(agentColor)
+
 	approvalBoxStyle = lipgloss.NewStyle().
 				Border(lipgloss.RoundedBorder()).
 				BorderForeground(accentColor).
@@ -72,8 +81,7 @@ func (m *Model) view() string {
 
 	main := m.viewport.View()
 	if m.drawerOpen {
-		sep := mutedStyle.Render("│")
-		main = lipgloss.JoinHorizontal(lipgloss.Top, main, sep, m.drawerViewport.View())
+		main = lipgloss.JoinHorizontal(lipgloss.Top, main, m.drawerBoxView())
 	}
 
 	parts := []string{m.headerView(), main}
@@ -82,6 +90,23 @@ func (m *Model) view() string {
 	}
 	parts = append(parts, m.inputView(), m.hintView())
 	return strings.Join(parts, "\n")
+}
+
+func (m *Model) drawerBoxView() string {
+	w := m.drawerViewport.Width + 2
+	h := m.drawerViewport.Height
+	box := drawerBoxStyle.Width(w).Height(h).Render(m.drawerViewport.View())
+	// 把标题嵌进上边框：╭ 工具 · 1 ───╮
+	lines := strings.Split(box, "\n")
+	if len(lines) > 0 {
+		title := m.drawerTitle()
+		fill := w - lipgloss.Width(title)
+		if fill >= 1 {
+			lines[0] = drawerBorderStyle.Render("╭─") + titleStyle.Render(title) +
+				drawerBorderStyle.Render(strings.Repeat("─", fill-1)+"╮")
+		}
+	}
+	return strings.Join(lines, "\n")
 }
 
 func (m *Model) headerView() string {
@@ -175,21 +200,136 @@ func (m *Model) hintView() string {
 
 func (m *Model) renderTranscript() string {
 	var b strings.Builder
-	for _, msg := range m.messages {
-		// 跳过尚未有任何内容的空助手气泡（工具后预留的）
-		if msg.role == roleAssistant && msg.content == "" && msg.reasoning == "" && msg.done {
-			continue
+	width := m.contentWidth()
+	pad := lipgloss.NewStyle().Padding(0, 1)
+
+	// 一轮回答（用户消息之后的若干助手气泡与工具卡）合成一组，只显示一次 GoAgent 标签。
+	inGroup := false
+	var group strings.Builder
+	reasoning := 0
+	var reasoningText []string
+	pendingStream := false
+
+	flush := func() {
+		if !inGroup {
+			return
 		}
-		if msg.role == roleAssistant && msg.content == "" && msg.reasoning == "" && !msg.done {
-			// 流式中的空气泡仍显示占位
-			if m.streaming {
-				b.WriteString(m.renderMessage(msg))
-			}
-			continue
+		label := agentTagStyle.Render("GoAgent")
+		if reasoning > 0 && !m.showReasoning {
+			label += " " + mutedStyle.Render(fmt.Sprintf("思考 %d 字 · Ctrl+R", reasoning))
 		}
-		b.WriteString(m.renderMessage(msg))
+		body := label + "\n"
+		if m.showReasoning && len(reasoningText) > 0 {
+			body += mutedStyle.Render(wrapText(strings.Join(reasoningText, "\n"), width)) + "\n"
+		}
+		inner := strings.TrimRight(group.String(), "\n")
+		if inner == "" && pendingStream {
+			inner = mutedStyle.Render("…")
+		}
+		body += inner
+		b.WriteString(pad.Render(strings.TrimRight(body, "\n")) + "\n\n")
+		inGroup, reasoning, reasoningText, pendingStream = false, 0, nil, false
+		group.Reset()
 	}
+
+	for idx := range m.messages {
+		msg := &m.messages[idx]
+		switch msg.role {
+		case roleAssistant, roleTool:
+			inGroup = true
+			if msg.role == roleTool {
+				group.WriteString(m.toolCardLine(*msg, width) + "\n")
+				continue
+			}
+			if msg.reasoning != "" {
+				reasoning += utf8.RuneCountInString(msg.reasoning)
+				reasoningText = append(reasoningText, msg.reasoning)
+			}
+			if msg.content == "" {
+				if !msg.done {
+					pendingStream = true
+				}
+				continue
+			}
+			group.WriteString(m.assistantBody(msg, width) + "\n")
+		default:
+			flush()
+			b.WriteString(m.renderMessage(*msg))
+		}
+	}
+	flush()
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// assistantBody 渲染助手正文：流式时纯文本，完成后 Glamour（带缓存）。
+func (m *Model) assistantBody(msg *chatMessage, width int) string {
+	if !msg.done {
+		return wrapText(msg.content, width)
+	}
+	if msg.mdCache == "" || msg.mdW != width {
+		msg.mdCache = renderMarkdown(msg.content, width)
+		msg.mdW = width
+	}
+	return msg.mdCache
+}
+
+// toolCardLine 是主区的一行工具卡：⚙ name · ✓ 12ms · 摘要。
+func (m *Model) toolCardLine(msg chatMessage, width int) string {
+	name := "⚙ " + msg.toolName
+	var summary string
+	switch {
+	case !msg.done:
+		summary = "运行中…"
+	case msg.toolError:
+		summary = "✗ · " + firstLine(msg.toolResult)
+	default:
+		summary = "✓ " + msg.toolDur.Round(time.Millisecond).String()
+		if s := toolSummary(msg.toolName, msg.toolResult); s != "" {
+			summary += " · " + s
+		}
+	}
+	plain := truncateWidth(name+" · "+summary, width)
+	if i := strings.Index(plain, " · "); i >= 0 {
+		name, summary = plain[:i], plain[i+len(" · "):]
+	} else {
+		name, summary = plain, ""
+	}
+	suffix := ""
+	if summary != "" {
+		st := mutedStyle
+		if msg.done && msg.toolError {
+			st = errorStyle
+		}
+		suffix = st.Render(" · " + summary)
+	}
+	return toolLabelStyle.Render(name) + suffix
+}
+
+// toolSummary 只写结果数量或第一行，不把多行内容挤成一行。
+func toolSummary(tool, result string) string {
+	result = strings.TrimRight(result, "\n")
+	if result == "" {
+		return ""
+	}
+	n := strings.Count(result, "\n") + 1
+	switch tool {
+	case "list_dir":
+		if result == "(空目录)" {
+			return "空目录"
+		}
+		return fmt.Sprintf("%d 项", n)
+	case "read_file":
+		return fmt.Sprintf("%d 行", n)
+	}
+	if n > 1 {
+		return fmt.Sprintf("%s（共 %d 行）", firstLine(result), n)
+	}
+	return result
+}
+
+func firstLine(s string) string {
+	l, _, _ := strings.Cut(strings.TrimSpace(s), "\n")
+	return l
 }
 
 func (m *Model) renderMessage(msg chatMessage) string {
@@ -198,81 +338,17 @@ func (m *Model) renderMessage(msg chatMessage) string {
 
 	switch msg.role {
 	case roleUser:
-		body := userLabelStyle.Render("▌ 你") + "\n" +
+		body := userTagStyle.Render("你") + "\n" +
 			lipgloss.NewStyle().Width(width).Render(wrapText(msg.content, width))
 		return pad.Render(body) + "\n\n"
 
-	case roleAssistant:
-		var b strings.Builder
-		b.WriteString(agentLabelStyle.Render("▌ GoAgent"))
-		b.WriteString("\n")
-
-		if msg.reasoning != "" {
-			if m.showReasoning {
-				b.WriteString(mutedStyle.Width(width).Render(wrapText(msg.reasoning, width)))
-			} else {
-				b.WriteString(mutedStyle.Render(fmt.Sprintf(
-					"思考 %d 字 · Ctrl+R 展开", utf8.RuneCountInString(msg.reasoning))))
-			}
-			b.WriteString("\n")
-		}
-
-		switch {
-		case msg.content != "":
-			b.WriteString(lipgloss.NewStyle().Width(width).Render(wrapText(msg.content, width)))
-		case !msg.done:
-			b.WriteString(mutedStyle.Render("…"))
-		default:
-			b.WriteString(mutedStyle.Render("(无内容)"))
-		}
-		return pad.Render(b.String()) + "\n\n"
-
-	case roleTool:
-		// 默认一行：⚙ name · ✓ 12ms · 摘要；详情留给抽屉。
-		name := "⚙ " + msg.toolName
-		var summary string
-		switch {
-		case !msg.done:
-			summary = "运行中…"
-		case msg.toolError:
-			summary = "✗"
-			if preview := compact(msg.toolResult, 40); preview != "" {
-				summary += " · " + preview
-			}
-		default:
-			summary = fmt.Sprintf("✓ %s", msg.toolDur.Round(time.Millisecond))
-			if preview := compact(msg.toolResult, 48); preview != "" {
-				summary += " · " + preview
-			}
-		}
-		// 先按纯文本截断，再上色，避免 ANSI 干扰换行宽度。
-		plain := name + " · " + summary
-		if lipgloss.Width(plain) > width {
-			plain = truncateWidth(plain, width)
-			// 截断后重新拆：尽量保留工具名着色
-			if i := strings.Index(plain, " · "); i >= 0 {
-				name, summary = plain[:i], plain[i+len(" · "):]
-			} else {
-				name, summary = plain, ""
-			}
-		}
-		suffix := ""
-		if summary != "" {
-			if msg.done && msg.toolError {
-				suffix = errorStyle.Render(" · " + summary)
-			} else {
-				suffix = mutedStyle.Render(" · " + summary)
-			}
-		}
-		return pad.Render(toolLabelStyle.Render(name)+suffix) + "\n\n"
-
 	case roleNotice:
 		body := "· " + strings.ReplaceAll(msg.content, "\n", "\n  ")
-		return pad.Render(mutedStyle.Width(width).Render(wrapText(body, width))) + "\n"
+		return pad.Render(mutedStyle.Width(width).Render(wrapText(body, width))) + "\n\n"
 
 	case roleError:
 		body := "! " + strings.ReplaceAll(msg.content, "\n", "\n  ")
-		return pad.Render(errorStyle.Width(width).Render(wrapText(body, width))) + "\n"
+		return pad.Render(errorStyle.Width(width).Render(wrapText(body, width))) + "\n\n"
 	}
 	return ""
 }

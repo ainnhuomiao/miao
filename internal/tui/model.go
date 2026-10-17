@@ -2,8 +2,10 @@ package tui
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 	"unicode/utf8"
@@ -41,6 +43,9 @@ type chatMessage struct {
 	toolError  bool
 	toolDur    time.Duration
 	toolCallID string
+
+	mdCache string // 完成后 Glamour 渲染结果缓存
+	mdW     int
 }
 
 // streamEventMsg 是后台流式 goroutine 发给 Update 的事件。
@@ -110,6 +115,12 @@ func New(ag *agent.Agent, modelName string) *Model {
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.SetHeight(inputLines)
+	ta.SetPromptFunc(2, func(i int) string {
+		if i == 0 {
+			return "› "
+		}
+		return "  "
+	})
 	ta.SetWidth(60)
 	ta.KeyMap.InsertNewline.SetKeys("ctrl+j")
 
@@ -588,8 +599,8 @@ func (m *Model) layout() {
 			mainW = 24
 			dw = m.width - mainW
 		}
-		m.drawerViewport.Width = dw
-		m.drawerViewport.Height = vh
+		m.drawerViewport.Width = max(4, dw-4) // 圆角边框 2 + 左右留白 2
+		m.drawerViewport.Height = max(1, vh-2)
 	}
 	m.viewport.Width = mainW
 	m.viewport.Height = vh
@@ -631,21 +642,18 @@ func (m *Model) refreshDrawer() {
 }
 
 func (m *Model) renderDrawer() string {
-	width := max(8, m.drawerViewport.Width-2)
+	width := max(8, m.drawerViewport.Width)
 	var b strings.Builder
 	if m.approval != nil {
-		b.WriteString(titleStyle.Render("待确认 · " + m.approval.title()))
+		b.WriteString(titleStyle.Render(truncateWidth("待确认 · "+m.approval.title(), width)))
 		b.WriteString("\n")
 		for _, l := range m.approval.body() {
 			b.WriteString(diffLineStyle(l).Render(truncateWidth(l, width)))
 			b.WriteString("\n")
 		}
+		b.WriteString(mutedStyle.Render(strings.Repeat("─", width)))
 		b.WriteString("\n")
 	}
-	b.WriteString(titleStyle.Render("工具"))
-	b.WriteString("\n")
-	b.WriteString(mutedStyle.Render(strings.Repeat("─", max(0, width))))
-	b.WriteString("\n")
 
 	var tools []chatMessage
 	for _, msg := range m.messages {
@@ -661,33 +669,93 @@ func (m *Model) renderDrawer() string {
 		if i > 0 {
 			b.WriteString("\n")
 		}
+		b.WriteString(toolLabelStyle.Render(truncateWidth("⚙ "+t.toolName, width)))
+		b.WriteString("\n")
 		status := "运行中…"
 		if t.done {
 			if t.toolError {
-				status = "失败"
+				status = "✗ 失败"
 			} else {
-				status = fmt.Sprintf("完成 · %s", t.toolDur.Round(time.Millisecond))
+				status = "✓ " + t.toolDur.Round(time.Millisecond).String()
 			}
 		}
-		b.WriteString(toolLabelStyle.Render("⚙ " + t.toolName))
-		b.WriteString("\n")
-		b.WriteString(mutedStyle.Render(status))
-		b.WriteString("\n")
-		if t.toolArgs != "" {
-			b.WriteString(mutedStyle.Width(width).Render(wrapText("参数: "+compact(t.toolArgs, 200), width)))
-			b.WriteString("\n")
+		meta := status
+		if a := formatArgs(t.toolName, t.toolArgs); a != "" {
+			meta += " · " + a
 		}
+		b.WriteString(mutedStyle.Render(wrapText(meta, width)))
+		b.WriteString("\n")
 		if t.done && t.toolResult != "" {
-			preview := compact(t.toolResult, 400)
-			style := mutedStyle
+			b.WriteString(mutedStyle.Render(strings.Repeat("─", min(width, 12))))
+			b.WriteString("\n")
+			style := lipgloss.NewStyle()
 			if t.toolError {
 				style = errorStyle
 			}
-			b.WriteString(style.Width(width).Render(wrapText(preview, width)))
-			b.WriteString("\n")
+			lines := strings.Split(strings.TrimRight(t.toolResult, "\n"), "\n")
+			const maxLines = 40
+			for k, l := range lines {
+				if k == maxLines {
+					b.WriteString(mutedStyle.Render(fmt.Sprintf("…还有 %d 行", len(lines)-maxLines)))
+					b.WriteString("\n")
+					break
+				}
+				b.WriteString(style.Render(truncateWidth(l, width)))
+				b.WriteString("\n")
+			}
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
+}
+
+// drawerTitle 是抽屉标题：工具 · 本轮调用次数。
+func (m *Model) drawerTitle() string {
+	n := 0
+	for i := len(m.messages) - 1; i >= 0; i-- {
+		if m.messages[i].role == roleUser {
+			break
+		}
+		if m.messages[i].role == roleTool {
+			n++
+		}
+	}
+	return fmt.Sprintf(" 工具 · %d ", n)
+}
+
+// formatArgs 把工具参数 JSON 写成 key: value；run_command 写成命令行。
+func formatArgs(tool, raw string) string {
+	var obj map[string]any
+	if err := json.Unmarshal([]byte(raw), &obj); err != nil || len(obj) == 0 {
+		return strings.TrimSpace(raw)
+	}
+	if tool == "run_command" {
+		parts := []string{fmt.Sprint(obj["command"])}
+		if args, ok := obj["args"].([]any); ok {
+			for _, a := range args {
+				parts = append(parts, fmt.Sprint(a))
+			}
+		}
+		return "$ " + strings.Join(parts, " ")
+	}
+	keys := make([]string, 0, len(obj))
+	for k := range obj {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	var out []string
+	for _, k := range keys {
+		v := obj[k]
+		str, ok := v.(string)
+		if !ok {
+			bs, _ := json.Marshal(v)
+			str = string(bs)
+		}
+		if k == "content" {
+			str = fmt.Sprintf("%d 字节", len(str))
+		}
+		out = append(out, k+": "+compact(str, 60))
+	}
+	return strings.Join(out, " · ")
 }
 
 func compact(s string, maxRunes int) string {

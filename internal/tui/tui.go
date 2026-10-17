@@ -12,6 +12,7 @@ import (
 
 // Run 启动 TUI，直到用户退出。
 func Run(ag *agent.Agent, modelName string) error {
+	initMarkdown()
 	m := New(ag, modelName)
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
