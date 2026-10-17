@@ -54,14 +54,57 @@ Go 知识点：
 
 ---
 
+## 阶段 1.5 · 全屏 TUI ✅
+
+状态：已完成（从阶段 7 提前，因为界面体验直接影响日常使用）。
+
+交付物：
+
+- 默认启动全屏 TUI，使用备用屏幕，退出后恢复原终端内容
+- 对话区自动换行、跟随滚动，支持鼠标滚轮和 `PgUp` / `PgDn`
+- 多行输入：`Enter` 发送，`Ctrl+J` 换行
+- 状态栏显示“就绪 / 思考中 / 生成中”，带 spinner
+- 思考过程默认折叠为“思考 N 字”，`Ctrl+R` 展开
+- `Esc` 取消当前生成，空闲时 `Ctrl+C` 退出
+- 非 TTY（管道、CI）自动回退 REPL，也可以 `-plain` 强制启用
+- 窗口缩放、小终端降级、中文自动换行
+- 状态机测试：布局不溢出、流式写入、取消、命令、折叠
+
+涉及文件：
+
+- `cmd/agent/main.go`
+- `internal/tui/tui.go`、`model.go`、`view.go`
+- `internal/tui/model_test.go`
+
+Go / 工程知识点：
+
+- Bubble Tea 的 Elm 架构：`Init` / `Update` / `View`
+- 消息驱动 UI：`tea.Msg`、`tea.Cmd`、`tea.Batch`
+- 网络 goroutine + channel 与 UI 解耦，避免阻塞渲染
+- `viewport`、`textarea`、`spinner` 组件的组合
+- lipgloss 布局、边框和自适应主题色
+- Unicode UAX #14 换行、宽字符（中文占 2 列）
+- TTY 检测与优雅降级
+
+练习：
+
+1. 修改 `view.go` 里的 `accentColor`，换一套配色，分别看深色/浅色终端。
+2. 给状态栏加“本轮耗时”或“已接收 N 字”（提示：`time.Since`、`utf8.RuneCountInString`）。
+3. 增加 `/theme` 命令，在两组配色间切换（提示：把包级样式改成 `Model` 字段）。
+4. 接入 `glamour`，把完成后的回答渲染成 Markdown（流式阶段先保持纯文本）。
+5. 增加“回到最新消息”快捷键（提示：`viewport.GotoBottom()`）。
+6. 用 `go test ./internal/tui -run TestViewFitsTerminal -v` 观察不同窗口尺寸。
+
+---
+
 ## 阶段 2 · 配置、日志与健壮性
 
 目标：从"能跑的 demo"变成"像样的 CLI 工具"。
 
 要做的事：
 
-1. **命令行参数**：用 `flag` 包支持 `-model`、`-base-url`、`-system`、`-debug`，
-   环境变量作为默认值。例如：
+1. **命令行参数**：`-plain` 和 TTY 自动回退已经完成；继续用 `flag`
+   支持 `-model`、`-base-url`、`-system`、`-debug`，环境变量作为默认值。例如：
    ```bash
    go run ./cmd/agent -model deepseek-reasoner -debug
    ```
@@ -261,7 +304,7 @@ Go 知识点：`os.UserHomeDir`、`os.OpenFile` 权限位、`bufio.Writer`、
 | --- | --- | --- |
 | MCP 客户端 | 用 JSON-RPC over stdio 接入社区 MCP 工具 | 子进程、`os/exec`、JSON-RPC、协议设计 |
 | 子 agent | 父 agent 派发任务给子 agent，汇总结果 | 接口、并发、上下文隔离 |
-| TUI | 用 `bubbletea` 做全屏界面 | Elm 架构、消息循环、终端控制 |
+| TUI | 基础版已完成（见阶段 1.5）；可继续做 Markdown 渲染、主题系统、会话侧栏 | Elm 架构、消息循环、终端控制 |
 | RAG | 文档切分、embedding、向量检索 | 文件遍历、相似度计算、数据持久化 |
 | 多模型路由 | 按任务选择模型，统计 token 与成本 | 配置、策略模式、统计 |
 | 发布 | GitHub Actions + goreleaser 交叉编译 | CI、版本注入、跨平台构建 |
