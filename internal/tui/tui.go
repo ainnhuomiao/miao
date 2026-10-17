@@ -4,6 +4,7 @@ package tui
 import (
 	"context"
 	"encoding/json"
+	"os"
 
 	tea "github.com/charmbracelet/bubbletea"
 
@@ -15,8 +16,10 @@ import (
 func Run(ag *agent.Agent, modelName string) error {
 	initMarkdown()
 	termDark = mdDark
+	fillOut = os.Stdout
 	setTheme("auto")
 	loadSavedTheme()
+	defer resetFill()
 	m := New(ag, modelName)
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),

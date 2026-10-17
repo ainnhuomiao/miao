@@ -32,6 +32,13 @@ func (m *Model) themeMatches(query string) []paletteCmd {
 			fuzzy = append(fuzzy, c)
 		}
 	}
+	if q == "" || strings.HasPrefix(fillCmdName, q) {
+		state := "关"
+		if fillBg {
+			state = "开"
+		}
+		fuzzy = append(fuzzy, paletteCmd{name: fillCmdName, desc: "铺底色：用主题底色盖住透明终端背后的内容（当前：" + state + "）"})
+	}
 	return append(append(first, prefix...), fuzzy...)
 }
 
@@ -67,6 +74,13 @@ func (m *Model) cancelThemePreview() {
 func (m *Model) applyTheme(name string) {
 	orig := m.themeOrig
 	m.themeOrig = ""
+	if strings.TrimSpace(strings.ToLower(name)) == fillCmdName {
+		if orig != "" {
+			setTheme(orig)
+		}
+		m.toggleFill()
+		return
+	}
 	if !setTheme(name) {
 		if orig != "" {
 			setTheme(orig)
@@ -97,4 +111,23 @@ func (m *Model) restyle() {
 		m.layout()
 		m.refreshViewport(false)
 	}
+}
+
+// fillCmdName 是 /theme 菜单里的铺底色开关。
+const fillCmdName = "fill"
+
+// toggleFill 切换铺底色并保存。
+func (m *Model) toggleFill() {
+	fillBg = !fillBg
+	syncFill()
+	m.restyle()
+	state := "已关闭铺底色。"
+	if fillBg {
+		state = "已打开铺底色。"
+	}
+	if err := saveConfigKey("fill_bg", fillBg); err != nil {
+		m.notice(state + "但保存失败：" + err.Error())
+		return
+	}
+	m.notice(state)
 }

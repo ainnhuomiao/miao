@@ -2,6 +2,8 @@ package tui
 
 import (
 	"encoding/json"
+	"fmt"
+	"io"
 	"os"
 	"path/filepath"
 	"strings"
@@ -16,6 +18,7 @@ type theme struct {
 	dark                                                bool
 	accent, user, agent, tool, error_, text, muted      string
 	surface0, surface1, crust, mantle, subtext0, yellow string
+	base                                                string // 铺底色用
 }
 
 func ctpTheme(name, title string, f catppuccin.Flavor, dark bool) theme {
@@ -24,7 +27,7 @@ func ctpTheme(name, title string, f catppuccin.Flavor, dark bool) theme {
 		accent: f.Mauve().Hex, user: f.Blue().Hex, agent: f.Green().Hex, tool: f.Peach().Hex,
 		error_: f.Red().Hex, text: f.Text().Hex, muted: f.Overlay0().Hex,
 		surface0: f.Surface0().Hex, surface1: f.Surface1().Hex, crust: f.Crust().Hex,
-		mantle: f.Mantle().Hex, subtext0: f.Subtext0().Hex, yellow: f.Yellow().Hex,
+		mantle: f.Mantle().Hex, base: f.Base().Hex, subtext0: f.Subtext0().Hex, yellow: f.Yellow().Hex,
 	}
 }
 
@@ -38,15 +41,15 @@ var themes = []theme{
 	{name: "tokyonight", title: "Tokyo Night", dark: true,
 		accent: "#bb9af7", user: "#7aa2f7", agent: "#9ece6a", tool: "#ff9e64", error_: "#f7768e",
 		text: "#c0caf5", muted: "#565f89", surface0: "#292e42", surface1: "#3b4261",
-		crust: "#16161e", mantle: "#1f2335", subtext0: "#a9b1d6", yellow: "#e0af68"},
+		crust: "#16161e", mantle: "#1f2335", base: "#1a1b26", subtext0: "#a9b1d6", yellow: "#e0af68"},
 	{name: "gruvbox", title: "Gruvbox Dark", dark: true,
 		accent: "#d3869b", user: "#83a598", agent: "#b8bb26", tool: "#fe8019", error_: "#fb4934",
 		text: "#ebdbb2", muted: "#928374", surface0: "#3c3836", surface1: "#504945",
-		crust: "#1d2021", mantle: "#282828", subtext0: "#d5c4a1", yellow: "#fabd2f"},
+		crust: "#1d2021", mantle: "#282828", base: "#282828", subtext0: "#d5c4a1", yellow: "#fabd2f"},
 	{name: "nord", title: "Nord", dark: true,
 		accent: "#b48ead", user: "#81a1c1", agent: "#a3be8c", tool: "#d08770", error_: "#bf616a",
 		text: "#eceff4", muted: "#616e88", surface0: "#3b4252", surface1: "#434c5e",
-		crust: "#242933", mantle: "#2e3440", subtext0: "#d8dee9", yellow: "#ebcb8b"},
+		crust: "#242933", mantle: "#2e3440", base: "#2e3440", subtext0: "#d8dee9", yellow: "#ebcb8b"},
 }
 
 var (
@@ -109,7 +112,39 @@ func setTheme(name string) bool {
 		mdDark, mdRenderer = t.dark, nil // Markdown 跟着换深/浅色样式
 	}
 	buildStyles()
+	syncFill()
 	return true
+}
+
+// ---- 铺底色：用 OSC 11 把终端默认背景设成主题 base ----
+// 不给每个样式加 Background：样式结尾的 \x1b[0m 会把背景重置掉，有字处反而露洞。
+// 改终端默认背景色则所有格子（含重置后的）都用 base，退出时用 OSC 111 恢复。
+
+var (
+	fillBg    bool      // 用户设置，默认关
+	fillOut   io.Writer // Run 时设为终端；测试里为 nil，不输出转义
+	fillShown bool      // 是否已改过终端背景，需要恢复
+)
+
+func syncFill() {
+	if fillOut == nil {
+		return
+	}
+	if fillBg {
+		t, _ := findTheme(currentTheme)
+		fmt.Fprintf(fillOut, "\x1b]11;%s\x1b\\", t.base)
+		fillShown = true
+	} else if fillShown {
+		resetFill()
+	}
+}
+
+// resetFill 恢复终端原来的背景色。
+func resetFill() {
+	if fillOut != nil && fillShown {
+		fmt.Fprint(fillOut, "\x1b]111\x1b\\")
+		fillShown = false
+	}
 }
 
 func buildStyles() {
@@ -190,15 +225,23 @@ func loadSavedTheme() {
 		return
 	}
 	var cfg struct {
-		Theme string `json:"theme"`
+		Theme  string `json:"theme"`
+		FillBg bool   `json:"fill_bg"`
 	}
-	if json.Unmarshal(data, &cfg) == nil && cfg.Theme != "" {
+	if json.Unmarshal(data, &cfg) != nil {
+		return
+	}
+	fillBg = cfg.FillBg
+	if cfg.Theme != "" {
 		setTheme(cfg.Theme)
 	}
 }
 
 // saveTheme 只改 theme 字段，保留配置文件里的其它键。
-func saveTheme(name string) error {
+func saveTheme(name string) error { return saveConfigKey("theme", name) }
+
+// saveConfigKey 只改一个键，保留配置文件里的其它键。
+func saveConfigKey(key string, val any) error {
 	p, err := configPath()
 	if err != nil {
 		return err
@@ -207,7 +250,7 @@ func saveTheme(name string) error {
 	if data, err := os.ReadFile(p); err == nil {
 		_ = json.Unmarshal(data, &cfg)
 	}
-	cfg["theme"] = name
+	cfg[key] = val
 	data, err := json.MarshalIndent(cfg, "", "  ")
 	if err != nil {
 		return err
