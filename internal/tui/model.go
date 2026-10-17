@@ -112,6 +112,7 @@ type Model struct {
 
 	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
 	usage      *llm.Usage
+	ctxTokens  int  // 最近一次请求的 prompt+completion，即当前上下文长度（顶栏吃豆人）
 	usageFresh bool // 新一轮开始后的第一份用量覆盖旧值，之后累加
 
 	store *session.Store
@@ -462,6 +463,7 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 	switch msg.kind {
 	case agent.EventUsage:
 		if msg.usage != nil {
+			m.ctxTokens = msg.usage.PromptTokens + msg.usage.CompletionTokens
 			if m.usageFresh || m.usage == nil {
 				u := *msg.usage
 				m.usage = &u
@@ -629,6 +631,7 @@ func (m *Model) saveCurrentSession() {
 func (m *Model) beginNewSession(notice string) {
 	m.ag.Reset()
 	m.usage = nil
+	m.ctxTokens = 0
 	m.usageFresh = false
 	if m.store != nil {
 		m.sess = m.store.New(m.modelName, m.ag.Workspace())
@@ -689,6 +692,7 @@ func (m *Model) loadSession(id string) {
 	m.sess = sess
 	m.ag.SetHistory(sess.Messages)
 	m.usage = nil
+	m.ctxTokens = 0
 	m.usageFresh = false
 	m.messages = chatMessagesFromHistory(sess)
 	m.refreshViewport(true)

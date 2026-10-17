@@ -91,3 +91,6 @@ func lerpHex(a, b [3]uint8, t float64) string {
 	}
 	return string(out)
 }
+
+// pacYellowColor 是吃豆人的 Catppuccin yellow。
+var pacYellowColor = lipgloss.AdaptiveColor{Light: "#df8e1d", Dark: "#f9e2af"}

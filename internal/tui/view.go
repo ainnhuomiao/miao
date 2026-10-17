@@ -112,12 +112,14 @@ func (m *Model) drawerBoxView() string {
 }
 
 func (m *Model) headerView() string {
-	right := ""
 	left := " " + titleStyle.Render("GoAgent")
-
 	suffix := " · " + m.modelName
+	right := m.contextView() + " "
+	if lipgloss.Width(left)+lipgloss.Width(suffix)+lipgloss.Width(right)+2 > m.width {
+		right = ""
+	}
 	if lipgloss.Width(left)+lipgloss.Width(suffix)+lipgloss.Width(right)+2 <= m.width {
-		left += mutedStyle.Render(suffix)
+		left += lipgloss.NewStyle().Foreground(subtext0Color).Render(suffix)
 	}
 
 	gap := m.width - lipgloss.Width(left) - lipgloss.Width(right) - 1
@@ -125,7 +127,7 @@ func (m *Model) headerView() string {
 		gap = 1
 	}
 	line := left + strings.Repeat(" ", gap) + right
-	rule := " " + mutedStyle.Render(strings.Repeat("─", max(0, m.width-2)))
+	rule := " " + lipgloss.NewStyle().Foreground(surface0Color).Render(strings.Repeat("─", max(0, m.width-2)))
 
 	return line + "\n" + rule
 }
