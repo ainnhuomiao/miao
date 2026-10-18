@@ -165,6 +165,7 @@ func resetFill() {
 }
 
 func buildStyles() {
+	styleGen++ // 让按样式缓存的画面（输入框等）失效
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
 	toolLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(toolColor)
 	mutedStyle = lipgloss.NewStyle().Foreground(mutedColor)

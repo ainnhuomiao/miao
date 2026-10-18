@@ -74,7 +74,7 @@ func TestCtrlVPastesImageElseText(t *testing.T) {
 	}
 	// 没有工具：灰字提示，输入框照常处理（文本粘贴）
 	m.Update(clipImageMsg{noTools: true})
-	if !strings.Contains(m.viewport.View(), clipNoToolsHint) || len(m.img.pending) != 1 {
+	if !strings.Contains(m.viewportView(), clipNoToolsHint) || len(m.img.pending) != 1 {
 		t.Fatal("应提示需要 wl-paste 或 xclip")
 	}
 	// 括号粘贴的文本不受影响
@@ -104,7 +104,7 @@ func TestImageLimitsAndChipsWidth(t *testing.T) {
 	for i := 0; i < llm.MaxImages+1; i++ {
 		m.addPendingImage("a.png", tuiPNG)
 	}
-	if len(m.img.pending) != llm.MaxImages || !strings.Contains(m.viewport.View(), "最多 5 张") {
+	if len(m.img.pending) != llm.MaxImages || !strings.Contains(m.viewportView(), "最多 5 张") {
 		t.Fatal("超过 5 张应拒绝")
 	}
 	if m.addPendingImage("big.png", append(append([]byte{}, tuiPNG...), make([]byte, llm.MaxImageBytes)...)) {
@@ -128,7 +128,7 @@ func TestSendWithImagesAndUnsupportedModel(t *testing.T) {
 	m.submit()
 	collectStream(t, m)
 	h := m.ag.History()
-	if len(h[0].Images) != 1 || !strings.Contains(m.viewport.View(), "[图片 1: 剪贴板.png 3KB]") || len(m.img.pending) != 0 {
+	if len(h[0].Images) != 1 || !strings.Contains(m.viewportView(), "[图片 1: 剪贴板.png 3KB]") || len(m.img.pending) != 0 {
 		t.Fatalf("应随消息发送图片并显示：%+v", h[0].Images)
 	}
 
@@ -138,7 +138,7 @@ func TestSendWithImagesAndUnsupportedModel(t *testing.T) {
 	m2.input.SetValue("看")
 	m2.submit()
 	collectStream(t, m2)
-	if len(m2.ag.History()[0].Images) != 0 || !strings.Contains(m2.viewport.View(), "当前模型 deepseek-chat 不支持图片，已忽略") {
+	if len(m2.ag.History()[0].Images) != 0 || !strings.Contains(m2.viewportView(), "当前模型 deepseek-chat 不支持图片，已忽略") {
 		t.Fatal("不支持图片的模型应丢弃图片")
 	}
 }
@@ -164,7 +164,7 @@ func TestAtImageAttach(t *testing.T) {
 	if len(im) != 1 || im[0].Name != "图片.png" {
 		t.Fatalf("@图片 应作为图片附加：%+v history=%+v", im, ag.History())
 	}
-	if strings.Contains(m.viewport.View(), "不是文本文件") {
+	if strings.Contains(m.viewportView(), "不是文本文件") {
 		t.Fatal("不应提示二进制")
 	}
 }

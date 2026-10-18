@@ -104,6 +104,8 @@ type Model struct {
 	viewport       viewport.Model
 	drawerViewport viewport.Model
 	input          textarea.Model
+	vpFast         viewFastCache // 对话区可见块缓存，见 viewport_fast.go
+	inputFast      inputFastCache
 	inputOrigin    [2]int // 上一帧输入框文字区左上角（列, 行）；-1 表示本帧没有输入框
 	spinner        spinner.Model
 
@@ -1091,12 +1093,12 @@ func (m *Model) layout() {
 
 func (m *Model) refreshViewport(forceBottom bool) {
 	if m.side.tree.preview != nil { // 文件树预览占用对话区，Esc 关闭
-		m.viewport.SetContent(lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.renderTreePreview(m.columnWidth())))
+		m.setViewportContent(lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.renderTreePreview(m.columnWidth())))
 		return
 	}
 	m.renderDirty = false
 	atBottom := m.viewport.AtBottom()
-	m.viewport.SetContent(m.transcriptContent())
+	m.setViewportContent(m.transcriptContent())
 	if forceBottom || atBottom {
 		m.viewport.GotoBottom()
 	}

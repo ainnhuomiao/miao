@@ -65,7 +65,7 @@ func (m *Model) view() string {
 			mutedStyle.Render("终端窗口太小\n请调整到至少 36×12"))
 	}
 
-	main := m.viewport.View()
+	main := m.viewportView()
 	if m.isEmptySession() && m.side.tree.preview == nil {
 		main = m.welcomeView(m.viewport.Width(), m.viewport.Height())
 	}
@@ -171,6 +171,16 @@ func (m *Model) inputCursor() *tea.Cursor {
 }
 
 func (m *Model) inputView() string {
+	k := m.inputCacheKey()
+	if m.inputFast.ok && m.inputFast.key == k {
+		return m.inputFast.out
+	}
+	out := m.renderInputView()
+	m.inputFast = inputFastCache{key: k, out: out, ok: true}
+	return out
+}
+
+func (m *Model) renderInputView() string {
 	st := inputBoxStyle
 	if strings.TrimSpace(m.input.Value()) == "" {
 		st = st.BorderForeground(mutedColor) // 空着时边框淡一点

@@ -79,6 +79,7 @@ func newBenchModel(tb testing.TB, width, height int) *Model {
 // fullViewport 返回视口里的全部内容（不只是可见窗口）。
 func fullViewport(m *Model) string {
 	v := m.viewport
+	v.SetContent(m.vpFast.raw) // viewport 里只有占位行，真实内容在 vpFast
 	v.SetHeight(max(1, v.TotalLineCount()))
 	v.GotoTop()
 	return v.View()
