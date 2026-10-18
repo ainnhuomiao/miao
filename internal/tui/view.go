@@ -9,6 +9,7 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
+	xansi "github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 
@@ -618,6 +619,11 @@ func (m *Model) contentWidth() int {
 func truncateWidth(s string, width int) string {
 	if width <= 1 || lipgloss.Width(s) <= width {
 		return s
+	}
+	if strings.Contains(s, "\x1b") {
+		// 带颜色的字符串要跳过 ANSI 转义序列；逐 rune 截断会把颜色码切断，
+		// 留下半截转义序列吞掉后面的字符，宽度也会算错。
+		return xansi.Truncate(s, width, "…")
 	}
 	var b strings.Builder
 	used := 0
