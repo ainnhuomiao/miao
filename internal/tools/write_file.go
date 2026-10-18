@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"os"
+	"path"
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
@@ -50,6 +51,9 @@ func registerWriteFile(r *Registry) {
 			if isSensitive(rel) {
 				return Result{Content: "禁止写入敏感文件: " + rel, IsError: true}
 			}
+			if err := r.checkWritable(full, "写入"); err != nil {
+				return Result{Content: err.Error(), IsError: true}
+			}
 
 			action := "新建"
 			var diff []string
@@ -59,7 +63,7 @@ func registerWriteFile(r *Registry) {
 					return Result{Content: "目标是目录", IsError: true}
 				}
 				action = "覆盖"
-				oldData, err := os.ReadFile(full)
+				oldData, err := readRegularFile(full)
 				if err != nil {
 					return Result{Content: "读取原文件失败: " + err.Error(), IsError: true}
 				}
@@ -122,41 +126,91 @@ func registerWriteFile(r *Registry) {
 	})
 }
 
-// checkNoSymlinkEscape 确认最近的已存在祖先目录（含目标本身）解析符号链接后仍在工作区内。
+// checkNoSymlinkEscape 确认最近的已存在祖先目录（含目标本身）解析符号链接后仍在工作区内，
+// 且解析后的真实路径不是敏感文件（防止 notes.txt -> .env 这类工作区内链接绕过）。
 func (r *Registry) checkNoSymlinkEscape(full string) error {
+	realRel, err := r.realRel(full)
+	if err != nil {
+		return err
+	}
+	if lit, lerr := filepath.Rel(r.workspace, full); lerr == nil && !isSensitive(lit) && isSensitive(realRel) {
+		return fmt.Errorf("路径经符号链接指向敏感文件: %s", realRel)
+	}
+	return nil
+}
+
+// realRel 解析 full 最近的已存在祖先（含自身）的符号链接，返回真实路径相对工作区根的路径；越界则报错。
+func (r *Registry) realRel(full string) (string, error) {
 	root, err := filepath.EvalSymlinks(r.workspace)
 	if err != nil {
-		return fmt.Errorf("工作区解析失败: %w", err)
+		return "", fmt.Errorf("工作区解析失败: %w", err)
 	}
 	p := full
 	for {
 		if _, err := os.Lstat(p); err == nil {
 			real, err := filepath.EvalSymlinks(p)
 			if err != nil {
-				return fmt.Errorf("路径解析失败: %w", err)
+				return "", fmt.Errorf("路径解析失败: %w", err)
+			}
+			if suffix, err := filepath.Rel(p, full); err == nil && suffix != "." {
+				real = filepath.Join(real, suffix)
 			}
 			rel, err := filepath.Rel(root, real)
 			if err != nil || rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator)) {
-				return fmt.Errorf("路径经符号链接越出工作区")
+				return "", fmt.Errorf("路径经符号链接越出工作区")
 			}
-			return nil
+			return rel, nil
 		}
 		parent := filepath.Dir(p)
 		if parent == p {
-			return nil
+			return filepath.Rel(r.workspace, full)
 		}
 		p = parent
 	}
 }
 
+// checkWritable 拒绝写入/修改受保护文件：敏感文件，以及 AGENTS.md（可读不可写）。符号链接按真实路径再查一次。
+func (r *Registry) checkWritable(full, verb string) error {
+	rel, _ := filepath.Rel(r.workspace, full)
+	realRel, err := r.realRel(full)
+	if err != nil {
+		return err
+	}
+	for _, p := range []string{rel, realRel} {
+		if isSensitive(p) || isWriteProtected(p) {
+			return fmt.Errorf("禁止%s受保护文件: %s", verb, p)
+		}
+	}
+	return nil
+}
+
+func isWriteProtected(rel string) bool {
+	return filepath.Base(filepath.ToSlash(filepath.Clean(rel))) == "AGENTS.md"
+}
+
+// sshKeyPrefixes 是常见 SSH 私钥/公钥文件名前缀（id_rsa、id_ed25519.pub 等）。
+var sshKeyPrefixes = []string{"id_rsa", "id_dsa", "id_ecdsa", "id_ed25519"}
+
+var sensitiveNames = map[string]bool{
+	".npmrc": true, ".netrc": true, ".envrc": true, ".git-credentials": true,
+}
+
 func isSensitive(rel string) bool {
 	rel = filepath.ToSlash(filepath.Clean(rel))
-	base := filepath.Base(rel)
-	if base == ".env" || strings.HasPrefix(base, ".env.") {
+	base := path.Base(rel)
+	if base == ".env" || strings.HasPrefix(base, ".env.") || sensitiveNames[base] {
 		return true
 	}
+	if strings.HasSuffix(strings.ToLower(base), ".pem") {
+		return true
+	}
+	for _, k := range sshKeyPrefixes {
+		if base == k || strings.HasPrefix(base, k+".") || strings.HasPrefix(base, k+"_") {
+			return true
+		}
+	}
 	for _, seg := range strings.Split(rel, "/") {
-		if seg == ".git" {
+		if seg == ".git" || seg == ".miao" {
 			return true
 		}
 	}

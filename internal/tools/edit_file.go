@@ -51,6 +51,9 @@ func registerEditFile(r *Registry) {
 			if isSensitive(rel) {
 				return Result{Content: "禁止修改敏感文件: " + rel, IsError: true}
 			}
+			if err := r.checkWritable(full, "修改"); err != nil {
+				return Result{Content: err.Error(), IsError: true}
+			}
 			info, err := os.Stat(full)
 			if err != nil {
 				return Result{Content: "文件不存在: " + rel + "（新建文件请用 write_file）", IsError: true}
@@ -58,7 +61,7 @@ func registerEditFile(r *Registry) {
 			if info.IsDir() {
 				return Result{Content: "目标是目录", IsError: true}
 			}
-			data, err := os.ReadFile(full)
+			data, err := readRegularFile(full)
 			if err != nil {
 				return Result{Content: "读取失败: " + err.Error(), IsError: true}
 			}

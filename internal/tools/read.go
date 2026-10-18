@@ -8,6 +8,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"unicode/utf8"
 )
 
@@ -26,19 +27,9 @@ func (r *Registry) openForRead(rel string) (*os.File, string, error) {
 	if isSensitive(relToRoot) {
 		return nil, "", fmt.Errorf("禁止读取敏感文件: %s", relToRoot)
 	}
-	info, err := os.Lstat(full)
+	f, err := openRegular(full)
 	if err != nil {
-		return nil, "", fmt.Errorf("无法读取: %w", err)
-	}
-	if info.IsDir() {
-		return nil, "", fmt.Errorf("目标是目录，请用 list_dir")
-	}
-	if info.Mode()&(os.ModeDevice|os.ModeNamedPipe|os.ModeSocket|os.ModeCharDevice) != 0 {
-		return nil, "", fmt.Errorf("拒绝读取设备或管道文件")
-	}
-	f, err := os.Open(full)
-	if err != nil {
-		return nil, "", fmt.Errorf("读取失败: %w", err)
+		return nil, "", err
 	}
 	return f, relToRoot, nil
 }
@@ -112,4 +103,41 @@ func readFileWindow(f *os.File, offset, limit int) (string, error) {
 		out += "\n"
 	}
 	return out + footer, nil
+}
+
+// openRegular 打开普通文件：先解析符号链接，再以 O_NOFOLLOW|O_NONBLOCK 打开真实路径（最后一段被替换成链接则失败，
+// FIFO 不会阻塞），最后对已打开的 fd 做 Stat，拒绝目录、设备、管道等非普通文件。
+func openRegular(full string) (*os.File, error) {
+	real, err := filepath.EvalSymlinks(full)
+	if err != nil {
+		return nil, fmt.Errorf("无法读取: %w", err)
+	}
+	f, err := os.OpenFile(real, os.O_RDONLY|syscall.O_NOFOLLOW|syscall.O_NONBLOCK, 0)
+	if err != nil {
+		return nil, fmt.Errorf("读取失败: %w", err)
+	}
+	info, err := f.Stat()
+	if err != nil {
+		_ = f.Close()
+		return nil, fmt.Errorf("读取失败: %w", err)
+	}
+	switch {
+	case info.IsDir():
+		_ = f.Close()
+		return nil, fmt.Errorf("目标是目录，请用 list_dir")
+	case !info.Mode().IsRegular():
+		_ = f.Close()
+		return nil, fmt.Errorf("拒绝读取设备或管道文件")
+	}
+	return f, nil
+}
+
+// readRegularFile 与 os.ReadFile 相同，但只接受普通文件（见 openRegular）。
+func readRegularFile(full string) ([]byte, error) {
+	f, err := openRegular(full)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = f.Close() }()
+	return io.ReadAll(f)
 }
