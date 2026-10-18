@@ -146,11 +146,137 @@ func TestNeedsApproval(t *testing.T) {
 		"go test -exec rm ./...": true, "go build -toolexec=x .": true, "go build -o /tmp/x .": true,
 		"git diff --output=f": true, "git log --output f": true, "git -c core.pager=x log": true,
 		"go test -run TestX ./...": false, "git diff --stat": false,
+		"rg --pre sh x": true, "rg --pre=sh x": true, "uniq in out": true,
+		"git diff --no-index a b": true,
 	}
 	for c, want := range cases {
 		f := strings.Fields(c)
 		if got := needsApproval(f[0], f[1:]); got != want {
 			t.Errorf("%q: got %v want %v", c, got, want)
 		}
+	}
+}
+
+func TestCommandEscapesWorkspace(t *testing.T) {
+	dir := t.TempDir()
+	if !CommandEscapesWorkspace(dir, "cat", []string{"/etc/passwd"}) {
+		t.Fatal("cat /etc/passwd should escape")
+	}
+	if !CommandEscapesWorkspace(dir, "cat", []string{"../../.ssh/id_rsa"}) {
+		t.Fatal("relative escape should be caught")
+	}
+	if !CommandEscapesWorkspace(dir, "find", []string{"/"}) {
+		t.Fatal("find / should escape")
+	}
+	if !CommandEscapesWorkspace(dir, "head", []string{"/proc/self/environ"}) {
+		t.Fatal("head /proc should escape")
+	}
+	if !CommandEscapesWorkspace(dir, "cat", []string{".env"}) {
+		t.Fatal("cat .env is sensitive")
+	}
+	if CommandEscapesWorkspace(dir, "cat", []string{"README.md"}) {
+		t.Fatal("relative in-workspace path should be fine")
+	}
+	if !CommandEscapesWorkspace(dir, "cat", []string{"./.git/config"}) {
+		t.Fatal("cat ./.git/config should be sensitive")
+	}
+	if err := os.Mkdir(filepath.Join(dir, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if !CommandEscapesWorkspace(dir, "cat", []string{"sub/../.git/config"}) {
+		t.Fatal("cat sub/../.git/config should be sensitive")
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("x"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(dir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	if !CommandEscapesWorkspace(dir, "cat", []string{"link.txt"}) {
+		t.Fatal("symlink pointing outside should be caught")
+	}
+	if !needsApprovalIn(dir, "git", []string{"diff", "--no-index", "/etc/passwd", "x"}) {
+		t.Fatal("git diff --no-index outside should need approval")
+	}
+}
+
+func TestCommandDenied(t *testing.T) {
+	t.Setenv("MIAO_DENY_COMMANDS", "curl,rm -rf,go test")
+	if !CommandDenied("curl", []string{"https://x"}) {
+		t.Fatal("curl should be denied")
+	}
+	if !CommandDenied("go", []string{"test", "./..."}) {
+		t.Fatal("go test should be denied")
+	}
+	if CommandDenied("go", []string{"vet", "."}) {
+		t.Fatal("go vet should not match go test")
+	}
+}
+
+func TestRestrictTo(t *testing.T) {
+	dir := t.TempDir()
+	r, err := NewRegistry(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterBuiltins(r)
+	r.RestrictTo([]string{"read_file", "grep"})
+	defs := r.Definitions()
+	if len(defs) != 2 {
+		t.Fatalf("defs=%d", len(defs))
+	}
+	res := r.Call(context.Background(), "list_dir", `{"path":"."}`)
+	if !res.IsError || !strings.Contains(res.Content, "未启用") {
+		t.Fatalf("disabled tool should fail: %+v", res)
+	}
+}
+
+func TestRepoMapGoFile(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "hello.go"), []byte("package hello\nfunc World() {}\ntype Box struct{}\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := buildRepoMap(context.Background(), dir, dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(got, "hello.go") || !strings.Contains(got, "func World") || !strings.Contains(got, "struct Box") {
+		t.Fatalf("repo map: %q", got)
+	}
+}
+
+func TestReadFileSensitiveAndSymlink(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, ".env"), []byte("MIAO_API_KEY=sk-secret"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "ok.txt"), []byte("hi"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	outside := t.TempDir()
+	if err := os.WriteFile(filepath.Join(outside, "secret"), []byte("leaked"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Symlink(filepath.Join(outside, "secret"), filepath.Join(dir, "link.txt")); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRegistry(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterBuiltins(r)
+
+	res := r.Call(context.Background(), "read_file", `{"path":".env"}`)
+	if !res.IsError || !strings.Contains(res.Content, "敏感") {
+		t.Fatalf("read .env: %+v", res)
+	}
+	res = r.Call(context.Background(), "read_file", `{"path":"link.txt"}`)
+	if !res.IsError || !strings.Contains(res.Content, "符号链接") {
+		t.Fatalf("read symlink: %+v", res)
+	}
+	res = r.Call(context.Background(), "read_file", `{"path":"ok.txt"}`)
+	if res.IsError || res.Content != "hi" {
+		t.Fatalf("read ok: %+v", res)
 	}
 }

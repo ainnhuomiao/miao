@@ -129,12 +129,21 @@ func (r *Registry) walkWorkspace(ctx context.Context, base string, fn func(full,
 		}
 		rel = filepath.ToSlash(rel)
 		if rel != "." {
-			if d.Name() == ".git" || gi.Ignored(rel, d.IsDir()) {
+			if d.Name() == ".git" || gi.Ignored(rel, d.IsDir()) || isSensitive(rel) {
 				if d.IsDir() {
 					return filepath.SkipDir
 				}
 				return nil
 			}
+		}
+		if d.Type()&os.ModeSymlink != 0 {
+			return nil
+		}
+		if err := r.checkNoSymlinkEscape(p); err != nil {
+			if d.IsDir() {
+				return filepath.SkipDir
+			}
+			return nil
 		}
 		if d.IsDir() || !d.Type().IsRegular() {
 			return nil
@@ -183,6 +192,9 @@ func registerSearchTools(r *Registry) {
 			}
 			base, err := r.ResolvePath(in.Path)
 			if err != nil {
+				return Result{Content: err.Error(), IsError: true}
+			}
+			if err := r.checkNoSymlinkEscape(base); err != nil {
 				return Result{Content: err.Error(), IsError: true}
 			}
 			var lines []string
@@ -242,6 +254,13 @@ func registerSearchTools(r *Registry) {
 			base, err := r.ResolvePath(in.Path)
 			if err != nil {
 				return Result{Content: err.Error(), IsError: true}
+			}
+			if err := r.checkNoSymlinkEscape(base); err != nil {
+				return Result{Content: err.Error(), IsError: true}
+			}
+			relBase, _ := filepath.Rel(r.workspace, base)
+			if isSensitive(filepath.ToSlash(relBase)) {
+				return Result{Content: "禁止搜索敏感文件: " + relBase, IsError: true}
 			}
 			info, err := os.Stat(base)
 			if err != nil {

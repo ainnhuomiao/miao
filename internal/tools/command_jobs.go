@@ -55,6 +55,7 @@ func (r *Registry) startBackground(name string, args []string, display string) R
 	id := fmt.Sprintf("bg%d", t.next)
 	t.mu.Unlock()
 
+	name, args = wrapSandbox(r.Workspace(), name, args)
 	cmd := exec.Command(name, args...)
 	cmd.Dir = r.Workspace()
 	out := &liveBuffer{progress: func(string) {}}

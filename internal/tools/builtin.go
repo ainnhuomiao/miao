@@ -11,7 +11,7 @@ import (
 
 const maxReadBytes = 256 << 10 // 256 KiB
 
-// RegisterBuiltins 注册内置工具：read_file、list_dir、run_command、write_file、edit_file。
+// RegisterBuiltins 注册内置工具（读、搜、写、命令、网页、todo）。
 func RegisterBuiltins(r *Registry) {
 	r.Register(Tool{
 		Def: toolDef("read_file", "读取工作区内的文本文件。", map[string]any{
@@ -31,26 +31,19 @@ func RegisterBuiltins(r *Registry) {
 			if err := json.Unmarshal(args, &in); err != nil {
 				return Result{Content: "参数解析失败: " + err.Error(), IsError: true}
 			}
-			full, err := r.ResolvePath(in.Path)
+			f, _, err := r.openForRead(in.Path)
 			if err != nil {
 				return Result{Content: err.Error(), IsError: true}
 			}
-			info, err := os.Stat(full)
+			defer f.Close()
+			text, truncated, err := readTextLimited(f, maxReadBytes)
 			if err != nil {
-				return Result{Content: "无法读取: " + err.Error(), IsError: true}
+				return Result{Content: err.Error(), IsError: true}
 			}
-			if info.IsDir() {
-				return Result{Content: "目标是目录，请用 list_dir", IsError: true}
+			if truncated {
+				return Result{Content: text + "\n\n…(已截断，超过 256KiB)"}
 			}
-			data, err := os.ReadFile(full)
-			if err != nil {
-				return Result{Content: "读取失败: " + err.Error(), IsError: true}
-			}
-			if len(data) > maxReadBytes {
-				data = data[:maxReadBytes]
-				return Result{Content: string(data) + "\n\n…(已截断，超过 256KiB)"}
-			}
-			return Result{Content: string(data)}
+			return Result{Content: text}
 		},
 	})
 
@@ -74,6 +67,9 @@ func RegisterBuiltins(r *Registry) {
 			}
 			full, err := r.ResolvePath(in.Path)
 			if err != nil {
+				return Result{Content: err.Error(), IsError: true}
+			}
+			if err := r.checkNoSymlinkEscape(full); err != nil {
 				return Result{Content: err.Error(), IsError: true}
 			}
 			entries, err := os.ReadDir(full)
@@ -102,7 +98,9 @@ func RegisterBuiltins(r *Registry) {
 	registerSearchTools(r)
 	registerEditFile(r)
 	registerWebFetch(r)
+	registerWebSearch(r)
 	registerTodoWrite(r)
+	registerRepoMap(r)
 }
 
 func toolDef(name, desc string, params map[string]any) llm.ToolDef {

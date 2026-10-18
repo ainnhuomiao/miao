@@ -34,8 +34,10 @@ func (r *Registry) gateWebFetch(ctx context.Context, raw string, args json.RawMe
 		return ctx, Result{Content: "审批中断: " + err.Error(), IsError: true}, false
 	}
 	if !allow {
+		auditEvent(r.workspace, "web_fetch", raw, "reject")
 		return ctx, Result{Content: "用户拒绝抓取: " + raw, IsError: true}, false
 	}
+	auditEvent(r.workspace, "web_fetch", raw, "allow")
 	return ctx, Result{}, true
 }
 

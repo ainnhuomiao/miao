@@ -13,7 +13,7 @@ import (
 
 // AllowedTools 是子代理默认可用的本地只读工具白名单。
 // 不含 web_fetch：read_file + 免审批联网会被提示注入用来外传数据，需在 /subagents 里显式「允许联网」。
-var AllowedTools = []string{"read_file", "list_dir", "grep", "glob"}
+var AllowedTools = []string{"read_file", "list_dir", "grep", "glob", "repo_map"}
 
 // WebTool 是「允许联网」开启时额外给子代理的工具。
 const WebTool = "web_fetch"

@@ -94,15 +94,18 @@ func registerEditFile(r *Registry) {
 				return Result{Content: "审批中断: " + err.Error(), IsError: true}
 			}
 			if !allow {
+				auditEvent(r.workspace, "edit_file", rel, "reject")
 				return Result{Content: "用户拒绝修改 " + rel, IsError: true}
 			}
+			auditEvent(r.workspace, "edit_file", rel, "allow")
 			if err := r.saveSnapshot(full); err != nil {
 				return Result{Content: "保存撤销快照失败: " + err.Error(), IsError: true}
 			}
 			if err := atomicWrite(full, updated, info.Mode().Perm()); err != nil {
 				return Result{Content: "写入失败: " + err.Error(), IsError: true}
 			}
-			return Result{Content: fmt.Sprintf("已修改 %s（+%d -%d）", rel, add, del)}
+			msg := fmt.Sprintf("已修改 %s（+%d -%d）", rel, add, del)
+			return Result{Content: msg + diagnoseFile(ctx, r.workspace, rel)}
 		},
 	})
 }

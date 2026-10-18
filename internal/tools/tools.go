@@ -34,6 +34,7 @@ type Registry struct {
 	workspace string
 	tools     map[string]Tool
 	order     []string
+	enabled   map[string]bool // 非 nil 时只暴露这些工具（--allowed-tools）
 	approver  Approver
 	webPolicy WebPolicy // web_fetch 免审批/重定向放行规则，见 web_policy.go
 }
@@ -70,12 +71,36 @@ func (r *Registry) Register(t Tool) {
 	r.tools[name] = t
 }
 
+// RestrictTo 之后只向模型暴露指定工具；空列表表示不限制。
+func (r *Registry) RestrictTo(names []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if len(names) == 0 {
+		r.enabled = nil
+		return
+	}
+	r.enabled = make(map[string]bool, len(names))
+	for _, n := range names {
+		n = strings.TrimSpace(n)
+		if n != "" {
+			r.enabled[n] = true
+		}
+	}
+}
+
+func (r *Registry) allowedLocked(name string) bool {
+	return r.enabled == nil || r.enabled[name]
+}
+
 // Definitions 返回发给模型的工具定义列表。
 func (r *Registry) Definitions() []llm.ToolDef {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	out := make([]llm.ToolDef, 0, len(r.order))
 	for _, name := range r.order {
+		if !r.allowedLocked(name) {
+			continue
+		}
 		out = append(out, r.tools[name].Def)
 	}
 	return out
@@ -85,9 +110,13 @@ func (r *Registry) Definitions() []llm.ToolDef {
 func (r *Registry) Call(ctx context.Context, name string, argsJSON string) Result {
 	r.mu.RLock()
 	t, ok := r.tools[name]
+	allow := r.allowedLocked(name)
 	r.mu.RUnlock()
 	if !ok {
 		return Result{Content: fmt.Sprintf("未知工具: %s", name), IsError: true}
+	}
+	if !allow {
+		return Result{Content: fmt.Sprintf("工具未启用: %s", name), IsError: true}
 	}
 	raw := json.RawMessage(strings.TrimSpace(argsJSON))
 	if len(raw) == 0 {

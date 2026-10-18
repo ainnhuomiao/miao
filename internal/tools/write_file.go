@@ -90,8 +90,10 @@ func registerWriteFile(r *Registry) {
 				return Result{Content: "审批中断: " + err.Error(), IsError: true}
 			}
 			if !allow {
+				auditEvent(r.workspace, "write_file", rel, "reject")
 				return Result{Content: "用户拒绝写入 " + rel, IsError: true}
 			}
+			auditEvent(r.workspace, "write_file", rel, "allow")
 
 			if err := r.saveSnapshot(full); err != nil {
 				return Result{Content: "保存撤销快照失败: " + err.Error(), IsError: true}
@@ -113,7 +115,8 @@ func registerWriteFile(r *Registry) {
 				os.Remove(tmp.Name())
 				return Result{Content: "写入失败: " + err.Error(), IsError: true}
 			}
-			return Result{Content: fmt.Sprintf("已%s %s（%d 字节）", action, rel, len(in.Content))}
+			msg := fmt.Sprintf("已%s %s（%d 字节）", action, rel, len(in.Content))
+			return Result{Content: msg + diagnoseFile(ctx, r.workspace, rel)}
 		},
 	})
 }
@@ -146,10 +149,15 @@ func (r *Registry) checkNoSymlinkEscape(full string) error {
 }
 
 func isSensitive(rel string) bool {
+	rel = filepath.ToSlash(filepath.Clean(rel))
 	base := filepath.Base(rel)
 	if base == ".env" || strings.HasPrefix(base, ".env.") {
 		return true
 	}
-	first := strings.SplitN(filepath.ToSlash(rel), "/", 2)[0]
-	return first == ".git"
+	for _, seg := range strings.Split(rel, "/") {
+		if seg == ".git" {
+			return true
+		}
+	}
+	return false
 }

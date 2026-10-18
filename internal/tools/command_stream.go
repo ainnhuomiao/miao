@@ -64,6 +64,7 @@ func lastLine(s string) string {
 func execCommandStream(ctx context.Context, dir, name string, args []string, timeout time.Duration) Result {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	name, args = wrapSandbox(dir, name, args)
 	cmd := exec.CommandContext(runCtx, name, args...)
 	cmd.Dir = dir
 	out := &liveBuffer{progress: progressFrom(ctx)}
