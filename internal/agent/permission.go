@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 
@@ -187,6 +188,9 @@ func sessionKey(toolName string, args json.RawMessage) string {
 	if toolName == "web_fetch" {
 		return webHostKey(webFetchURLHost(args))
 	}
+	if toolName == "web_search" {
+		return webSearchKey(args)
+	}
 	return toolName
 }
 
@@ -261,7 +265,7 @@ func (a *Agent) wrapApprover(fn tools.Approver) tools.Approver {
 }
 
 // approveWebSearch：查询串会发往外部搜索引擎，和 web_fetch 一样需审批（卡片显示完整查询串）。
-// 只读规划模式下也不直接拒绝；本会话按 A 放行后不再询问；无审批回调（-p）时拒绝。
+// 只读规划模式下也不直接拒绝；按 A 只放行完全相同的查询串，其他查询仍要审批；无审批回调（-p）时拒绝。
 func (a *Agent) approveWebSearch(ctx context.Context, fn tools.Approver, display string, args json.RawMessage) (bool, error) {
 	a.perm.mu.Lock()
 	ok := a.perm.session[sessionKey("web_search", args)]
@@ -273,4 +277,16 @@ func (a *Agent) approveWebSearch(ctx context.Context, fn tools.Approver, display
 		return false, nil
 	}
 	return fn(ctx, "web_search", display, args)
+}
+
+// webSearchKey 是 web_search 的会话放行键：完全相同的查询串（不做任何规范化），
+// 防止按一次 A 后被提示注入用任意查询外传数据。参数解析失败时退回原始参数字节。
+func webSearchKey(args json.RawMessage) string {
+	var in struct {
+		Query *string `json:"query"`
+	}
+	if json.Unmarshal(args, &in) != nil || in.Query == nil {
+		return "web_search_raw:" + string(args)
+	}
+	return "web_search_q:" + strconv.Quote(*in.Query)
 }

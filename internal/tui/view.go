@@ -171,6 +171,9 @@ func (m *Model) approvalView() string {
 	}
 	cmd := strings.Join(lines, "\n")
 	hint := "Y 允许 · A 本会话总是允许 · N 拒绝 · Esc 取消"
+	if m.approval.toolName == "web_search" {
+		hint = "Y 允许 · A 本会话再次搜索这条完全相同的内容时放行 · N 拒绝 · Esc 取消"
+	}
 	if isFileEdit(m.approval.toolName) {
 		hint = "Y 写入 · B 本轮全部写入 · A 本会话总是允许 · N 拒绝 · Esc 取消"
 	}

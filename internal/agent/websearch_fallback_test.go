@@ -86,3 +86,31 @@ func TestFallbackUsesPerRequestModel(t *testing.T) {
 		t.Fatalf("不应修改全局模型：%q", c.model)
 	}
 }
+
+func TestWebSearchSessionAllowExactQueryOnly(t *testing.T) {
+	reg, err := tools.NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	a := New(nil, "sys", reg)
+	asked := 0
+	a.SetApprover(func(context.Context, string, string, json.RawMessage) (bool, error) { asked++; return false, nil })
+	x := json.RawMessage(`{"query":"golang ctx"}`)
+	a.AllowForSession("web_search", x) // 审批卡上按 A
+	ask := func(args string) bool {
+		ok, err := a.tools.Approver()(context.Background(), "web_search", "搜索", json.RawMessage(args))
+		if err != nil {
+			t.Fatal(err)
+		}
+		return ok
+	}
+	if !ask(`{"query":"golang ctx"}`) || asked != 0 {
+		t.Fatalf("相同查询应免审批放行 asked=%d", asked)
+	}
+	for _, y := range []string{`{"query":"secret abc"}`, `{"query":"golang ctx "}`, `{"query":"Golang ctx"}`} {
+		before := asked
+		if ask(y) || asked != before+1 {
+			t.Fatalf("%s 应仍弹审批卡", y)
+		}
+	}
+}
