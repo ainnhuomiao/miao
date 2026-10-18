@@ -41,7 +41,7 @@ func PreviewFile(workspace, rel string, maxLines int) (lines []string, truncated
 	if err != nil {
 		return nil, false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	sc := bufio.NewScanner(f)
 	sc.Buffer(make([]byte, 64*1024), 1024*1024)
 	for sc.Scan() {
