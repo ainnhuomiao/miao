@@ -341,75 +341,108 @@ func (m *Model) workspaceLabel() string {
 	return "⌂ " + ws
 }
 
+// renderTranscript 是对话区的全部内容（不含左侧居中边距），按段拼接。
 func (m *Model) renderTranscript() string {
 	var b strings.Builder
+	for _, s := range m.transcriptSegments(nil) {
+		b.WriteString(s)
+	}
+	return strings.TrimRight(b.String(), "\n")
+}
+
+// transcriptLogo 是还没有用户消息时顶部的大 logo，没有时返回空串。
+func (m *Model) transcriptLogo() string {
+	if m.hasUserMessage() || m.viewport.Height < 6 {
+		return ""
+	}
+	width := m.contentWidth()
+	logo := gradientLogo()
+	sub := gradientText("你的 Go 终端 agent")
+	hint := mutedStyle.Render("Enter 开始对话 · /help 查看命令")
+	return lipgloss.PlaceHorizontal(max(width, lipgloss.Width(logo)), lipgloss.Center,
+		logo+"\n\n"+sub+"\n"+hint) + "\n\n"
+}
+
+// transcriptSpans 把消息切成渲染段：一轮回答（连续的助手气泡与工具卡）合成一段，
+// 其余消息各自一段。返回每段的 [起, 止) 下标。
+func (m *Model) transcriptSpans() [][2]int {
+	var spans [][2]int
+	for i := 0; i < len(m.messages); {
+		j := i + 1
+		if isGroupRole(m.messages[i].role) {
+			for j < len(m.messages) && isGroupRole(m.messages[j].role) {
+				j++
+			}
+		}
+		spans = append(spans, [2]int{i, j})
+		i = j
+	}
+	return spans
+}
+
+func isGroupRole(r role) bool { return r == roleAssistant || r == roleTool }
+
+// transcriptSegments 依次返回 logo 段和每个消息段的渲染结果（各自以 "\n\n" 结尾，空段为空串）。
+// render 非空时用它渲染消息段（缓存层），否则直接渲染。
+func (m *Model) transcriptSegments(render func(lo, hi int) string) []string {
+	if render == nil {
+		render = m.renderSpan
+	}
+	spans := m.transcriptSpans()
+	out := make([]string, 0, len(spans)+1)
+	out = append(out, m.transcriptLogo())
+	for _, sp := range spans {
+		out = append(out, render(sp[0], sp[1]))
+	}
+	return out
+}
+
+// renderSpan 渲染 messages[lo:hi]：一组助手/工具消息，或单条其他消息。
+func (m *Model) renderSpan(lo, hi int) string {
+	if !isGroupRole(m.messages[lo].role) {
+		return m.renderMessage(m.messages[lo])
+	}
 	width := m.contentWidth()
 	pad := lipgloss.NewStyle().Padding(0, 1)
 
-	// 一轮回答（用户消息之后的若干助手气泡与工具卡）合成一组，只显示一次 miao 标签。
-	inGroup := false
+	// 一轮回答只显示一次 miao 标签。
 	var group strings.Builder
 	reasoning := 0
 	var reasoningText []string
 	pendingStream := false
-
-	flush := func() {
-		if !inGroup {
-			return
-		}
-		label := agentTagStyle.Render("miao")
-		if reasoning > 0 && !m.showReasoning {
-			label += " " + mutedStyle.Render(fmt.Sprintf("思考 %d 字 · Ctrl+R", reasoning))
-		}
-		body := label + "\n"
-		if m.showReasoning && len(reasoningText) > 0 {
-			body += mutedStyle.Render(wrapText(strings.Join(reasoningText, "\n"), width)) + "\n"
-		}
-		inner := strings.TrimRight(group.String(), "\n")
-		if inner == "" && pendingStream {
-			inner = mutedStyle.Render("…")
-		}
-		body += inner
-		b.WriteString(pad.Render(strings.TrimRight(body, "\n")) + "\n\n")
-		inGroup, reasoning, reasoningText, pendingStream = false, 0, nil, false
-		group.Reset()
-	}
-
-	if !m.hasUserMessage() && m.viewport.Height >= 6 {
-		logo := gradientLogo()
-		sub := gradientText("你的 Go 终端 agent")
-		hint := mutedStyle.Render("Enter 开始对话 · /help 查看命令")
-		b.WriteString(lipgloss.PlaceHorizontal(max(width, lipgloss.Width(logo)), lipgloss.Center,
-			logo+"\n\n"+sub+"\n"+hint) + "\n\n")
-	}
-
-	for idx := range m.messages {
+	for idx := lo; idx < hi; idx++ {
 		msg := &m.messages[idx]
-		switch msg.role {
-		case roleAssistant, roleTool:
-			inGroup = true
-			if msg.role == roleTool {
-				group.WriteString(m.toolCardLine(*msg, width) + "\n")
-				continue
-			}
-			if msg.reasoning != "" {
-				reasoning += utf8.RuneCountInString(msg.reasoning)
-				reasoningText = append(reasoningText, msg.reasoning)
-			}
-			if msg.content == "" {
-				if !msg.done {
-					pendingStream = true
-				}
-				continue
-			}
-			group.WriteString(m.assistantBody(msg, width) + "\n")
-		default:
-			flush()
-			b.WriteString(m.renderMessage(*msg))
+		if msg.role == roleTool {
+			group.WriteString(m.toolCardLine(*msg, width) + "\n")
+			continue
 		}
+		if msg.reasoning != "" {
+			reasoning += utf8.RuneCountInString(msg.reasoning)
+			reasoningText = append(reasoningText, msg.reasoning)
+		}
+		if msg.content == "" {
+			if !msg.done {
+				pendingStream = true
+			}
+			continue
+		}
+		group.WriteString(m.assistantBody(msg, width) + "\n")
 	}
-	flush()
-	return strings.TrimRight(b.String(), "\n")
+
+	label := agentTagStyle.Render("miao")
+	if reasoning > 0 && !m.showReasoning {
+		label += " " + mutedStyle.Render(fmt.Sprintf("思考 %d 字 · Ctrl+R", reasoning))
+	}
+	body := label + "\n"
+	if m.showReasoning && len(reasoningText) > 0 {
+		body += mutedStyle.Render(wrapText(strings.Join(reasoningText, "\n"), width)) + "\n"
+	}
+	inner := strings.TrimRight(group.String(), "\n")
+	if inner == "" && pendingStream {
+		inner = mutedStyle.Render("…")
+	}
+	body += inner
+	return pad.Render(strings.TrimRight(body, "\n")) + "\n\n"
 }
 
 // assistantBody 渲染助手正文：流式时纯文本，完成后 Glamour（带缓存）。

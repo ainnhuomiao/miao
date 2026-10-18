@@ -140,6 +140,25 @@ type Model struct {
 
 	store *session.Store
 	sess  *session.Session
+
+	rcache       renderCache // 对话区分段渲染缓存，见 render_cache.go
+	renderDirty  bool        // 有流式增量尚未刷到视口
+	flushPending bool        // 已排了一次合并刷新的 tick
+}
+
+// renderFlushMsg 触发一次合并后的视口刷新（流式增量最多约 30fps 刷一次）。
+type renderFlushMsg struct{}
+
+const renderFlushInterval = 33 * time.Millisecond
+
+// scheduleRefresh 标记视口待刷新，并在没有排队的 tick 时排一个。
+func (m *Model) scheduleRefresh() tea.Cmd {
+	m.renderDirty = true
+	if m.flushPending {
+		return nil
+	}
+	m.flushPending = true
+	return tea.Tick(renderFlushInterval, func(time.Time) tea.Msg { return renderFlushMsg{} })
 }
 
 // New 创建 TUI 模型。
@@ -308,6 +327,14 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case streamEventMsg:
 		return m.handleStreamEvent(msg)
+
+	case renderFlushMsg:
+		m.flushPending = false
+		if m.renderDirty {
+			m.refreshViewport(false)
+			m.refreshDrawer()
+		}
+		return m, nil
 
 	case approvalRequestMsg:
 		ringBell()
@@ -654,6 +681,7 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 		}
 		last.content += msg.content
 		last.reasoning += msg.reasoning
+		return m, tea.Batch(waitForEvent(m.events), m.scheduleRefresh())
 	case agent.EventToolStart:
 		// 当前助手气泡先收尾（可能尚无文本），再插入工具卡
 		if last := m.lastAssistant(); last != nil && !last.done {
@@ -673,6 +701,7 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 				break
 			}
 		}
+		return m, tea.Batch(waitForEvent(m.events), m.scheduleRefresh())
 	case agent.EventToolEnd:
 		updated := false
 		for i := len(m.messages) - 1; i >= 0; i-- {
@@ -1056,8 +1085,9 @@ func (m *Model) refreshViewport(forceBottom bool) {
 		m.viewport.SetContent(lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.renderTreePreview(m.columnWidth())))
 		return
 	}
+	m.renderDirty = false
 	atBottom := m.viewport.AtBottom()
-	m.viewport.SetContent(lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.renderTranscript()))
+	m.viewport.SetContent(m.transcriptContent())
 	if forceBottom || atBottom {
 		m.viewport.GotoBottom()
 	}
