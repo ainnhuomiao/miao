@@ -19,10 +19,12 @@ const interruptedResult = "已中断"
 
 // readOnlyTools 是可以并发执行的只读工具；不在此集合内的（写、命令、未知/MCP 工具）一律串行。
 var readOnlyTools = map[string]bool{
-	"read_file": true,
-	"list_dir":  true,
-	"grep":      true,
-	"glob":      true,
+	"read_file":  true,
+	"list_dir":   true,
+	"grep":       true,
+	"glob":       true,
+	"repo_map":   true,
+	"web_search": true,
 	// web_fetch 不在此列：域名未放行时要弹审批卡，必须串行，避免一批里同时弹多张卡。
 	"task": true, // 只读子代理；并发数由 subagent.Manager 的信号量限制
 }

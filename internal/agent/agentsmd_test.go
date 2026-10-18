@@ -49,6 +49,55 @@ func TestLoadAgentsMD(t *testing.T) {
 	}
 }
 
+func TestGenerateAgentsMD(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "go.mod"), []byte("module example.com/x\n\ngo 1.24\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "README.md"), []byte("# Demo\n\nhi\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "Makefile"), []byte("test:\n\tgo test ./...\ncheck: test\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Mkdir(filepath.Join(dir, "cmd"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(dir, "cmd", "main.go"), []byte("package main\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	got, err := GenerateAgentsMD(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"example.com/x", "测试：`go test", "构建：`go build ./cmd", "make test", "cmd/", "Demo"} {
+		if !strings.Contains(got, want) {
+			t.Fatalf("missing %q in %s", want, got)
+		}
+	}
+	if strings.Contains(got, "构建：`go test") {
+		t.Fatal("go test 不应写成构建")
+	}
+	if err := WriteAgentsMD(dir, got, false); err != nil {
+		t.Fatal(err)
+	}
+	if err := WriteAgentsMD(dir, got, false); !os.IsExist(err) {
+		t.Fatalf("should refuse overwrite: %v", err)
+	}
+}
+
+func TestApplyAgentsMDReplacesOldBlock(t *testing.T) {
+	a := New(nil, WithAgentsMD("SYS", "旧规则", false), nil)
+	a.ApplyAgentsMD("新规则", false)
+	got := a.systemPrompt()
+	if !strings.Contains(got, "新规则") || strings.Contains(got, "旧规则") || !strings.HasPrefix(got, "SYS") {
+		t.Fatalf("got %q", got)
+	}
+	if !a.AgentsMDLoaded() {
+		t.Fatal("应标记已加载")
+	}
+}
+
 func TestLoadAgentsMDDirAndEmptyWorkspace(t *testing.T) {
 	dir := t.TempDir()
 	if err := os.Mkdir(filepath.Join(dir, AgentsMDName), 0o755); err != nil {

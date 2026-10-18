@@ -31,14 +31,18 @@ func (a *Agent) Compact(ctx context.Context, keepTurns int) (CompactResult, erro
 	if keepTurns < 1 {
 		keepTurns = 1
 	}
+	a.mu.Lock()
 	cut := splitPoint(a.history, keepTurns)
 	if cut <= 0 {
+		a.mu.Unlock()
 		return CompactResult{}, fmt.Errorf("对话太短，暂时不需要压缩")
 	}
+	old := append([]llm.Message(nil), a.history[:cut]...)
+	a.mu.Unlock()
 	before := EstimateTokens(a.requestMessages())
 
 	var sb strings.Builder
-	for _, m := range a.history[:cut] {
+	for _, m := range old {
 		sb.WriteString(renderForSummary(m))
 		sb.WriteString("\n")
 	}
@@ -55,6 +59,7 @@ func (a *Agent) Compact(ctx context.Context, keepTurns int) (CompactResult, erro
 		return CompactResult{}, fmt.Errorf("模型没有返回摘要")
 	}
 
+	a.mu.Lock()
 	kept := a.history[cut:]
 	next := make([]llm.Message, 0, len(kept)+2)
 	next = append(next,
@@ -63,6 +68,7 @@ func (a *Agent) Compact(ctx context.Context, keepTurns int) (CompactResult, erro
 	)
 	next = append(next, kept...)
 	a.history = next
+	a.mu.Unlock()
 	return CompactResult{Before: before, After: EstimateTokens(a.requestMessages()), Dropped: cut}, nil
 }
 
@@ -98,6 +104,40 @@ func renderForSummary(m llm.Message) string {
 	default:
 		return "【用户】" + m.Content
 	}
+}
+
+// TrimOldToolResults 把早于最近 keepTurns 轮的超长工具结果裁成摘要，返回折叠条数。
+func (a *Agent) TrimOldToolResults(keepTurns, maxRunes int) int {
+	if keepTurns < 1 {
+		keepTurns = 1
+	}
+	if maxRunes < 80 {
+		maxRunes = 80
+	}
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	cut := splitPoint(a.history, keepTurns)
+	if cut <= 0 {
+		return 0
+	}
+	n := 0
+	for i := 0; i < cut; i++ {
+		if a.history[i].Role != llm.RoleTool {
+			continue
+		}
+		r := []rune(a.history[i].Content)
+		if len(r) <= maxRunes {
+			continue
+		}
+		a.history[i].Content = string(r[:maxRunes]) + fmt.Sprintf("\n…（已折叠，原 %d 字）", len(r))
+		n++
+	}
+	return n
+}
+
+// EstimateContext 估算当前发给模型的上下文 token 数。
+func (a *Agent) EstimateContext() int {
+	return EstimateTokens(a.requestMessages())
 }
 
 // EstimateTokens 粗略估算消息的 token 数：中文约 1 字 1 token，其余约 4 字节 1 token。

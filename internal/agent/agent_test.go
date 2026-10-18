@@ -177,8 +177,9 @@ func TestAgent_RejectLengthTruncatedTools(t *testing.T) {
 func TestAgent_MaxRounds(t *testing.T) {
 	reg, _ := tools.NewRegistry(t.TempDir())
 	tools.RegisterBuiltins(reg)
-	scripts := make([]llm.ChatResult, 0, maxToolRounds)
-	for i := 0; i < maxToolRounds; i++ {
+	const limit = 4
+	scripts := make([]llm.ChatResult, 0, limit)
+	for i := 0; i < limit; i++ {
 		scripts = append(scripts, llm.ChatResult{
 			FinishReason: "tool_calls",
 			ToolCalls: []llm.ToolCall{{
@@ -193,8 +194,12 @@ func TestAgent_MaxRounds(t *testing.T) {
 	}
 	fake := &scriptClient{scripts: scripts}
 	a := New(fake, "", reg)
+	a.SetMaxToolRounds(limit)
 	err := a.Send(context.Background(), "loop", nil)
-	if err == nil || !strings.Contains(err.Error(), "上限") {
+	if err == nil || !errors.Is(err, ErrMaxToolRounds) {
 		t.Fatalf("err = %v", err)
+	}
+	if n := len(a.History()); n == 0 {
+		t.Fatal("超限时应保留历史，而不是 rollback")
 	}
 }

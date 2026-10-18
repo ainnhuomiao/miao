@@ -37,10 +37,11 @@ const AllowCommandsEnv = config.EnvPrefix + "ALLOW_COMMANDS"
 const planModeNote = "\n\n当前处于「只读规划」模式：只能读取和搜索文件、给出方案，不要尝试写文件或执行有副作用的命令（这类调用会被直接拒绝）。等用户切回其他模式后再动手修改。"
 
 type permissions struct {
-	mu        sync.Mutex
-	mode      PermissionMode
-	session   map[string]bool // 本会话总是允许
-	allowCmds []string
+	mu         sync.Mutex
+	mode       PermissionMode
+	session    map[string]bool // 本会话总是允许
+	allowCmds  []string
+	roundEdits bool // 本轮其余文件编辑都允许（审批卡按 B）
 }
 
 func isEditTool(name string) bool { return name == "write_file" || name == "edit_file" }
@@ -81,20 +82,45 @@ func (a *Agent) AllowForSession(toolName string, args json.RawMessage) {
 func (a *Agent) ClearSessionAllows() {
 	a.perm.mu.Lock()
 	a.perm.session = nil
+	a.perm.roundEdits = false
+	a.perm.mu.Unlock()
+}
+
+// AllowEditsThisRound 允许本轮剩余的 write_file / edit_file（审批卡按 B）。
+func (a *Agent) AllowEditsThisRound() {
+	a.perm.mu.Lock()
+	a.perm.roundEdits = true
+	a.perm.mu.Unlock()
+}
+
+func (a *Agent) clearRoundAllows() {
+	a.perm.mu.Lock()
+	a.perm.roundEdits = false
 	a.perm.mu.Unlock()
 }
 
 // SetAllowedCommands 设置命令白名单（前缀匹配，按词边界）。
 func (a *Agent) SetAllowedCommands(prefixes []string) {
+	seen := make(map[string]bool, len(prefixes))
 	var clean []string
 	for _, p := range prefixes {
-		if p = strings.Join(strings.Fields(p), " "); p != "" {
-			clean = append(clean, p)
+		p = strings.Join(strings.Fields(p), " ")
+		if p == "" || seen[p] {
+			continue
 		}
+		seen[p] = true
+		clean = append(clean, p)
 	}
 	a.perm.mu.Lock()
 	a.perm.allowCmds = clean
 	a.perm.mu.Unlock()
+}
+
+// AllowedCommands 返回当前命令白名单副本。
+func (a *Agent) AllowedCommands() []string {
+	a.perm.mu.Lock()
+	defer a.perm.mu.Unlock()
+	return append([]string(nil), a.perm.allowCmds...)
 }
 
 // AllowedCommandsFromEnv 读取 MIAO_ALLOW_COMMANDS（旧名 AGNET_ALLOW_COMMANDS 作回退）。
@@ -157,7 +183,7 @@ var neverAutoAllow = map[string]bool{
 var goNeverAutoAllow = map[string]bool{"run": true, "generate": true, "tool": true}
 
 // decide 返回 (decided, allow)：decided=false 表示要交给用户确认。
-func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool) {
+func (p *permissions) decide(toolName string, args json.RawMessage, workspace string) (bool, bool) {
 	p.mu.Lock()
 	defer p.mu.Unlock()
 	if p.mode == ModePlan {
@@ -166,14 +192,17 @@ func (p *permissions) decide(toolName string, args json.RawMessage) (bool, bool)
 	if p.session[sessionKey(toolName, args)] {
 		return true, true
 	}
-	if p.mode == ModeAcceptEdits && isEditTool(toolName) {
+	if isEditTool(toolName) && (p.mode == ModeAcceptEdits || p.roundEdits) {
 		return true, true
 	}
 	if toolName == "run_command" {
 		name, cargs, ok := parseCommand(args)
+		if ok && tools.CommandDenied(name, cargs) {
+			return true, false
+		}
 		raw := strings.Join(append([]string{name}, cargs...), " ")
-		// 危险参数（-exec、-toolexec、-o…）和 shell 元字符、换行一律交给用户确认，白名单不放行。
-		if !ok || neverAutoAllow[filepath.Base(name)] || (filepath.Base(name) == "go" && len(cargs) > 0 && goNeverAutoAllow[cargs[0]]) || tools.HasDangerousFlag(name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
+		// 危险参数、越界路径、shell 元字符一律交给用户确认，ALLOW_COMMANDS 不放行。
+		if !ok || neverAutoAllow[filepath.Base(name)] || (filepath.Base(name) == "go" && len(cargs) > 0 && goNeverAutoAllow[cargs[0]]) || tools.HasDangerousFlag(name, cargs) || tools.CommandEscapesWorkspace(workspace, name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
 			return false, false
 		}
 		line := commandLine(args)
@@ -195,7 +224,7 @@ func (a *Agent) wrapApprover(fn tools.Approver) tools.Approver {
 		if toolName == "web_fetch" {
 			return a.approveWebFetch(ctx, fn, display, args)
 		}
-		if decided, allow := a.perm.decide(toolName, args); decided {
+		if decided, allow := a.perm.decide(toolName, args, a.Workspace()); decided {
 			return allow, nil
 		}
 		if fn == nil {

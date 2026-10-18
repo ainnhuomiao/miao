@@ -93,7 +93,7 @@ func TestCycleModeAndReset(t *testing.T) {
 	}
 	a.AllowForSession("edit_file", nil)
 	a.Reset()
-	if d, _ := a.perm.decide("edit_file", nil); d {
+	if d, _ := a.perm.decide("edit_file", nil, ""); d {
 		t.Fatal("Reset 后会话放行应清空")
 	}
 }
@@ -111,6 +111,10 @@ func TestPlanModePromptAndEnv(t *testing.T) {
 	a.SetAllowedCommands(AllowedCommandsFromEnv())
 	if got := a.perm.allowCmds; len(got) != 2 || got[1] != "git status" {
 		t.Fatalf("白名单解析：%q", got)
+	}
+	a.SetAllowedCommands(append(a.AllowedCommands(), "go test", "make"))
+	if got := a.AllowedCommands(); len(got) != 3 || got[2] != "make" {
+		t.Fatalf("应去重：%q", got)
 	}
 }
 

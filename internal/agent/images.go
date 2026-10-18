@@ -3,9 +3,13 @@ package agent
 import "github.com/ainnhuomiao/miao/internal/llm"
 
 // AttachImages 设置下一次 Send 的用户消息要附带的图片（发送后清空）。
-func (a *Agent) AttachImages(imgs []llm.Image) { a.pendingImages = imgs }
+func (a *Agent) AttachImages(imgs []llm.Image) {
+	a.mu.Lock()
+	a.pendingImages = imgs
+	a.mu.Unlock()
+}
 
-func (a *Agent) takeImages() []llm.Image {
+func (a *Agent) takeImagesLocked() []llm.Image {
 	imgs := a.pendingImages
 	a.pendingImages = nil
 	return imgs

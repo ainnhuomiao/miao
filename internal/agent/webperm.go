@@ -62,7 +62,7 @@ func (a *Agent) webURLAllowed(u *url.URL) bool {
 	a.perm.mu.Lock()
 	ok := a.perm.session[webHostKey(host)]
 	a.perm.mu.Unlock()
-	return ok || userHosts(a.history)[host]
+	return ok || userHosts(a.History())[host]
 }
 
 // approveWebFetch：满足规则直接放行；否则交给审批卡（显示完整网址）。

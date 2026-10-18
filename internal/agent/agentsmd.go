@@ -62,6 +62,20 @@ func WithAgentsMD(system, content string, truncated bool) string {
 		system, AgentsMDName, note, content)
 }
 
+const agentsMDMarker = "\n\n以下是项目根目录 "
+
+// ApplyAgentsMD 把 AGENTS.md 写进当前会话的系统提示词（去掉旧块再拼上）。
+func (a *Agent) ApplyAgentsMD(content string, truncated bool) {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	base := a.system
+	if i := strings.Index(base, agentsMDMarker); i >= 0 {
+		base = strings.TrimRight(base[:i], "\n")
+	}
+	a.system = WithAgentsMD(base, content, truncated)
+	a.agentsMD = strings.TrimSpace(content) != ""
+}
+
 // SetAgentsMDLoaded 标记启动时是否加载了 AGENTS.md，供界面提示。
 func (a *Agent) SetAgentsMDLoaded(v bool) { a.agentsMD = v }
 

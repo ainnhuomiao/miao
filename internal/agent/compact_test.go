@@ -44,6 +44,30 @@ func TestCompactKeepsToolPairsAndRecentTurns(t *testing.T) {
 	}
 }
 
+func TestTrimOldToolResults(t *testing.T) {
+	a := New(&summaryClient{reply: "x"}, "", nil)
+	long := strings.Repeat("工具输出", 200)
+	a.SetHistory([]llm.Message{
+		{Role: llm.RoleUser, Content: "第一轮"},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "1"}}},
+		{Role: llm.RoleTool, ToolCallID: "1", Content: long},
+		{Role: llm.RoleAssistant, Content: "答1"},
+		{Role: llm.RoleUser, Content: "第二轮"},
+		{Role: llm.RoleAssistant, Content: "答2"},
+	})
+	n := a.TrimOldToolResults(1, 80)
+	if n != 1 {
+		t.Fatalf("应折叠 1 条，got %d", n)
+	}
+	got := a.History()[2].Content
+	if !strings.Contains(got, "已折叠") || strings.Contains(got, long) {
+		t.Fatalf("应截断早期工具输出：%q", got)
+	}
+	if a.History()[4].Content != "第二轮" {
+		t.Fatal("最近一轮不应动")
+	}
+}
+
 func TestCompactTooShort(t *testing.T) {
 	a := New(&summaryClient{reply: "x"}, "", nil)
 	a.SetHistory([]llm.Message{{Role: llm.RoleUser, Content: "hi"}, {Role: llm.RoleAssistant, Content: "yo"}})
