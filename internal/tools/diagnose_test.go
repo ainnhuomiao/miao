@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/ainnhuomiao/miao/internal/childenv"
 	"github.com/ainnhuomiao/miao/internal/config"
 )
 
@@ -154,5 +155,47 @@ func TestAutoVetRunsInTrustedProject(t *testing.T) {
 	}
 	if n := r.TakeDiagnoseNotice(); n != "" {
 		t.Fatalf("已信任时不应有跳过提示: %q", n)
+	}
+}
+
+func TestGoVetEnvOverridesInherited(t *testing.T) {
+	t.Setenv("GOFLAGS", "-toolexec=/tmp/evil")
+	t.Setenv("GOTOOLCHAIN", "go1.99.0")
+	t.Setenv("CGO_ENABLED", "1")
+	t.Setenv("MIAO_API_KEY", "sk-vet-leak")
+	env := goVetEnv(childenv.Environ())
+	got := map[string][]string{}
+	for _, kv := range env {
+		k, v, _ := strings.Cut(kv, "=")
+		got[k] = append(got[k], v)
+	}
+	want := map[string]string{"GOTOOLCHAIN": "local", "GOFLAGS": "-mod=readonly", "CGO_ENABLED": "0"}
+	for k, v := range want {
+		if len(got[k]) != 1 || got[k][0] != v {
+			t.Fatalf("%s = %q, want exactly [%q]", k, got[k], v)
+		}
+	}
+	if len(got["MIAO_API_KEY"]) != 0 {
+		t.Fatal("go vet 环境不应包含 MIAO_API_KEY")
+	}
+	if len(got["PATH"]) != 1 {
+		t.Fatal("PATH 应保留")
+	}
+}
+
+// 真实运行一次：继承的 GOFLAGS=-toolexec 不能生效。
+func TestAutoVetIgnoresInheritedGOFLAGS(t *testing.T) {
+	ws := vetWorkspace(t)
+	marker := filepath.Join(t.TempDir(), "pwned")
+	evil := filepath.Join(t.TempDir(), "evil.sh")
+	if err := os.WriteFile(evil, []byte("#!/bin/sh\ntouch "+marker+"\nexec \"$@\"\n"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("GOFLAGS", "-toolexec="+evil)
+	if out := diagnoseFile(context.Background(), ws, "a.go"); !strings.Contains(out, "go vet") {
+		t.Fatalf("go vet 应正常运行并报错: %q", out)
+	}
+	if _, err := os.Stat(marker); err == nil {
+		t.Fatal("继承的 GOFLAGS -toolexec 被执行了")
 	}
 }

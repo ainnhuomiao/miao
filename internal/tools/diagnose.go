@@ -125,8 +125,24 @@ func diagnoseFile(ctx context.Context, workspace, rel string) string {
 	cmd := exec.CommandContext(dctx, name, args...)
 	cmd.Dir = workspace
 	cmd.Env = childenv.Environ()
+	if label == "go vet" {
+		cmd.Env = goVetEnv(cmd.Env)
+	}
 	out, err := cmd.CombinedOutput()
 	return formatDiagnose(ctx, dctx, label, string(out), err)
+}
+
+// goVetEnv 固定自动 go vet 的工具链行为：不下载工具链、GOFLAGS 固定为 -mod=readonly（替换继承值，可能带 -toolexec 等）、不跑 cgo。
+func goVetEnv(base []string) []string {
+	out := make([]string, 0, len(base)+3)
+	for _, kv := range base {
+		k, _, _ := strings.Cut(kv, "=")
+		if k == "GOTOOLCHAIN" || k == "GOFLAGS" || k == "CGO_ENABLED" {
+			continue
+		}
+		out = append(out, kv)
+	}
+	return append(out, "GOTOOLCHAIN=local", "GOFLAGS=-mod=readonly", "CGO_ENABLED=0")
 }
 
 func formatDiagnose(parent, dctx context.Context, label, out string, err error) string {
