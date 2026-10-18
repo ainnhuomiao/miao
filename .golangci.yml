@@ -1,26 +1,35 @@
-run:
-  timeout: 5m
-
-linters-settings:
-  errcheck:
-    # 往终端或 bytes.Buffer 打印的结果不检查；写文件的地方各自显式处理返回值。
-    exclude-functions:
-      - fmt.Fprint
-      - fmt.Fprintf
-      - fmt.Fprintln
-
+version: "2"
 linters:
-  disable-all: true
+  default: none
   enable:
     - errcheck
     - govet
     - ineffassign
     - staticcheck
     - unused
-
-issues:
-  exclude-use-default: false
-  exclude-rules:
-    - path: _test\.go
-      linters:
-        - errcheck
+  settings:
+    errcheck:
+      # 往终端或 bytes.Buffer 打印的结果不检查；写文件的地方各自显式处理返回值。
+      exclude-functions:
+        - fmt.Fprint
+        - fmt.Fprintf
+        - fmt.Fprintln
+  exclusions:
+    generated: lax
+    # 不启用任何默认排除（对应 v1 的 exclude-use-default: false）
+    presets: []
+    rules:
+      - linters:
+          - errcheck
+        path: _test\.go
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
+formatters:
+  exclusions:
+    generated: lax
+    paths:
+      - third_party$
+      - builtin$
+      - examples$
