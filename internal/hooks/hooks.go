@@ -32,6 +32,8 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/ainnhuomiao/miao/internal/atomicfile"
+
 	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
@@ -421,12 +423,5 @@ func saveTrust(path, hash string) error {
 	m := readTrust()
 	m[path] = hash
 	data, _ := json.MarshalIndent(m, "", "  ")
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return err
-	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o600); err != nil {
-		return err
-	}
-	return os.Rename(tmp, p)
+	return atomicfile.WritePrivate(p, append(data, '\n'))
 }
