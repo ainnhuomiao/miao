@@ -75,6 +75,9 @@ func registerRunCommand(r *Registry) {
 				return Result{Content: "命令被拒绝列表拦截: " + display, IsError: true}
 			}
 			if needsApprovalIn(r.Workspace(), name, in.Args) {
+				if name == "git" && UntrustedGitExecConfig(r.Workspace()) {
+					display += "（未信任仓库的 .git/config 含有 filter、gpg、core.sshCommand 或 textconv，可能执行程序）"
+				}
 				approver := r.Approver()
 				if approver == nil {
 					return Result{

@@ -1,17 +1,22 @@
 package childenv
 
 // gitHardening 关掉会让 git 执行仓库/全局配置里任意程序的入口：fsmonitor、hooks、外部 diff、pager、editor。
+// log.showSignature=false 避免 log/show 按 gpg.program 去跑签名校验。
 var gitHardening = []string{"-c", "core.fsmonitor=false", "-c", "core.hooksPath=/dev/null",
-	"-c", "diff.external=", "-c", "core.pager=cat", "-c", "core.editor=true"}
+	"-c", "diff.external=", "-c", "core.pager=cat", "-c", "core.editor=true",
+	"-c", "log.showSignature=false"}
 
-// GitArgs 在 git 参数前加上加固配置；diff/log/show 再关掉外部 diff 和 textconv 过滤器。
+// GitArgs 在 git 参数前加上加固配置；diff/log/show/blame 再关掉外部 diff 和 textconv。
 func GitArgs(args []string) []string {
-	out := make([]string, 0, len(gitHardening)+len(args)+2)
+	out := make([]string, 0, len(gitHardening)+len(args)+4)
 	out = append(out, gitHardening...)
 	if len(args) > 0 {
 		switch args[0] {
 		case "diff", "log", "show":
 			out = append(out, args[0], "--no-ext-diff", "--no-textconv")
+			return append(out, args[1:]...)
+		case "blame":
+			out = append(out, args[0], "--no-textconv")
 			return append(out, args[1:]...)
 		}
 	}

@@ -1,6 +1,9 @@
 package tools
 
 import (
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 )
@@ -39,6 +42,19 @@ func TestApprovalBypassPoCs(t *testing.T) {
 		{"grep", "-drecurse", "KEY", "."},
 		{"grep", "--directories=recurse", "KEY", "."},
 		{"grep", "--directories", "recurse", "KEY", "."},
+		{"grep", "--recurs", "KEY", "."},
+		{"grep", "--rec", "KEY", "."},
+		{"grep", "--direc=recurse", "KEY", "."},
+		{"grep", "--dir", "recurse", "KEY", "."},
+		{"grep", "--deref", "KEY", "."},
+		{"grep", "--de", "KEY", "."},
+		// diff -r / --recursive 会把目录里的 .env 打出来
+		{"diff", "-r", ".", "sub"},
+		{"diff", "--recursive", ".", "sub"},
+		{"diff", "--recurs", ".", "sub"},
+		{"diff", "-ur", "a", "b"},
+		{"diff", "-ru", "a", "b"},
+		{"diff", "-Naur", "old", "new"},
 		// rg 关掉忽略规则/开启隐藏文件
 		{"rg", "--hidden", "KEY"},
 		{"rg", "-.", "KEY"},
@@ -81,6 +97,16 @@ func TestApprovalBypassPoCs(t *testing.T) {
 		{"grep", "-erm", "a.txt"},
 		{"grep", "-A", "3", "foo", "a.txt"},
 		{"grep", "--", "-r", "a.txt"},
+		{"grep", "--dir=read", "KEY", "a.txt"},
+		{"grep", "--di=skip", "KEY", "a.txt"},
+		{"grep", "--directories=read", "KEY", "a.txt"},
+		{"grep", "--devices=skip", "KEY", "a.txt"},
+		{"diff", "-u", "a", "b"},
+		{"diff", "-q", "a.txt", "b.txt"},
+		{"diff", "-U", "3", "a", "b"},
+		{"diff", "-I", "r", "a", "b"},
+		{"diff", "--exclude", "-r", "a", "b"},
+		{"diff", "--", "-r", "a", "b"},
 		{"rg", "foo"},
 		{"rg", "-n", "foo"},
 		{"rg", "-tgo", "foo"},
@@ -94,5 +120,46 @@ func TestApprovalBypassPoCs(t *testing.T) {
 		if needsApprovalIn(ws, c[0], c[1:]) {
 			t.Errorf("%s 不应需要审批", strings.Join(c, " "))
 		}
+	}
+}
+
+// diff . sub 不带 -r 也会把两边的 .env 打出来；参数只有目录名，路径检查发现不了。
+func TestDiffDirectoryPairReadsEnv(t *testing.T) {
+	if _, err := exec.LookPath("diff"); err != nil {
+		t.Skip("no diff")
+	}
+	ws := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ws, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, ".env"), []byte("SECRET=real\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, "sub", ".env"), []byte("SECRET=fake\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	cmd := exec.Command("diff", ".", "sub")
+	cmd.Dir = ws
+	out, _ := cmd.CombinedOutput()
+	if !strings.Contains(string(out), "SECRET=real") {
+		t.Fatalf("对照：diff . sub 应打印 .env：%s", out)
+	}
+	if !needsApprovalIn(ws, "diff", []string{".", "sub"}) {
+		t.Fatal("diff . sub 应需要审批")
+	}
+	if HasDangerousFlag("diff", []string{".", "sub"}) {
+		t.Fatal("目录比较没有危险标志，靠工作区判断")
+	}
+	if !ImplicitCommandRisk(ws, "diff", []string{".", "sub"}) {
+		t.Fatal("两个目录应被 ImplicitCommandRisk 拦住")
+	}
+	if err := os.WriteFile(filepath.Join(ws, "a.txt"), []byte("a\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, "b.txt"), []byte("b\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if needsApprovalIn(ws, "diff", []string{"-u", "a.txt", "b.txt"}) {
+		t.Fatal("比较两个文件不应需要审批")
 	}
 }

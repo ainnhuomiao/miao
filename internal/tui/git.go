@@ -17,6 +17,7 @@ import (
 
 	"github.com/ainnhuomiao/miao/internal/childenv"
 	"github.com/ainnhuomiao/miao/internal/llm"
+	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
 const (
@@ -52,6 +53,9 @@ func (commitMsgReady) isGitMsg() {}
 func (commitDecision) isGitMsg() {}
 
 func runGit(dir string, args ...string) (string, error) {
+	if tools.UntrustedGitExecConfig(dir) {
+		return "", fmt.Errorf("未信任仓库的 .git/config 含有可执行配置（filter、gpg、core.sshCommand、textconv），已拒绝运行")
+	}
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
 	cmd := exec.CommandContext(ctx, "git", childenv.GitArgs(args)...)

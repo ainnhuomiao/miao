@@ -42,13 +42,14 @@ type treeRow struct {
 
 // treeState 是文件树侧栏的状态（挂在 sidebarState 里）。
 type treeState struct {
-	root     *treeNode
-	changes  map[string]fileChange
-	dirs     map[string]bool // 含改动的目录
-	sel      int
-	confirm  string // 等待确认撤销的文件
-	preview  []string
-	prevHead string
+	root            *treeNode
+	changes         map[string]fileChange
+	dirs            map[string]bool // 含改动的目录
+	sel             int
+	confirm         string // 等待确认撤销的文件
+	preview         []string
+	prevHead        string
+	execConfigNoted bool
 }
 
 func (m *Model) workspaceDir() string {
@@ -62,7 +63,16 @@ func (m *Model) workspaceDir() string {
 func (m *Model) refreshTree() {
 	t := &m.side.tree
 	dir := m.workspaceDir()
-	t.changes = gitChanges(dir)
+	if tools.UntrustedGitExecConfig(dir) {
+		if !t.execConfigNoted {
+			t.execConfigNoted = true
+			m.notice("未信任仓库的 .git/config 含有可执行配置（filter、gpg、core.sshCommand、textconv），已跳过 git 状态。确认仓库可信后输入 /trust-project。")
+		}
+		t.changes = map[string]fileChange{}
+	} else {
+		t.execConfigNoted = false
+		t.changes = gitChanges(dir)
+	}
 	t.dirs = map[string]bool{"": true}
 	for p := range t.changes {
 		for d := path.Dir(p); d != "." && d != "/"; d = path.Dir(d) {

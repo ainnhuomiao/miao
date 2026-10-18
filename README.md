@@ -193,7 +193,7 @@ miao
 
 审批卡上：`Y` 允许 · `B` 本轮其余文件写入都允许 · `A` 本会话总是允许 · `N` 拒绝 · `Esc` 取消。`A` 对文件编辑整类放行，对命令只放行完全相同的命令行。
 
-`run_command` 白名单只覆盖只读用法。下面这些会弹审批，不会静默执行：`rg --pre`、`uniq` 写文件、`cat /etc/passwd` 这类工作区外路径、`git diff --no-index`。`grep -r`、`rg --hidden` / `-u` / `--no-ignore` 这类会扫到 `.env` 的用法，以及 `sort` 白名单外的参数（`-o`、`-T`、`--compress-program` 等）也要审批。`go test` / `go build` / `go vet` 会编译并运行仓库里的代码，**需要审批**；想免审批就写进 `MIAO_ALLOW_COMMANDS`。设 `MIAO_SANDBOX=1`（需 `bwrap`）可以从系统层禁止往工作区外写。
+`run_command` 白名单只覆盖只读用法。下面这些会弹审批，不会静默执行：`rg --pre`、`uniq` 写文件、`cat /etc/passwd` 这类工作区外路径、`git diff --no-index`。`grep -r`（含 `--recurs` 这类长选项缩写）、`diff -r` / `--recursive`、直接比较两个目录，以及 `rg --hidden` / `-u` / `--no-ignore` 这类会扫到 `.env` 的用法，还有 `sort` 白名单外的参数（`-o`、`-T`、`--compress-program` 等）也要审批。`go test` / `go build` / `go vet` 会编译并运行仓库里的代码，**需要审批**；想免审批就写进 `MIAO_ALLOW_COMMANDS`。设 `MIAO_SANDBOX=1`（需 `bwrap`）可以从系统层禁止往工作区外写。
 
 `MIAO_ALLOW_COMMANDS` 是命令白名单，逗号分隔，按词边界前缀匹配：
 
@@ -204,7 +204,7 @@ export MIAO_DENY_COMMANDS="curl,rm -rf"   # 命中则直接拒绝，不询问
 
 审批过的命令会追加到 `~/.miao/data/audit.log`。
 
-miao 启动的子进程（`run_command`、后台任务、hooks、自动诊断）拿不到名字里带 `KEY` / `TOKEN` / `SECRET` / `PASSWORD` 或以 `MIAO_` 开头的环境变量，所以 `GITHUB_TOKEN` 这类也不会传下去，`gh` 等工具通过 miao 运行时可能需要重新登录。miao 调用 git 时会关掉 hooks、fsmonitor、外部 diff、textconv 和系统级 gitconfig，**通过 miao 提交不会运行 `pre-commit` 等 git hook**，需要的话请自己在终端里提交或手动跑检查。
+miao 启动的子进程（`run_command`、后台任务、hooks、自动诊断）拿不到名字里带 `KEY` / `TOKEN` / `SECRET` / `PASSWORD` 或以 `MIAO_` 开头的环境变量，所以 `GITHUB_TOKEN` 这类也不会传下去，`gh` 等工具通过 miao 运行时可能需要重新登录。miao 调用 git 时会关掉 hooks、fsmonitor、外部 diff、textconv、提交签名校验（`log.showSignature`）和系统级 gitconfig，**通过 miao 提交不会运行 `pre-commit` 等 git hook**，需要的话请自己在终端里提交或手动跑检查。未信任的仓库如果在本地 git 配置（含 `include`）里写了 `filter.*`、`gpg.*`、`core.sshCommand` 或 `*.textconv`，`git status` 这类只读命令也要审批；`git blame` 会带上 `--no-textconv`。确认仓库可信后输入 `/trust-project` 不再做这项检查。
 
 编辑 `.go` 文件后的自动 `go vet` 只在已信任的仓库运行（同样以 `.miao/config.json` 加 `/trust-project` 为准，没有项目配置可以先写一个 `{}`）；未信任时跳过，并显示一行提示。
 

@@ -1,6 +1,7 @@
 package tools
 
 import (
+	"os"
 	"path/filepath"
 	"strings"
 
@@ -27,6 +28,9 @@ func HasDangerousFlag(name string, args []string) bool {
 		return true
 	}
 	if name == "grep" && grepRecursive(args) {
+		return true
+	}
+	if name == "diff" && diffRecursive(args) {
 		return true
 	}
 	if name == "rg" && rgUnrestricted(args) {
@@ -103,7 +107,44 @@ func needsApproval(name string, args []string) bool {
 }
 
 func needsApprovalIn(workspace, name string, args []string) bool {
-	return needsApproval(name, args) || CommandEscapesWorkspace(workspace, name, args)
+	return needsApproval(name, args) || CommandEscapesWorkspace(workspace, name, args) || ImplicitCommandRisk(workspace, name, args)
+}
+
+// ImplicitCommandRisk 报告参数里没有危险标志、但结合工作区仍会读到密钥或执行仓库配置里的程序。
+// 权限白名单（ALLOW_COMMANDS）不能因此放行。
+func ImplicitCommandRisk(workspace, name string, args []string) bool {
+	switch name {
+	case "diff":
+		return diffDirectoryPair(workspace, args)
+	case "git":
+		return UntrustedGitExecConfig(workspace)
+	default:
+		return false
+	}
+}
+
+// diffDirectoryPair 报告 diff 是否在比较两个目录。
+// 不带 -r 时，同名文件（包括两边的 .env）也会被整文件打印出来；路径检查只看得到目录名。
+func diffDirectoryPair(workspace string, args []string) bool {
+	if workspace == "" {
+		return false
+	}
+	n := 0
+	for _, a := range pathCandidates(args) {
+		p := a
+		if !filepath.IsAbs(p) {
+			p = filepath.Join(workspace, p)
+		}
+		st, err := os.Stat(p)
+		if err != nil || !st.IsDir() {
+			continue
+		}
+		n++
+		if n >= 2 {
+			return true
+		}
+	}
+	return false
 }
 
 // dangerousFlag 识别能写文件或执行任意程序的参数（含 -flag=value 形式）。

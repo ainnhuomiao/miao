@@ -3,9 +3,13 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"os"
+	"os/exec"
+	"path/filepath"
 	"strings"
 	"testing"
 
+	"github.com/ainnhuomiao/miao/internal/config"
 	"github.com/ainnhuomiao/miao/internal/llm"
 	"github.com/ainnhuomiao/miao/internal/tools"
 )
@@ -52,6 +56,8 @@ func TestPermissionDecisions(t *testing.T) {
 		{name: "白名单 rg 不放行 rg --hidden", allow: []string{"rg"}, tool: "run_command", args: cmd("rg", "--hidden", "KEY"), wantAsked: true, wantAllowed: true},
 		{name: "白名单 sort 不放行 --compress-program", allow: []string{"sort"}, tool: "run_command", args: cmd("sort", "--compress-program=sh", "a"), wantAsked: true, wantAllowed: true},
 		{name: "白名单 sort 不放行 -T", allow: []string{"sort"}, tool: "run_command", args: cmd("sort", "-T", "/tmp", "a"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 diff 不放行 -r", allow: []string{"diff"}, tool: "run_command", args: cmd("diff", "-r", "a", "b"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 grep 不放行 --recurs", allow: []string{"grep"}, tool: "run_command", args: cmd("grep", "--recurs", "KEY", "."), wantAsked: true, wantAllowed: true},
 		{name: "白名单 go vet 不放行 -vettool", allow: []string{"go vet"}, tool: "run_command", args: cmd("go", "vet", "-vettool=./evil"), wantAsked: true, wantAllowed: true},
 		{name: "会话放行编辑整类", session: []struct {
 			tool string
@@ -138,3 +144,81 @@ func TestPlanModePromptAndEnv(t *testing.T) {
 }
 
 var _ tools.Approver = (&Agent{}).wrapApprover(nil)
+
+func TestAllowlistDoesNotSkipDiffDirsOrGitExecConfig(t *testing.T) {
+	t.Setenv("MIAO_HOME", t.TempDir())
+	ws := t.TempDir()
+	if err := os.Mkdir(filepath.Join(ws, "sub"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, ".env"), []byte("SECRET=real\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, "sub", ".env"), []byte("SECRET=fake\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := tools.NewRegistry(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	ask := func(a *Agent, args json.RawMessage) (asked, allowed bool) {
+		t.Helper()
+		ap := a.wrapApprover(func(context.Context, string, string, json.RawMessage) (bool, error) {
+			asked = true
+			return true, nil
+		})
+		var err error
+		allowed, err = ap(context.Background(), "run_command", "", args)
+		if err != nil {
+			t.Fatal(err)
+		}
+		return asked, allowed
+	}
+	cmd := func(c string, args ...string) json.RawMessage {
+		b, _ := json.Marshal(map[string]any{"command": c, "args": args})
+		return b
+	}
+	a := New(nil, "", r)
+	a.SetAllowedCommands([]string{"diff", "git"})
+	if asked, allowed := ask(a, cmd("diff", ".", "sub")); !asked || !allowed {
+		t.Fatalf("diff . sub 应询问，asked=%v allowed=%v", asked, allowed)
+	}
+	if asked, allowed := ask(a, cmd("diff", "-u", "a.txt", "b.txt")); asked || !allowed {
+		t.Fatalf("diff 两个文件应直接放行，asked=%v allowed=%v", asked, allowed)
+	}
+
+	if _, err := exec.LookPath("git"); err != nil {
+		t.Skip("no git")
+	}
+	git := func(args ...string) {
+		t.Helper()
+		c := exec.Command("git", args...)
+		c.Dir = ws
+		c.Env = append(os.Environ(), "GIT_CONFIG_NOSYSTEM=1", "GIT_CONFIG_GLOBAL=/dev/null")
+		if out, err := c.CombinedOutput(); err != nil {
+			t.Fatalf("git %v: %v %s", args, err, out)
+		}
+	}
+	git("init", "-q")
+	git("config", "user.email", "t@t")
+	git("config", "user.name", "t")
+	if asked, allowed := ask(a, cmd("git", "status")); asked || !allowed {
+		t.Fatalf("普通仓库的 git status 应直接放行，asked=%v allowed=%v", asked, allowed)
+	}
+	git("config", "filter.evil.clean", "evil")
+	if asked, allowed := ask(a, cmd("git", "status")); !asked || !allowed {
+		t.Fatalf("含 filter 的未信任仓库应询问，asked=%v allowed=%v", asked, allowed)
+	}
+	if err := os.Mkdir(filepath.Join(ws, ".miao"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, ".miao", "config.json"), []byte(`{}`), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	if _, err := config.TrustProject(ws); err != nil {
+		t.Fatal(err)
+	}
+	if asked, allowed := ask(a, cmd("git", "status")); asked || !allowed {
+		t.Fatalf("信任项目配置后 git status 应直接放行，asked=%v allowed=%v", asked, allowed)
+	}
+}

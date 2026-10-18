@@ -228,8 +228,8 @@ func (p *permissions) decide(toolName string, args json.RawMessage, workspace st
 			return true, false
 		}
 		raw := strings.Join(append([]string{name}, cargs...), " ")
-		// 危险参数、越界路径、shell 元字符一律交给用户确认，ALLOW_COMMANDS 不放行。
-		if !ok || neverAutoAllow[filepath.Base(name)] || (filepath.Base(name) == "go" && len(cargs) > 0 && goNeverAutoAllow[cargs[0]]) || tools.HasDangerousFlag(name, cargs) || tools.CommandEscapesWorkspace(workspace, name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
+		// 危险参数、越界路径、目录比较、未信任仓库的可执行 git 配置、shell 元字符一律交给用户确认，ALLOW_COMMANDS 不放行。
+		if !ok || neverAutoAllow[filepath.Base(name)] || (filepath.Base(name) == "go" && len(cargs) > 0 && goNeverAutoAllow[cargs[0]]) || tools.HasDangerousFlag(name, cargs) || tools.CommandEscapesWorkspace(workspace, name, cargs) || tools.ImplicitCommandRisk(workspace, name, cargs) || strings.ContainsAny(raw, ";&|`$<>()\n\r") {
 			return false, false
 		}
 		line := commandLine(args)

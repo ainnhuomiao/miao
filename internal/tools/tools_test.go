@@ -162,6 +162,9 @@ func TestNeedsApproval(t *testing.T) {
 		"go test -run TestX ./...": true, "git diff --stat": false,
 		"rg --pre sh x": true, "rg --pre=sh x": true, "uniq in out": true,
 		"git diff --no-index a b": true,
+		"grep --recurs KEY .":     true, "grep --dir=read KEY a": false,
+		"diff -r a b": true, "diff --recurs a b": true, "diff -u a b": false,
+		"diff --exclude -r a b": false,
 	}
 	for c, want := range cases {
 		f := strings.Fields(c)
