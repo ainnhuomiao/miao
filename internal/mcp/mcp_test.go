@@ -108,7 +108,7 @@ func fakeConfig(name string) ServerConfig {
 
 func newFake(t *testing.T) *Client {
 	t.Helper()
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	c, err := Spawn(fakeConfig("fake"))
 	if err != nil {
 		t.Fatal(err)
@@ -242,8 +242,8 @@ func TestParseConfig(t *testing.T) {
 	if _, err := ParseConfig([]byte(`{bad`)); err == nil {
 		t.Fatal("want error")
 	}
-	t.Setenv("XDG_CONFIG_HOME", "/cfg")
-	if ConfigPath() != "/cfg/miao/mcp.json" {
+	t.Setenv("MIAO_HOME", "/cfg")
+	if ConfigPath() != "/cfg/mcp.json" {
 		t.Fatal(ConfigPath())
 	}
 }
@@ -258,7 +258,7 @@ func TestFormatResultTruncate(t *testing.T) {
 }
 
 func TestManagerRegistry(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	dir := t.TempDir()
 	cfg := map[string]any{"mcpServers": map[string]any{
 		"fake":   map[string]any{"command": os.Args[0], "env": map[string]string{fakeEnv: "1"}},
@@ -326,7 +326,7 @@ func TestManagerRegistry(t *testing.T) {
 }
 
 func TestCallTimeout(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	old := CallTimeout
 	CallTimeout = 200 * time.Millisecond
 	defer func() { CallTimeout = old }()
@@ -345,7 +345,7 @@ func TestCallTimeout(t *testing.T) {
 }
 
 func TestNoApproverRefuses(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	dir := t.TempDir()
 	data, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"fake": map[string]any{"command": os.Args[0], "env": map[string]string{fakeEnv: "1"}}}})
 	path := filepath.Join(dir, "mcp.json")
@@ -360,7 +360,7 @@ func TestNoApproverRefuses(t *testing.T) {
 }
 
 func TestPlanModeRefusesMCP(t *testing.T) {
-	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	dir := t.TempDir()
 	data, _ := json.Marshal(map[string]any{"mcpServers": map[string]any{"fake": map[string]any{"command": os.Args[0], "env": map[string]string{fakeEnv: "1"}}}})
 	path := filepath.Join(dir, "mcp.json")

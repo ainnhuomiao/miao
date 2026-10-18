@@ -41,7 +41,7 @@ func (c Config) Normalize() Config {
 	return c
 }
 
-// ConfigPath 返回 $XDG_CONFIG_HOME/miao/config.json（与 /theme 同一个文件）。
+// ConfigPath 返回 ~/.miao/config.json（与 /theme 同一个文件）。
 func ConfigPath() (string, error) {
 	dir, err := appdir.ConfigDir()
 	if err != nil {
@@ -91,7 +91,7 @@ func SaveConfig(c Config) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
 	tmp := p + ".tmp"

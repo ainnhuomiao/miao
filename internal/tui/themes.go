@@ -216,7 +216,7 @@ func themeSwatch(t theme) string {
 	return b.String()
 }
 
-// ---- 持久化：~/.config/miao/config.json 里的 "theme" 字段 ----
+// ---- 持久化：~/.miao/config.json 里的 "theme" 字段 ----
 
 func configPath() (string, error) {
 	dir, err := appdir.ConfigDir()
@@ -267,7 +267,7 @@ func saveConfigKey(key string, val any) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
 	tmp := p + ".tmp"

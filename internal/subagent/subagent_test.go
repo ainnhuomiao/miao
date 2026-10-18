@@ -18,7 +18,7 @@ import (
 func tempXDG(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", dir)
+	t.Setenv("MIAO_HOME", dir)
 	return filepath.Join(dir, "miao", "config.json")
 }
 

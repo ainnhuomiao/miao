@@ -15,7 +15,7 @@ import (
 
 func newOpenAIModel(t *testing.T, srvURL, model string) (*Model, *llm.OpenAIClient) {
 	t.Helper()
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	t.Setenv("MIAO_MODELS", "")
 	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	c := llm.NewOpenAI("k", srvURL, model)

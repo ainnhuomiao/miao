@@ -51,7 +51,7 @@ const helpText = `命令:
   /subagents  子代理设置（开关、并发上限、模型）
   /mcp        查看 MCP 服务器状态与工具数
   /hooks      查看已配置的 hook（工具调用前后、回合结束自动执行的命令）
-  自定义命令  .miao/commands/*.md 或 ~/.config/miao/commands/*.md，模板里用 $ARGS 接参数
+  自定义命令  .miao/commands/*.md 或 ~/.miao/commands/*.md，模板里用 $ARGS 接参数
   /reasoning  展开或收起思考过程
   /exit       退出`
 

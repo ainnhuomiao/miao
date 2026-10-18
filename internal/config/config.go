@@ -11,6 +11,8 @@ import (
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 const (
@@ -48,7 +50,7 @@ func Load() (Config, error) {
 
 // LoadWithNotes 与 Load 相同，额外返回启动时值得告诉用户的提示（项目 JSON 错误、未信任的放宽项等）。
 func LoadWithNotes() (Config, []string, error) {
-	notes := loadDotEnv(".env")
+	notes := loadWorkspaceDotEnv()
 
 	ws := firstEnv(AgentEnvNames("WORKSPACE")...)
 	if ws == "" {
@@ -167,6 +169,18 @@ var workspaceEnvBlocked = map[string]bool{
 	"MIAO_BASE_URL": true, "AGENT_BASE_URL": true, "DEEPSEEK_BASE_URL": true,
 	"MIAO_PROTOCOL": true, "AGNET_PROTOCOL": true,
 	"AGENT_PROTOCOL": true,
+}
+
+// loadWorkspaceDotEnv 读取当前目录的 .env；当前目录是 $HOME 或 $MIAO_HOME 时不读，
+// 那里不是项目，不能和全局配置混在一起。
+func loadWorkspaceDotEnv() []string {
+	if cwd, err := os.Getwd(); err == nil && appdir.IsGlobalWorkspace(cwd) {
+		if _, err := os.Stat(".env"); err == nil {
+			return []string{"当前目录是用户家目录，不当作项目，已忽略其中的 .env。"}
+		}
+		return nil
+	}
+	return loadDotEnv(".env")
 }
 
 func loadDotEnv(path string) []string {

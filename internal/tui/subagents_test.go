@@ -14,7 +14,7 @@ import (
 
 func setupSubMgr(t *testing.T, cfg subagent.Config) (*subagent.Manager, *tools.Registry) {
 	t.Helper()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	reg, err := tools.NewRegistry(t.TempDir())
 	if err != nil {
 		t.Fatal(err)

@@ -78,8 +78,9 @@ func (s *Store) storeImage(img llm.Image) (imageRef, error) {
 	return imageRef{Path: rel, MIME: img.MIME, Name: img.Name}, nil
 }
 
-// relImagePath 兼容旧会话里的绝对路径：位于本会话目录或旧数据目录（改名前的
-// $XDG_DATA_HOME/agnet/sessions）下的绝对路径改写成相对会话目录的路径，其余原样返回，
+// relImagePath 兼容旧会话里的绝对路径：位于本会话目录或旧数据目录（迁移到 ~/.miao 之前的
+// $XDG_DATA_HOME/miao/sessions 和改名前的 $XDG_DATA_HOME/agnet/sessions）下的绝对路径
+// 改写成相对会话目录的路径，其余原样返回，
 // 交给调用方做越界检查。
 func (s *Store) relImagePath(p string) string {
 	if !filepath.IsAbs(p) {
@@ -87,7 +88,7 @@ func (s *Store) relImagePath(p string) string {
 	}
 	p = filepath.Clean(p)
 	bases := []string{s.dir}
-	if old, err := appdir.OldDataDir(); err == nil {
+	for _, old := range appdir.OldDataDirs() {
 		bases = append(bases, filepath.Join(old, "sessions"))
 	}
 	for _, b := range bases {

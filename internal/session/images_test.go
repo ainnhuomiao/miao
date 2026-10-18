@@ -61,6 +61,7 @@ func TestSessionImageRefRejectsTraversal(t *testing.T) {
 func TestSessionImageOldAbsolutePath(t *testing.T) {
 	data := t.TempDir()
 	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("MIAO_HOME", t.TempDir())
 	dir := filepath.Join(data, "miao", "sessions")
 	s, err := NewStore(dir)
 	if err != nil {
@@ -85,5 +86,36 @@ func TestSessionImageOldAbsolutePath(t *testing.T) {
 	im := got.Messages[0].Images
 	if len(im) != 2 || string(im[0].Data) != "png" || im[0].Path != "images/a.png" || im[1].Path != "images/a.png" {
 		t.Fatalf("旧数据目录下的绝对路径应改写为相对路径，越界的忽略：%+v", im)
+	}
+}
+
+// 迁移到 ~/.miao 之后，旧会话里 $XDG_DATA_HOME/miao/sessions 和 agnet 下的绝对路径仍能读回。
+func TestSessionImageXDGPathAfterMove(t *testing.T) {
+	data, home := t.TempDir(), t.TempDir()
+	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("MIAO_HOME", home)
+	dir, err := DefaultDir()
+	if err != nil {
+		t.Fatal(err)
+	}
+	s, err := NewStore(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	os.MkdirAll(filepath.Join(dir, "images"), 0o755)
+	os.WriteFile(filepath.Join(dir, "images", "a.png"), []byte("png"), 0o644)
+	miaoAbs := filepath.Join(data, "miao", "sessions", "images", "a.png")
+	agnetAbs := filepath.Join(data, "agnet", "sessions", "images", "a.png")
+	body := `{"id":"y","messages":[{"role":"user","content":"a","images":[` +
+		`{"path":"` + miaoAbs + `","mime":"image/png"},` +
+		`{"path":"` + agnetAbs + `","mime":"image/png"}]}]}`
+	os.WriteFile(filepath.Join(dir, "y.json"), []byte(body), 0o644)
+	got, err := s.Load("y")
+	if err != nil {
+		t.Fatal(err)
+	}
+	im := got.Messages[0].Images
+	if len(im) != 2 || string(im[0].Data) != "png" || string(im[1].Data) != "png" {
+		t.Fatalf("旧 XDG 绝对路径应映射到新会话目录：%+v", im)
 	}
 }

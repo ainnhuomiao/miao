@@ -12,7 +12,7 @@ import (
 
 func newThemeModel(t *testing.T) *Model {
 	t.Helper()
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	setTheme("auto")
 	t.Cleanup(func() { setTheme("auto") })
 	return newTestModel(t, 100, 30, "ok")

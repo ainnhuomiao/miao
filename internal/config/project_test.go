@@ -36,7 +36,7 @@ func TestLoadIgnoresWorkspaceEnvBaseURL(t *testing.T) {
 
 func TestUntrustedProjectCannotLoosen(t *testing.T) {
 	clearConnEnv(t)
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	t.Setenv("MIAO_API_KEY", "k")
 	ws := t.TempDir()
 	t.Setenv("MIAO_WORKSPACE", ws)
@@ -95,7 +95,7 @@ func TestBadProjectJSONIsNoted(t *testing.T) {
 
 func TestTrustProjectAllowsCommands(t *testing.T) {
 	clearConnEnv(t)
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	t.Setenv("MIAO_API_KEY", "k")
 	ws := t.TempDir()
 	t.Setenv("MIAO_WORKSPACE", ws)
@@ -121,7 +121,7 @@ func TestTrustProjectAllowsCommands(t *testing.T) {
 
 func TestProjectCanTightenWithoutTrust(t *testing.T) {
 	clearConnEnv(t)
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	t.Setenv("MIAO_API_KEY", "k")
 	t.Setenv("MIAO_MAX_TOOL_ROUNDS", "")
 	t.Setenv("MIAO_SANDBOX", "")
@@ -143,5 +143,63 @@ func TestProjectCanTightenWithoutTrust(t *testing.T) {
 	}
 	if os.Getenv("MIAO_SANDBOX") != "1" {
 		t.Fatal("应允许项目打开沙箱")
+	}
+}
+
+// 在 $HOME 下启动：~/.miao 是全局家目录，不能当项目配置读，~/.env 也不读。
+func TestWorkspaceIsHomeNotProject(t *testing.T) {
+	clearConnEnv(t)
+	home := t.TempDir()
+	t.Setenv("HOME", home)
+	t.Setenv("MIAO_HOME", "")
+	t.Setenv("MIAO_WORKSPACE", "")
+	t.Setenv("MIAO_API_KEY", "k")
+	t.Chdir(home)
+	if err := os.MkdirAll(filepath.Join(home, ".miao"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".miao", "config.json"), []byte(`{"model":"global-file","max_tool_rounds":3}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(home, ".env"), []byte("MIAO_MODEL=from-home-env\n"), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MIAO_MAX_TOOL_ROUNDS", "")
+	os.Unsetenv("MIAO_MODEL")
+	cfg, notes, err := LoadWithNotes()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProjectPath != "" || cfg.MaxToolRounds == 3 {
+		t.Fatalf("不应把 ~/.miao 当项目目录：%+v", cfg)
+	}
+	if cfg.Model == "from-home-env" {
+		t.Fatal("不应读取 ~/.env")
+	}
+	if !strings.Contains(strings.Join(notes, "\n"), "已忽略其中的 .env") {
+		t.Fatalf("notes=%q", notes)
+	}
+}
+
+// MIAO_HOME 指向某个工作区的 .miao 时，该工作区同样不当项目。
+func TestMiaoHomeInsideWorkspace(t *testing.T) {
+	clearConnEnv(t)
+	ws := t.TempDir()
+	t.Setenv("MIAO_HOME", filepath.Join(ws, ".miao"))
+	t.Setenv("MIAO_WORKSPACE", ws)
+	t.Setenv("MIAO_API_KEY", "k")
+	if err := os.MkdirAll(filepath.Join(ws, ".miao"), 0o700); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.WriteFile(filepath.Join(ws, ".miao", "config.json"), []byte(`{"max_tool_rounds":3}`), 0o600); err != nil {
+		t.Fatal(err)
+	}
+	t.Setenv("MIAO_MAX_TOOL_ROUNDS", "")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.ProjectPath != "" || cfg.MaxToolRounds == 3 {
+		t.Fatalf("MIAO_HOME 不能同时当项目目录：%+v", cfg)
 	}
 }

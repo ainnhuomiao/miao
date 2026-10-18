@@ -14,7 +14,7 @@ import (
 
 func newMentionModel(t *testing.T) *Model {
 	t.Helper()
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	dir := t.TempDir()
 	for name, body := range map[string]string{"main.go": "package main\n", "internal/tui/view.go": "package tui\n", "README.md": "hi"} {
 		p := filepath.Join(dir, name)

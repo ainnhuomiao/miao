@@ -28,6 +28,7 @@ func TestGetenvOldOnly(t *testing.T) {
 func clearConnEnv(t *testing.T) {
 	t.Helper()
 	t.Chdir(t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	for _, k := range []string{"API_KEY", "BASE_URL", "MODEL", "WORKSPACE"} {
 		t.Setenv("MIAO_"+k, "")
 		t.Setenv("AGENT_"+k, "")

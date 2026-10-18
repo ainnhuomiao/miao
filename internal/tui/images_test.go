@@ -144,7 +144,7 @@ func TestSendWithImagesAndUnsupportedModel(t *testing.T) {
 }
 
 func TestAtImageAttach(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	dir := t.TempDir()
 	os.WriteFile(filepath.Join(dir, "图片.png"), tuiPNG, 0o644)
 	reg, _ := tools.NewRegistry(dir)

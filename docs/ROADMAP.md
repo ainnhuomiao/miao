@@ -92,7 +92,7 @@
 
 状态：已完成。
 
-- 会话存到 `$XDG_DATA_HOME/miao/sessions/<id>.json`
+- 会话存到 `~/.miao/data/sessions/<id>.json`
 - 侧栏切换、`/fork`、`/load`、`-c`/`--resume` 恢复最近一次
 - 原子写入；侧栏列表只解析元数据
 - 会话落盘保存原文（目录 0700）；`/export` 时脱敏 API Key 等

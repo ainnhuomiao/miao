@@ -9,14 +9,14 @@ import (
 
 func TestAuditEventAndRotate(t *testing.T) {
 	data := t.TempDir()
-	t.Setenv("XDG_DATA_HOME", data)
+	t.Setenv("MIAO_HOME", data)
 	oldSkip, oldMax := skipAudit, maxAuditBytes
 	skipAudit, maxAuditBytes = false, 80
 	t.Cleanup(func() { skipAudit, maxAuditBytes = oldSkip, oldMax })
 
 	auditEvent("/ws", "write_file", "a.go", "allow")
 	auditEvent("/ws", "web_fetch", "https://example.com", "reject")
-	p := filepath.Join(data, "miao", "audit.log")
+	p := filepath.Join(data, "data", "audit.log")
 	b, err := os.ReadFile(p)
 	if err != nil {
 		t.Fatal(err)

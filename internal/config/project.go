@@ -33,6 +33,10 @@ func LoadProject(workspace string) (ProjectFile, error) {
 func loadProjectFile(workspace string) (ProjectFile, string, string, error) {
 	var zero ProjectFile
 	dir := appdir.ProjectDir(workspace)
+	if dir == "" {
+		// 工作区是 $HOME 或 $MIAO_HOME：没有项目配置
+		return zero, "", "", nil
+	}
 	path := filepath.Join(dir, "config.json")
 	data, err := os.ReadFile(path)
 	if err != nil {
@@ -110,7 +114,7 @@ func saveProjectTrust(path, hash string) error {
 	if err != nil {
 		return err
 	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
 	tmp := p + ".tmp"

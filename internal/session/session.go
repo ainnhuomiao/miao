@@ -47,7 +47,7 @@ type Store struct {
 	now func() time.Time
 }
 
-// DefaultDir 返回默认目录：$XDG_DATA_HOME/miao/sessions，或 ~/.local/share/miao/sessions。
+// DefaultDir 返回默认目录：~/.miao/data/sessions（或 $MIAO_HOME/data/sessions）。
 func DefaultDir() (string, error) {
 	dir, err := appdir.DataDir()
 	if err != nil {

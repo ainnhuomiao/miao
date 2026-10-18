@@ -69,7 +69,7 @@ func startMidStream(m *Model) {
 }
 
 func newBenchModel(tb testing.TB, width, height int) *Model {
-	tb.Setenv("XDG_DATA_HOME", tb.TempDir())
+	tb.Setenv("MIAO_HOME", tb.TempDir())
 	ag := agent.New(&fakeClient{}, "测试助手", nil)
 	m := New(ag, "test-model")
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})

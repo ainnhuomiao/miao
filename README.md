@@ -94,7 +94,16 @@ miao
 
 兼容旧名：连接配置的 `AGENT_API_KEY` / `AGENT_BASE_URL` / `AGENT_MODEL` / `AGENT_WORKSPACE` 仍然有效（还会回退到 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`）；其它变量的旧名 `AGNET_*`（如 `AGNET_MODELS`）也仍会读取。新旧都设置时 `MIAO_*` 优先。
 
-用户级配置文件是 `~/.config/miao/config.json`（遵循 `XDG_CONFIG_HOME`），保存主题、子代理和 hooks 设置，API Key 不放在这里：
+所有用户级文件都在 `~/.miao/` 下（设置 `MIAO_HOME` 可以换位置，目录权限 0700）：
+
+| 路径 | 内容 |
+| --- | --- |
+| `~/.miao/config.json` | 主题、子代理、hooks 设置 |
+| `~/.miao/mcp.json`、`~/.miao/commands/` | MCP 配置、自定义命令 |
+| `~/.miao/data/` | 会话、导出、审计日志 |
+| `~/.miao/state/` | 运行状态（MCP 日志等） |
+
+用户级配置文件 `~/.miao/config.json` 保存主题、子代理和 hooks 设置，API Key 不放在这里：
 
 ```json
 {
@@ -117,7 +126,9 @@ miao
 }
 ```
 
-从 agnet 升级：首次启动时会把 `~/.config/agnet`、`~/.local/share/agnet`、`~/.local/state/agnet` 自动迁移到对应的 `miao` 目录（新目录已存在则不动）。项目里的 `.agnet/` 不会被移动，没有 `.miao/` 时仍会读取它。
+在 `$HOME`（或 `MIAO_HOME`）下启动时，`~/.miao` 是全局目录，不会被当成项目目录，也不读取那里的 `.env`。
+
+从旧版本升级：首次启动时会把旧的 XDG 目录 `~/.config/miao`、`~/.local/share/miao`、`~/.local/state/miao`（没有时用更早的 `~/.config/agnet` 等）**复制**到 `~/.miao`、`~/.miao/data`、`~/.miao/state`。只复制、逐个文件校验，不删除旧目录，不跟随符号链接，`~/.miao` 里已有的文件不会被覆盖（冲突会提示）。成功后会提示一次，确认无误可手动删除旧目录；有文件复制失败时会在启动时警告，下次启动重试。旧会话里记录的旧目录绝对路径仍能正常读取。项目里的 `.agnet/` 不会被移动，没有 `.miao/` 时仍会读取它。
 
 ## 快捷键
 
@@ -148,7 +159,7 @@ miao
 | `/clear` | 清空对话并换新会话 |
 | `/undo` | 撤销最近一次文件修改 |
 | `/compact` | 压缩上下文：把早期对话总结成摘要（用量到 80% 时自动触发） |
-| `/export` | 把当前会话导出为 Markdown（默认 `$XDG_DATA_HOME/miao/exports`，会脱敏） |
+| `/export` | 把当前会话导出为 Markdown（默认 `~/.miao/data/exports`，会脱敏） |
 | `/diff` | 查看本次会话改过的文件和 diff |
 | `/commit` | 让模型写提交信息，确认后提交本会话改过的文件 |
 | `/fork` | 把当前对话复制成新会话（原会话保留） |
@@ -179,7 +190,7 @@ export MIAO_ALLOW_COMMANDS="go test,git status,make"
 export MIAO_DENY_COMMANDS="curl,rm -rf"   # 命中则直接拒绝，不询问
 ```
 
-审批过的命令会追加到 `~/.local/share/miao/audit.log`。
+审批过的命令会追加到 `~/.miao/data/audit.log`。
 
 `web_fetch` 的免审批规则：网址是 http/https、不带查询串，且主机名出现在你本会话亲手输入的消息里（`@` 引用的文件内容不算），或已在审批卡上按 `A` 放行；每一跳重定向都重新检查。其它情况弹审批卡并显示完整网址，只读规划模式下也一样。
 
@@ -187,7 +198,7 @@ export MIAO_DENY_COMMANDS="curl,rm -rf"   # 命中则直接拒绝，不询问
 
 ## Hooks
 
-用户级写在 `~/.config/miao/config.json` 的 `"hooks"` 字段，直接生效；项目级写在 `<工作区>/.miao/hooks.json`，第一次运行前需要确认，文件内容变了会重新确认。
+用户级写在 `~/.miao/config.json` 的 `"hooks"` 字段，直接生效；项目级写在 `<工作区>/.miao/hooks.json`，第一次运行前需要确认，文件内容变了会重新确认。
 
 ```json
 {
@@ -205,7 +216,7 @@ export MIAO_DENY_COMMANDS="curl,rm -rf"   # 命中则直接拒绝，不询问
 
 ## MCP
 
-配置文件 `~/.config/miao/mcp.json`，格式兼容 Claude Desktop / Cursor：
+配置文件 `~/.miao/mcp.json`，格式兼容 Claude Desktop / Cursor：
 
 ```json
 {
@@ -224,7 +235,7 @@ export MIAO_DENY_COMMANDS="curl,rm -rf"   # 命中则直接拒绝，不询问
 
 ## 子代理
 
-子代理是只读的（`task` 工具），默认关闭。用 `/subagents` 设置，或写在 `~/.config/miao/config.json`：
+子代理是只读的（`task` 工具），默认关闭。用 `/subagents` 设置，或写在 `~/.miao/config.json`：
 
 ```json
 {
@@ -238,7 +249,7 @@ export MIAO_DENY_COMMANDS="curl,rm -rf"   # 命中则直接拒绝，不询问
 
 ## 自定义命令
 
-把 Markdown 文件放进 `~/.config/miao/commands/`（用户级）或 `<工作区>/.miao/commands/`（项目级，同名覆盖用户级）。文件名就是命令名，正文是提示词模板，`$ARGS` 替换为命令后面的参数（模板里没有 `$ARGS` 时参数接在末尾）。
+把 Markdown 文件放进 `~/.miao/commands/`（用户级）或 `<工作区>/.miao/commands/`（项目级，同名覆盖用户级）。文件名就是命令名，正文是提示词模板，`$ARGS` 替换为命令后面的参数（模板里没有 `$ARGS` 时参数接在末尾）。
 
 `.miao/commands/review.md`：
 

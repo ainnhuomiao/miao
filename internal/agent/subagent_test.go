@@ -42,7 +42,7 @@ func contains(ss []string, s string) bool {
 }
 
 func TestToolListStableWhenSubagentToggled(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	ws := t.TempDir()
 	_ = os.WriteFile(filepath.Join(ws, "x"), nil, 0o644)
 	reg, _ := tools.NewRegistry(ws)

@@ -11,7 +11,7 @@ import (
 
 func TestAgentsMDNotice(t *testing.T) {
 	for _, loaded := range []bool{false, true} {
-		t.Setenv("XDG_DATA_HOME", t.TempDir())
+		t.Setenv("MIAO_HOME", t.TempDir())
 		ag := agent.New(&fakeClient{deltas: []llm.Delta{{Content: "x"}}}, "测试助手", nil)
 		ag.SetAgentsMDLoaded(loaded)
 		m := New(ag, "test-model")

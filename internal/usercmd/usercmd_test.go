@@ -16,10 +16,10 @@ func write(t *testing.T, p, s string) {
 
 func TestLoadAndExpand(t *testing.T) {
 	cfg := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("MIAO_HOME", cfg)
 	ws := t.TempDir()
-	write(t, filepath.Join(cfg, "miao/commands/review.md"), "---\ndescription: 用户版\n---\n用户 review $ARGS")
-	write(t, filepath.Join(cfg, "miao/commands/hi.md"), "# 打个招呼\n你好")
+	write(t, filepath.Join(cfg, "commands/review.md"), "---\ndescription: 用户版\n---\n用户 review $ARGS")
+	write(t, filepath.Join(cfg, "commands/hi.md"), "# 打个招呼\n你好")
 	write(t, filepath.Join(ws, ".miao/commands/review.md"), "---\ndescription: \"审查代码\"\n---\n请审查 $ARGS，重点看并发。\n")
 	write(t, filepath.Join(ws, ".miao/commands/help.md"), "覆盖内置")
 	write(t, filepath.Join(ws, ".miao/commands/bad name.md"), "x")
@@ -46,7 +46,7 @@ func TestLoadAndExpand(t *testing.T) {
 }
 
 func TestLoadOldProjectDirFallback(t *testing.T) {
-	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	ws := t.TempDir()
 	write(t, filepath.Join(ws, ".agnet/commands/old.md"), "旧目录命令")
 	if cmds := Load(ws, nil); len(cmds) != 1 || cmds[0].Name != "old" {

@@ -71,7 +71,7 @@ type Tool struct {
 	InputSchema json.RawMessage `json:"inputSchema"`
 }
 
-// stderrLog 打开 $XDG_STATE_HOME/miao/mcp/<name>.log；失败则返回 nil（丢弃 stderr）。
+// stderrLog 打开 ~/.miao/state/mcp/<name>.log；失败则返回 nil（丢弃 stderr）。
 func stderrLog(name string) *os.File {
 	dir, err := appdir.StateDir()
 	if err != nil {

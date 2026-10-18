@@ -16,9 +16,9 @@ import (
 func hookAgent(t *testing.T, userHooks string, scripts []llm.ChatResult) (*Agent, *scriptClient, string) {
 	t.Helper()
 	cfg := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", cfg)
-	os.MkdirAll(filepath.Join(cfg, "miao"), 0o755)
-	os.WriteFile(filepath.Join(cfg, "miao", "config.json"), []byte(`{"hooks":`+userHooks+`}`), 0o644)
+	t.Setenv("MIAO_HOME", cfg)
+	os.MkdirAll(cfg, 0o755)
+	os.WriteFile(filepath.Join(cfg, "config.json"), []byte(`{"hooks":`+userHooks+`}`), 0o644)
 	ws := t.TempDir()
 	os.WriteFile(filepath.Join(ws, "a.txt"), []byte("hello"), 0o644)
 	reg, err := tools.NewRegistry(ws)

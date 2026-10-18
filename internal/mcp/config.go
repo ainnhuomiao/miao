@@ -28,7 +28,7 @@ type fileConfig struct {
 	MCPServers map[string]ServerConfig `json:"mcpServers"`
 }
 
-// ConfigPath 返回 $XDG_CONFIG_HOME/miao/mcp.json（默认 ~/.config/miao/mcp.json）。
+// ConfigPath 返回 ~/.miao/mcp.json（或 $MIAO_HOME/mcp.json）。
 func ConfigPath() string {
 	dir, err := appdir.ConfigDir()
 	if err != nil {

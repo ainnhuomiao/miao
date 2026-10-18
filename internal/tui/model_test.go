@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"os"
 	"strings"
 	"testing"
 	"time"
@@ -59,7 +60,7 @@ func (b *blockingClient) StreamChat(ctx context.Context, _ llm.ChatRequest, _ ll
 
 func newTestModel(t *testing.T, width, height int, reply string) *Model {
 	t.Helper()
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	isolateHome(t)
 	ag := agent.New(&fakeClient{deltas: []llm.Delta{{Content: reply}}}, "测试助手", nil)
 	m := New(ag, "test-model")
 	m.Update(tea.WindowSizeMsg{Width: width, Height: height})
@@ -147,7 +148,7 @@ func TestSubmitStreamsIntoTranscript(t *testing.T) {
 }
 
 func TestEscCancelsStream(t *testing.T) {
-	t.Setenv("XDG_DATA_HOME", t.TempDir())
+	t.Setenv("MIAO_HOME", t.TempDir())
 	fc := &blockingClient{started: make(chan struct{})}
 	m := New(agent.New(fc, "", nil), "test-model")
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
@@ -451,4 +452,13 @@ func TestChatMessagesFromHistorySkipsReminders(t *testing.T) {
 	if users != 1 {
 		t.Fatalf("用户气泡数 = %d", users)
 	}
+}
+
+// isolateHome 让测试使用临时的 MIAO_HOME；本测试已经指向临时目录时保留（例如先放好了用户命令）。
+func isolateHome(t *testing.T) {
+	t.Helper()
+	if h := os.Getenv("MIAO_HOME"); h != "" && strings.HasPrefix(h, os.TempDir()) {
+		return
+	}
+	t.Setenv("MIAO_HOME", t.TempDir())
 }

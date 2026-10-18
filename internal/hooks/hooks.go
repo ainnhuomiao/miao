@@ -1,7 +1,7 @@
 // Package hooks 在工具调用前后、回合结束时执行用户配置的 shell 命令。
 //
 // 配置来源：
-//   - 用户级：~/.config/miao/config.json 的 "hooks" 字段，直接生效；
+//   - 用户级：~/.miao/config.json 的 "hooks" 字段，直接生效；
 //   - 项目级：<工作区>/.miao/hooks.json（没有 .miao 时读 .agnet），第一次运行前要用户确认，确认过的按文件哈希记住，
 //     文件内容一变就重新确认（防止克隆陌生仓库后自动执行别人的命令）。
 //
@@ -130,8 +130,8 @@ func Load(workspace string, approve func() ApproveFunc) (*Runner, error) {
 			}
 		}
 	}
-	if workspace != "" {
-		p := filepath.Join(appdir.ProjectDir(workspace), "hooks.json")
+	if pd := appdir.ProjectDir(workspace); workspace != "" && pd != "" {
+		p := filepath.Join(pd, "hooks.json")
 		if data, err := os.ReadFile(p); err == nil {
 			var s Set
 			if err := json.Unmarshal(data, &s); err != nil {
@@ -153,7 +153,7 @@ func (r *Runner) Empty() bool { return r == nil || (r.user.empty() && r.project.
 // Summary 用于 /hooks 显示。
 func (r *Runner) Summary() string {
 	if r.Empty() {
-		return "没有配置 hook。用户级写在 ~/.config/miao/config.json 的 \"hooks\" 里，项目级写在 .miao/hooks.json。"
+		return "没有配置 hook。用户级写在 ~/.miao/config.json 的 \"hooks\" 里，项目级写在 .miao/hooks.json。"
 	}
 	var b strings.Builder
 	b.WriteString("Hooks：")
@@ -355,7 +355,7 @@ func truncate(s string, n int) string {
 	return s[:n] + "\n…（已截断）"
 }
 
-// ---- 信任记录：~/.config/miao/trusted_hooks.json，{"<hooks.json 绝对路径>": "<sha256>"} ----
+// ---- 信任记录：~/.miao/trusted_hooks.json，{"<hooks.json 绝对路径>": "<sha256>"} ----
 
 func userConfigPath() (string, error) {
 	dir, err := appdir.ConfigDir()
@@ -421,7 +421,7 @@ func saveTrust(path, hash string) error {
 	m := readTrust()
 	m[path] = hash
 	data, _ := json.MarshalIndent(m, "", "  ")
-	if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
 		return err
 	}
 	tmp := p + ".tmp"

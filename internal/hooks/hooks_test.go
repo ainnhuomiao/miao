@@ -7,16 +7,18 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ainnhuomiao/miao/internal/appdir"
 )
 
 func setup(t *testing.T, user, project string) string {
 	t.Helper()
 	cfg := t.TempDir()
-	t.Setenv("XDG_CONFIG_HOME", cfg)
+	t.Setenv("MIAO_HOME", cfg)
 	ws := t.TempDir()
 	if user != "" {
-		os.MkdirAll(filepath.Join(cfg, "miao"), 0o755)
-		os.WriteFile(filepath.Join(cfg, "miao", "config.json"), []byte(user), 0o644)
+		os.MkdirAll(cfg, 0o755)
+		os.WriteFile(filepath.Join(cfg, "config.json"), []byte(user), 0o644)
 	}
 	if project != "" {
 		os.MkdirAll(filepath.Join(ws, ".miao"), 0o755)
@@ -126,7 +128,10 @@ func fileExists(p string) bool { _, err := os.Stat(p); return err == nil }
 func TestProjectHooksOldDirAndTrustSurvivesRename(t *testing.T) {
 	home := t.TempDir()
 	t.Setenv("HOME", home)
+	t.Setenv("MIAO_HOME", "")
 	t.Setenv("XDG_CONFIG_HOME", "")
+	t.Setenv("XDG_DATA_HOME", "")
+	t.Setenv("XDG_STATE_HOME", "")
 	ws := t.TempDir()
 	content := []byte(`{"stop":[{"command":"touch ran"}]}`)
 	oldHooks := filepath.Join(ws, ".agnet", "hooks.json")
@@ -138,9 +143,7 @@ func TestProjectHooksOldDirAndTrustSurvivesRename(t *testing.T) {
 	os.MkdirAll(filepath.Join(home, ".config", "agnet"), 0o755)
 	os.WriteFile(filepath.Join(home, ".config", "agnet", "trusted_hooks.json"), []byte(trust), 0o600)
 	// 模拟启动迁移
-	if err := os.Rename(filepath.Join(home, ".config", "agnet"), filepath.Join(home, ".config", "miao")); err != nil {
-		t.Fatal(err)
-	}
+	appdir.Migrate()
 
 	asked := 0
 	approve := func() ApproveFunc {
