@@ -24,6 +24,7 @@ func Run(ag *agent.Agent, modelName string) error {
 	p := tea.NewProgram(m,
 		tea.WithAltScreen(),
 		tea.WithMouseCellMotion(),
+		tea.WithFPS(30), // 与流式合并刷新的 33ms 对齐，降低空闲 CPU
 	)
 
 	ag.SetApprover(func(ctx context.Context, toolName, display string, args json.RawMessage) (bool, error) {
