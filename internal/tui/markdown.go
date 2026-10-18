@@ -41,7 +41,7 @@ func renderMarkdown(s string, width int) string {
 		// 行内代码：主题 peach 色文字，不加底色。
 		cfg.Code.StylePrimitive.Color = &codeFG
 		cfg.Code.StylePrimitive.BackgroundColor = nil
-		r, err := glamour.NewTermRenderer(glamour.WithStyles(cfg), glamour.WithWordWrap(width))
+		r, err := glamour.NewTermRenderer(glamour.WithStyles(cfg), glamour.WithWordWrap(width), glamour.WithChromaFormatter(chromaFormatterName))
 		if err != nil {
 			return wrapText(s, width)
 		}
