@@ -1,11 +1,14 @@
 package tui
 
 import (
+	"fmt"
+	"github.com/muesli/termenv"
 	"os"
 	"os/exec"
 	"path/filepath"
 	"strings"
 	"testing"
+	"unicode/utf8"
 
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
@@ -122,5 +125,35 @@ func TestFileTreePreviewAndMention(t *testing.T) {
 	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
 	if m.side.tree.preview != nil {
 		t.Fatal("esc should close the preview")
+	}
+}
+
+func TestFileTreeFitsWindow(t *testing.T) {
+	old := lipgloss.ColorProfile()
+	lipgloss.SetColorProfile(termenv.TrueColor)
+	defer lipgloss.SetColorProfile(old)
+	gitRepo(t)
+	os.MkdirAll("big", 0o755)
+	for i := 0; i < 60; i++ {
+		os.WriteFile(filepath.Join("big", fmt.Sprintf("a_very_long_file_name_number_%02d_test.go", i)), []byte("x\n"), 0o644)
+	}
+	m := newTestModel(t, 120, 30, "ok")
+	m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	selectTree(t, m, "big")
+	m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	for i := 0; i < 70; i++ {
+		m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		lines := strings.Split(m.View(), "\n")
+		if len(lines) != 30 {
+			t.Fatalf("step %d: view has %d lines, want 30", i, len(lines))
+		}
+		for j, l := range lines {
+			if !utf8.ValidString(l) {
+				t.Fatalf("step %d line %d invalid utf8: %q", i, j, l)
+			}
+			if w := lipgloss.Width(l); w > 120 {
+				t.Fatalf("step %d line %d too wide: %d", i, j, w)
+			}
+		}
 	}
 }
