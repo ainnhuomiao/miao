@@ -22,7 +22,7 @@
           inherit version;
           src = self;
           # go.mod / go.sum 一变就要更新：先改成 pkgs.lib.fakeHash，nix build 报出的 got 填回来
-          vendorHash = "sha256-Vn1aM3QRGsg8p5BZCSkuLIbSZUYWBO8eEf6KVrTE7oc=";
+          vendorHash = "sha256-pGsoLPrUvy03o8xSc/6brOCDuof1gMEf9eA/70RkyIY=";
           subPackages = [ "cmd/miao" ];
           env.CGO_ENABLED = 0;
           ldflags = [
