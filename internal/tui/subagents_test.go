@@ -75,8 +75,11 @@ func TestSubagentUsageCounted(t *testing.T) {
 	ch := make(chan streamEventMsg)
 	m.events = ch
 	m.handleStreamEvent(streamEventMsg{kind: agent.EventSubagentUsage, usage: &llm.Usage{PromptTokens: 7, CompletionTokens: 3, TotalTokens: 10}})
-	if m.usage == nil || m.usage.TotalTokens != 10 || m.sub.tokens != 10 || m.ctxTokens != 100 {
-		t.Fatalf("子代理用量应计入会话但不改 ctxTokens：%+v ctx=%d", m.usage, m.ctxTokens)
+	if m.usage != nil {
+		t.Fatalf("子代理用量不应混进主循环：%+v", m.usage)
+	}
+	if m.subUsage == nil || m.subUsage.TotalTokens != 10 || m.sub.tokens != 10 || m.ctxTokens != 100 {
+		t.Fatalf("子代理用量应单独累计且不改 ctxTokens：sub=%+v ctx=%d", m.subUsage, m.ctxTokens)
 	}
 }
 
@@ -131,8 +134,11 @@ func TestSubagentsMenuSavesConfig(t *testing.T) {
 	}
 	m.palette.sel = 0
 	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if mgr.Config().Enabled || reg.Has("task") {
+	if mgr.Config().Enabled {
 		t.Fatal("再次 Enter 应关闭")
+	}
+	if !reg.Has("task") {
+		t.Fatal("关闭后仍应保留 task 定义")
 	}
 	if !strings.Contains(helpText, "/subagents") {
 		t.Fatal("/help 应列出 /subagents")

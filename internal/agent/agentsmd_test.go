@@ -87,11 +87,15 @@ func TestGenerateAgentsMD(t *testing.T) {
 }
 
 func TestApplyAgentsMDReplacesOldBlock(t *testing.T) {
-	a := New(nil, WithAgentsMD("SYS", "旧规则", false), nil)
+	a := New(nil, "SYS", nil)
+	a.SetProjectContext("旧规则", false, "")
 	a.ApplyAgentsMD("新规则", false)
-	got := a.systemPrompt()
-	if !strings.Contains(got, "新规则") || strings.Contains(got, "旧规则") || !strings.HasPrefix(got, "SYS") {
-		t.Fatalf("got %q", got)
+	if a.systemPrompt() != "SYS" {
+		t.Fatalf("不应改系统提示词：%q", a.systemPrompt())
+	}
+	h := a.History()
+	if len(h) != 1 || !strings.Contains(h[0].Content, "项目说明已更新") || !strings.Contains(h[0].Content, "新规则") || strings.Contains(h[0].Content, "旧规则") {
+		t.Fatalf("应追加更新 reminder：%+v", h)
 	}
 	if !a.AgentsMDLoaded() {
 		t.Fatal("应标记已加载")

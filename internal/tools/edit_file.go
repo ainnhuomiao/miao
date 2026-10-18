@@ -13,7 +13,7 @@ import (
 // registerEditFile 注册 edit_file：把文件里唯一出现的 old_string 换成 new_string，写入前需 Approver 确认。
 func registerEditFile(r *Registry) {
 	r.Register(Tool{
-		Def: toolDef("edit_file", "局部修改工作区内的已有文本文件：把唯一出现的 old_string 替换为 new_string（每次修改都需用户确认）。old_string 必须与文件内容逐字一致（含缩进），且在文件中只出现一次；不唯一时请多带几行上下文。新建文件请用 write_file。", map[string]any{
+		Def: toolDef("edit_file", "局部修改已有文本文件：把恰好出现一次的 old_string 换成 new_string（需确认）。改现有文件用这个；新建或整文件重写用 write_file。改之前先 read_file。匹配不到时先读文件确认原文再重试；出现多次时多带几行上下文直到唯一。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"path":       map[string]any{"type": "string", "description": "相对工作区根目录的文件路径"},
@@ -68,10 +68,10 @@ func registerEditFile(r *Registry) {
 			}
 			switch n := strings.Count(old, in.OldString); n {
 			case 0:
-				return Result{Content: "在 " + rel + " 中没有找到 old_string，请先 read_file 确认原文（含缩进和空白）", IsError: true}
+				return Result{Content: "old_string 未找到——先 read_file 确认当前内容再重试", IsError: true}
 			case 1:
 			default:
-				return Result{Content: fmt.Sprintf("old_string 在 %s 中出现了 %d 次，必须唯一；请多带几行上下文", rel, n), IsError: true}
+				return Result{Content: fmt.Sprintf("old_string 在 %s 中出现了 %d 次，必须唯一——先 read_file 看原文，再多带几行上下文后重试", rel, n), IsError: true}
 			}
 			updated := strings.Replace(old, in.OldString, in.NewString, 1)
 			if len(updated) > maxWriteBytes {
@@ -105,7 +105,8 @@ func registerEditFile(r *Registry) {
 				return Result{Content: "写入失败: " + err.Error(), IsError: true}
 			}
 			msg := fmt.Sprintf("已修改 %s（+%d -%d）", rel, add, del)
-			return Result{Content: msg + diagnoseFile(ctx, r.workspace, rel)}
+			r.noteEdited(rel)
+			return Result{Content: msg}
 		},
 	})
 }

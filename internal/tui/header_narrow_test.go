@@ -10,7 +10,7 @@ import (
 func TestHeaderNarrowKeepsPercent(t *testing.T) {
 	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	for w := 30; w <= 90; w++ {
-		m := &Model{modelName: "deepseek-flash", width: w, ctxTokens: 54000}
+		m := &Model{modelName: "deepseek-flash", width: w, ctxTokens: 420_000}
 		line := strings.SplitN(m.headerView(), "\n", 2)[0]
 		if lipgloss.Width(line) > w {
 			t.Fatalf("宽 %d 时顶栏溢出：%q", w, line)

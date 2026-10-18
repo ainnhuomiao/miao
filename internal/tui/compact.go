@@ -40,8 +40,14 @@ func (m *Model) startCompact(auto bool) tea.Cmd {
 	m.streamStart = time.Now()
 	m.cancel = cancel
 	ag := m.ag
+	skipBelow := 0
+	if auto {
+		if w := contextWindow(m.modelName); w > 0 {
+			skipBelow = w * autoCompactPct / 100
+		}
+	}
 	run := func() tea.Msg {
-		res, err := ag.Compact(ctx, compactKeepTurns)
+		res, err := ag.Compact(ctx, compactKeepTurns, skipBelow)
 		return compactDoneMsg{res: res, err: err, auto: auto}
 	}
 	return tea.Batch(run, m.spinner.Tick)
@@ -65,7 +71,11 @@ func (m *Model) handleCompactDone(msg compactDoneMsg) (tea.Model, tea.Cmd) {
 		if msg.auto {
 			prefix = "上下文已用 80%，自动压缩"
 		}
-		m.notice(fmt.Sprintf("%s %s → %s", prefix, formatTokens(before), formatTokens(msg.res.After)))
+		if !msg.res.Summarized && msg.res.Trimmed > 0 {
+			m.notice(fmt.Sprintf("已折叠早期工具输出 %s → %s", formatTokens(before), formatTokens(msg.res.After)))
+		} else {
+			m.notice(fmt.Sprintf("%s %s → %s", prefix, formatTokens(before), formatTokens(msg.res.After)))
+		}
 		m.saveCurrentSession()
 	}
 	m.refreshViewport(true)

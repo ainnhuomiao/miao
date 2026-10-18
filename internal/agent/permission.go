@@ -34,7 +34,14 @@ func (m PermissionMode) String() string {
 // AllowCommandsEnv 是命令白名单环境变量，逗号分隔，按前缀匹配，如 "go test,git status,make"。
 const AllowCommandsEnv = config.EnvPrefix + "ALLOW_COMMANDS"
 
-const planModeNote = "\n\n当前处于「只读规划」模式：只能读取和搜索文件、给出方案，不要尝试写文件或执行有副作用的命令（这类调用会被直接拒绝）。等用户切回其他模式后再动手修改。"
+const planModeNote = `<system-reminder>
+已进入只读规划模式，直到用户用 /apply 批准或切换模式。用户说“实现某某”时，意思是规划如何实现，而不是动手。
+先用只读的读取、搜索、检查把方案落到仓库的真实代码上；不要写文件、改配置、运行会改写已跟踪文件的格式化或生成命令，也不要提交。
+为了保持请求缓存稳定，各模式下工具列表不变；写入类工具仍会列出，但在本模式下不要使用。
+能查到的事实自己查，只有需要用户做决定的问题才问。
+方案要完整到可以直接实施：目标与验收标准、按模块列出改动、涉及的接口和数据变化、边界情况、测试，以及明确的假设。
+写完方案就停下，等用户 /apply；不要再问“要我开始吗”。
+</system-reminder>`
 
 type permissions struct {
 	mu         sync.Mutex
@@ -53,19 +60,35 @@ func (a *Agent) Mode() PermissionMode {
 	return a.perm.mode
 }
 
-// SetMode 设置权限模式。
+// SetMode 设置权限模式。说明只记在 pendingModeNote，下次 Send 开头写入历史。
 func (a *Agent) SetMode(m PermissionMode) {
 	a.perm.mu.Lock()
+	old := a.perm.mode
 	a.perm.mode = m
 	a.perm.mu.Unlock()
+	if old != m {
+		a.noteMode(m)
+	}
 }
 
 // CycleMode 切到下一个模式并返回它。
 func (a *Agent) CycleMode() PermissionMode {
 	a.perm.mu.Lock()
-	defer a.perm.mu.Unlock()
 	a.perm.mode = (a.perm.mode + 1) % 3
-	return a.perm.mode
+	m := a.perm.mode
+	a.perm.mu.Unlock()
+	a.noteMode(m)
+	return m
+}
+
+func (a *Agent) noteMode(m PermissionMode) {
+	note := planModeNote
+	if m != ModePlan {
+		note = wrapReminder("已切换到「" + m.String() + "」模式。")
+	}
+	a.mu.Lock()
+	a.pendingModeNote = note
+	a.mu.Unlock()
 }
 
 // AllowForSession 记下「本会话总是允许」：文件编辑整类放行，命令按完全相同的命令行放行。

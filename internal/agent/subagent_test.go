@@ -41,7 +41,7 @@ func contains(ss []string, s string) bool {
 	return false
 }
 
-func TestToolListReflectsSubagentSettingPerRequest(t *testing.T) {
+func TestToolListStableWhenSubagentToggled(t *testing.T) {
 	t.Setenv("XDG_CONFIG_HOME", t.TempDir())
 	ws := t.TempDir()
 	_ = os.WriteFile(filepath.Join(ws, "x"), nil, 0o644)
@@ -54,8 +54,16 @@ func TestToolListReflectsSubagentSettingPerRequest(t *testing.T) {
 	if err := a.Send(context.Background(), "hi", nil); err != nil {
 		t.Fatal(err)
 	}
-	if contains(c.names[0], "task") || !contains(c.names[1], "task") {
-		t.Fatalf("工具列表应随设置变化：%v", c.names)
+	if !contains(c.names[0], "task") || !contains(c.names[1], "task") {
+		t.Fatalf("task 应始终在工具列表里：%v", c.names)
+	}
+	if len(c.names[0]) != len(c.names[1]) {
+		t.Fatalf("开关不应改变本会话工具列表：%v", c.names)
+	}
+	for i := range c.names[0] {
+		if c.names[0][i] != c.names[1][i] {
+			t.Fatalf("工具顺序应稳定：%v", c.names)
+		}
 	}
 	if !isReadOnlyTool("task") {
 		t.Fatal("task 应可与只读工具并发批处理")

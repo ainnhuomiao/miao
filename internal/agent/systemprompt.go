@@ -7,10 +7,8 @@ import "strings"
 const ModelPlaceholder = "{{MODEL}}"
 
 // systemPrompt 返回本次请求实际使用的系统提示词。
+// 内容必须稳定：权限模式改动写进历史末尾，不改这段前缀，以便命中 prompt cache。
 func (a *Agent) systemPrompt() string {
-	if a.Mode() == ModePlan {
-		return a.basePrompt() + planModeNote
-	}
 	return a.basePrompt()
 }
 

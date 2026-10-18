@@ -30,7 +30,7 @@ func TestEditFileErrors(t *testing.T) {
 	os.WriteFile(filepath.Join(dir, "a.txt"), []byte("x x x"), 0o644)
 	cases := map[string]string{
 		`{"path":"a.txt","old_string":"x","new_string":"y"}`:    "3 次",
-		`{"path":"a.txt","old_string":"zz","new_string":"y"}`:   "没有找到",
+		`{"path":"a.txt","old_string":"zz","new_string":"y"}`:   "未找到",
 		`{"path":"a.txt","old_string":"","new_string":"y"}`:     "不能为空",
 		`{"path":"nope.txt","old_string":"x","new_string":"y"}`: "不存在",
 		`{"path":".env","old_string":"x","new_string":"y"}`:     "敏感",

@@ -79,22 +79,28 @@ func (r *Registry) startBackground(name string, args []string, display string) R
 
 func (j *bgJob) status() string {
 	state := fmt.Sprintf("运行中（%s）", time.Since(j.start).Round(time.Second))
+	done := false
+	code := 0
 	select {
 	case <-j.done:
+		done = true
 		state = "已结束"
 		if j.err != nil {
 			state += "（" + j.err.Error() + "）"
+			code = commandExitCode(j.err)
 		}
 	default:
 	}
 	text := strings.TrimRight(j.out.String(), "\n")
-	if len(text) > maxCommandOutput {
-		text = "…(只显示最后部分)\n" + text[len(text)-maxCommandOutput:]
-	}
+	text = truncateOutput(text, maxCommandOutput)
 	if text == "" {
 		text = "(暂无输出)"
 	}
-	return "状态：" + state + "\n" + text
+	out := "状态：" + state + "\n" + text
+	if done {
+		return withExitCode(out, code)
+	}
+	return out
 }
 
 // KillJobs 结束所有后台任务（程序退出时调用），连同子进程一起。
@@ -144,7 +150,7 @@ func killGroup(cmd *exec.Cmd) error {
 // registerCommandOutput 注册 command_output：查看或结束后台任务。
 func registerCommandOutput(r *Registry) {
 	r.Register(Tool{
-		Def: toolDef("command_output", "查看 run_command 后台任务的状态和输出，或用 kill=true 结束它。不带 id 时列出所有后台任务。", map[string]any{
+		Def: toolDef("command_output", "查看或结束后台 run_command 任务。不带 id 列出全部；给 id 看该任务输出；kill=true 结束它。输出过长时同样保留开头和末尾。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"id":   map[string]any{"type": "string", "description": "后台任务 id，如 bg1"},

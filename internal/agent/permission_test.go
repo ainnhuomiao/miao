@@ -6,6 +6,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/ainnhuomiao/miao/internal/llm"
 	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
@@ -104,8 +105,20 @@ func TestPlanModePromptAndEnv(t *testing.T) {
 		t.Fatal("默认不应有规划说明")
 	}
 	a.SetMode(ModePlan)
-	if !strings.HasPrefix(a.systemPrompt(), "SYS") || !strings.Contains(a.systemPrompt(), "只读规划") {
-		t.Fatalf("规划模式提示缺失：%q", a.systemPrompt())
+	if a.systemPrompt() != "SYS" {
+		t.Fatalf("规划模式不应改系统提示词：%q", a.systemPrompt())
+	}
+	if a.pendingModeNote == "" || !strings.Contains(a.pendingModeNote, "只读规划") {
+		t.Fatalf("规划说明应写入历史备注：%q", a.pendingModeNote)
+	}
+	a.history = []llm.Message{{Role: llm.RoleUser, Content: "hi"}, {Role: llm.RoleAssistant, Content: "yo"}}
+	a.CycleMode()
+	a.CycleMode()
+	if len(a.History()) != 2 {
+		t.Fatalf("切模式不应立刻改历史：%+v", a.History())
+	}
+	if !strings.Contains(a.pendingModeNote, "每次询问") && !strings.Contains(a.pendingModeNote, "自动同意") {
+		t.Fatalf("连按应只保留最后一次：%q", a.pendingModeNote)
 	}
 	t.Setenv(AllowCommandsEnv, " go test , git  status ,")
 	a.SetAllowedCommands(AllowedCommandsFromEnv())

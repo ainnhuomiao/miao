@@ -158,14 +158,14 @@ func formatResults(lines []string, total int) string {
 	}
 	out := strings.Join(lines, "\n")
 	if total > maxSearchResults {
-		out += fmt.Sprintf("\n……已截断（共 %d 条，只显示前 %d 条）", total, maxSearchResults)
+		out += fmt.Sprintf("\n……已截断（共 %d 条，只显示前 %d 条。缩小 pattern 或改 path 再搜。）", total, maxSearchResults)
 	}
 	return out
 }
 
 func registerSearchTools(r *Registry) {
 	r.Register(Tool{
-		Def: toolDef("glob", "按通配符查找工作区内的文件（支持 ** 递归，如 **/*.go），返回相对工作区的路径，每行一个。", map[string]any{
+		Def: toolDef("glob", "按通配符查找工作区内的文件路径（如 **/*.go），每行一个相对路径。不知道文件名时用这个；读内容再用 read_file。最多返回 100 条，超出时缩小 pattern 或改 path。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"pattern": map[string]any{"type": "string", "description": "通配符模式，相对 path，如 **/*.go"},
@@ -217,7 +217,7 @@ func registerSearchTools(r *Registry) {
 	})
 
 	r.Register(Tool{
-		Def: toolDef("grep", "用正则在工作区文件中搜索内容，输出“文件:行号: 内容”。", map[string]any{
+		Def: toolDef("grep", "用正则搜索工作区内的文件内容，输出 文件:行号: 内容。定位代码时用；打开匹配文件再用 read_file。最多 100 条，超出时收紧 pattern、加 glob 或缩小 path。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"pattern":     map[string]any{"type": "string", "description": "Go 正则表达式"},

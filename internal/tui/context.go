@@ -20,6 +20,7 @@ var contextWindows = []struct {
 	{"gpt-4o", 128_000},
 	{"claude", 200_000},
 	{"gemini", 1_000_000},
+	{"deepseek-flash", 1_000_000},
 	{"deepseek", 128_000},
 	{"qwen", 128_000},
 	{"kimi", 128_000},

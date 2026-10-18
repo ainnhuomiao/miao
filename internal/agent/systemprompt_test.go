@@ -17,8 +17,7 @@ func (c *switchClient) SetModel(name string) { c.model = name }
 
 func TestSystemPromptFollowsModel(t *testing.T) {
 	c := &switchClient{model: "gpt-a"}
-	sys := WithAgentsMD("模型是 \""+ModelPlaceholder+"\"。", "项目规则", false)
-	a := New(c, sys, nil)
+	a := New(c, "模型是 \""+ModelPlaceholder+"\"。", nil)
 
 	first := a.requestMessages()[0].Content
 	if !strings.Contains(first, `模型是 "gpt-a"`) {
@@ -29,8 +28,8 @@ func TestSystemPromptFollowsModel(t *testing.T) {
 	if !strings.Contains(got, `模型是 "gpt-b"`) || strings.Contains(got, "gpt-a") {
 		t.Fatalf("切换后应使用新模型名：%q", got)
 	}
-	if !strings.HasSuffix(got, "<agents_md>\n项目规则\n</agents_md>") {
-		t.Fatalf("AGENTS.md 应仍在末尾：%q", got)
+	if strings.Contains(got, "agents_md") {
+		t.Fatalf("AGENTS.md 不应进系统提示词：%q", got)
 	}
 }
 

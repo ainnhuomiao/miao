@@ -22,7 +22,7 @@
 - `/undo` 撤销文件修改，`/diff` 查看改动，`/commit` 让模型写提交信息
 - 图片输入：`Ctrl+V` 粘贴剪贴板图片，或用 `@` 引用图片文件；`@` 也能引用普通文件
 - `/model` 运行时切换模型
-- `/compact` 压缩上下文（用量到 80% 时自动触发，之前会先折叠早期工具输出）；`/export` 导出 Markdown 到数据目录（会脱敏）
+- `/compact` 压缩上下文（用量到 80% 时自动触发，先折叠早期工具输出；摘要请求复用当前对话前缀）；`/export` 导出 Markdown 到数据目录（会脱敏）
 - `/apply` 确认只读规划方案并切到编辑模式执行；`/cost` 查看估算花费；`/init` 生成 `AGENTS.md`
 - `!<命令>` 在工作区直通执行 shell；`miao doctor` 检查 API、bwrap、剪贴板和终端
 - `-c` / `--resume` 启动时恢复最近一次会话
@@ -89,7 +89,8 @@ miao
 | `MIAO_MAX_TOOL_ROUNDS` | 一轮对话最多工具循环次数，默认 32 |
 | `MIAO_SANDBOX` | `1` 时用 bubblewrap 把命令关在「根只读、工作区可写」的命名空间里（需安装 `bwrap`；`go`/`git` 不套） |
 | `MIAO_PRICE_IN` / `MIAO_PRICE_OUT` | 每百万 token 的美元单价，底栏显示累计花费 |
-| `MIAO_SESSION_REDACT` | `0` 时关闭会话落盘脱敏（默认会把 API Key 等替换成 `***`） |
+| `MIAO_PRICE_CACHE` | 缓存命中相对输入价的倍率（默认 DeepSeek/Claude 0.1，其它 0.25） |
+| `MIAO_SESSION_REDACT` | `0` 时 `/export` 也不脱敏（会话落盘始终保存原文，目录权限 0700） |
 
 兼容旧名：连接配置的 `AGENT_API_KEY` / `AGENT_BASE_URL` / `AGENT_MODEL` / `AGENT_WORKSPACE` 仍然有效（还会回退到 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`）；其它变量的旧名 `AGNET_*`（如 `AGNET_MODELS`）也仍会读取。新旧都设置时 `MIAO_*` 优先。
 

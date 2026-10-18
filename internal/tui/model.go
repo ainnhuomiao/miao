@@ -129,11 +129,13 @@ type Model struct {
 
 	todoPanel bool // Ctrl+T 展开任务清单
 
-	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
+	// usage 是最近一轮主代理请求的累计用量（不含子代理）。
 	usage      *llm.Usage
-	ctxTokens  int     // 最近一次请求的 prompt+completion，即当前上下文长度（顶栏吃豆人）
-	usageFresh bool    // 新一轮开始后的第一份用量覆盖旧值，之后累加
-	costUSD    float64 // 本会话按模型单价累计的估算花费
+	lastReq    *llm.Usage // 主代理最近一次请求，底栏缓存命中率用它
+	subUsage   *llm.Usage // 子代理累计用量，与主循环分开统计
+	ctxTokens  int        // 最近一次请求的 prompt+completion，即当前上下文长度（顶栏吃豆人）
+	usageFresh bool       // 新一轮开始后的第一份用量覆盖旧值，之后累加
+	costUSD    float64    // 本会话按模型单价累计的估算花费
 
 	store *session.Store
 	sess  *session.Session
@@ -307,6 +309,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleStreamEvent(msg)
 
 	case approvalRequestMsg:
+		ringBell()
 		m.approval = &approvalState{
 			toolName: msg.toolName,
 			display:  msg.display,
@@ -601,11 +604,7 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 		m.refreshViewport(false)
 		m.refreshDrawer()
 		if msg.err == nil {
-			if n := m.ag.TrimOldToolResults(compactKeepTurns, 1500); n > 0 {
-				m.ctxTokens = m.ag.EstimateContext()
-				m.notice(fmt.Sprintf("已折叠 %d 条早期工具输出。", n))
-				m.saveCurrentSession()
-			}
+			ringBell()
 			if m.needAutoCompact() {
 				return m, m.startCompact(true)
 			}
@@ -614,15 +613,22 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 	}
 
 	switch msg.kind {
+	case agent.EventNotice:
+		if msg.toolResult != "" {
+			m.notice(msg.toolResult)
+		}
+		return m, waitForEvent(m.events)
 	case agent.EventUsage:
 		if msg.usage != nil {
 			m.ctxTokens = msg.usage.PromptTokens + msg.usage.CompletionTokens
-			if usd, ok := llm.EstimateCostUSD(m.modelName, *msg.usage, priceOverride("PRICE_IN"), priceOverride("PRICE_OUT")); ok {
+			u := *msg.usage
+			m.lastReq = &u
+			if usd, ok := llm.EstimateCostUSD(m.modelName, *msg.usage, priceOverride("PRICE_IN"), priceOverride("PRICE_OUT"), priceOverride("PRICE_CACHE")); ok {
 				m.costUSD += usd
 			}
 			if m.usageFresh || m.usage == nil {
-				u := *msg.usage
-				m.usage = &u
+				cp := *msg.usage
+				m.usage = &cp
 				m.usageFresh = false
 			} else {
 				m.usage.PromptTokens += msg.usage.PromptTokens
@@ -858,6 +864,8 @@ func (m *Model) saveCurrentSession() {
 func (m *Model) beginNewSession(notice string) {
 	m.ag.Reset()
 	m.usage = nil
+	m.lastReq = nil
+	m.subUsage = nil
 	m.ctxTokens = 0
 	m.usageFresh = false
 	m.costUSD = 0
@@ -927,6 +935,8 @@ func (m *Model) loadSession(id string) {
 		m.applyModel(sess.Model)
 	}
 	m.usage = nil
+	m.lastReq = nil
+	m.subUsage = nil
 	m.ctxTokens = 0
 	m.usageFresh = false
 	m.costUSD = 0
@@ -950,6 +960,10 @@ func chatMessagesFromHistory(sess *session.Session) []chatMessage {
 	for _, msg := range sess.Messages {
 		switch msg.Role {
 		case llm.RoleUser:
+			c := strings.TrimSpace(msg.Content)
+			if strings.HasPrefix(c, "<system-reminder>") || strings.HasPrefix(c, agent.SummaryPrefix) || strings.HasPrefix(c, "（已切换到「") {
+				continue
+			}
 			out = append(out, chatMessage{role: roleUser, content: msg.Content, done: true})
 			out = append(out, imageNotices(msg.Images)...)
 		case llm.RoleAssistant:

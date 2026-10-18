@@ -4,7 +4,6 @@ import (
 	"context"
 	"fmt"
 	"strings"
-	"unicode/utf8"
 
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
@@ -12,45 +11,58 @@ import (
 // SummaryPrefix 标记由压缩生成的摘要消息，会话恢复和 UI 可据此识别。
 const SummaryPrefix = "[早前对话摘要]"
 
-const compactPrompt = `请把下面这段用户与助手（含工具调用结果）的早前对话压缩成一份简洁的中文摘要，供后续对话继续使用。
+const compactTrimMaxRunes = 1500
+
+func compactInstruction(keepTurns int) string {
+	return fmt.Sprintf(`请把上面这段对话中、最近 %d 轮用户提问之前的部分压缩成一份简洁的中文摘要，供后续对话继续使用。
 要求：
+- 只输出摘要正文，不要调用任何工具，不要复述最近 %d 轮的原文；
 - 保留用户的目标、已做出的决定、约束和偏好；
 - 保留涉及的文件路径、函数名、命令、关键数值和报错原文；
 - 说明已经完成了什么、还有什么没做完；
-- 不要寒暄，不要编造，用条目列出，尽量不超过 400 字。`
+- 不要寒暄，不要编造，用条目列出，尽量不超过 400 字。`, keepTurns, keepTurns)
+}
 
 // CompactResult 是一次压缩的前后估算。
 type CompactResult struct {
-	Before, After int // 估算 token
-	Dropped       int // 被摘要替换掉的消息数
+	Before, After int  // 估算 token
+	Dropped       int  // 被摘要替换掉的消息数
+	Trimmed       int  // 就地折叠的早期工具输出条数
+	Summarized    bool // 是否请求了模型摘要
 }
 
-// Compact 把除最近 keepTurns 轮以外的历史交给模型总结成一条摘要。
-// 只在用户消息处切分，保证 assistant 的 tool_calls 与对应 tool 结果不会被拆开。
-func (a *Agent) Compact(ctx context.Context, keepTurns int) (CompactResult, error) {
+// Compact 把除最近 keepTurns 轮以外的历史压缩。
+// 先折叠早期超长工具输出；若 skipBelow>0 且折叠后估算已低于该值，则不再请求模型。
+// 摘要请求复用当前对话前缀（同一段 system + 历史 + 工具定义），指令放在最后一条用户消息。
+func (a *Agent) Compact(ctx context.Context, keepTurns, skipBelow int) (CompactResult, error) {
 	if keepTurns < 1 {
 		keepTurns = 1
 	}
+	before := EstimateTokens(a.requestMessages())
+	trimmed := a.TrimOldToolResults(keepTurns, compactTrimMaxRunes)
+	afterTrim := EstimateTokens(a.requestMessages())
+	if skipBelow > 0 && afterTrim > 0 && afterTrim <= skipBelow {
+		return CompactResult{Before: before, After: afterTrim, Trimmed: trimmed}, nil
+	}
+
 	a.mu.Lock()
 	cut := splitPoint(a.history, keepTurns)
+	a.mu.Unlock()
 	if cut <= 0 {
-		a.mu.Unlock()
+		if trimmed > 0 {
+			return CompactResult{Before: before, After: afterTrim, Trimmed: trimmed}, nil
+		}
 		return CompactResult{}, fmt.Errorf("对话太短，暂时不需要压缩")
 	}
-	old := append([]llm.Message(nil), a.history[:cut]...)
-	a.mu.Unlock()
-	before := EstimateTokens(a.requestMessages())
 
-	var sb strings.Builder
-	for _, m := range old {
-		sb.WriteString(renderForSummary(m))
-		sb.WriteString("\n")
+	var defs []llm.ToolDef
+	if a.tools != nil {
+		defs = a.tools.Definitions()
 	}
-	req := llm.ChatRequest{Messages: []llm.Message{
-		{Role: llm.RoleSystem, Content: compactPrompt},
-		{Role: llm.RoleUser, Content: sb.String()},
-	}}
-	res, err := a.client.StreamChat(ctx, req, func(llm.Delta) error { return ctx.Err() })
+	msgs := append(a.requestMessages(), llm.Message{Role: llm.RoleUser, Content: compactInstruction(keepTurns)})
+	res, err := a.client.StreamChat(ctx, llm.ChatRequest{Messages: msgs, Tools: defs}, func(llm.Delta) error {
+		return ctx.Err()
+	})
 	if err != nil {
 		return CompactResult{}, err
 	}
@@ -60,8 +72,12 @@ func (a *Agent) Compact(ctx context.Context, keepTurns int) (CompactResult, erro
 	}
 
 	a.mu.Lock()
-	kept := a.history[cut:]
-	next := make([]llm.Message, 0, len(kept)+2)
+	kept := dropLeadingBaseline(a.history[cut:])
+	baseline := a.baselineReminderLocked()
+	next := make([]llm.Message, 0, len(kept)+3)
+	if baseline != "" {
+		next = append(next, llm.Message{Role: llm.RoleUser, Content: baseline})
+	}
 	next = append(next,
 		llm.Message{Role: llm.RoleUser, Content: SummaryPrefix + "\n" + summary},
 		llm.Message{Role: llm.RoleAssistant, Content: "好的，我已了解之前的对话内容，我们继续。"},
@@ -69,41 +85,50 @@ func (a *Agent) Compact(ctx context.Context, keepTurns int) (CompactResult, erro
 	next = append(next, kept...)
 	a.history = next
 	a.mu.Unlock()
-	return CompactResult{Before: before, After: EstimateTokens(a.requestMessages()), Dropped: cut}, nil
+	return CompactResult{
+		Before:     before,
+		After:      EstimateTokens(a.requestMessages()),
+		Dropped:    cut,
+		Trimmed:    trimmed,
+		Summarized: true,
+	}, nil
 }
 
-// splitPoint 返回保留最近 keepTurns 轮时的切分下标（该处是一条用户消息）；不足以压缩时返回 0。
+// splitPoint 返回保留最近 keepTurns 轮真实用户输入时的切分下标；不足以压缩时返回 0。
+// 模式说明和摘要消息不计入轮次。
 func splitPoint(h []llm.Message, keepTurns int) int {
 	seen := 0
 	for i := len(h) - 1; i >= 0; i-- {
-		if h[i].Role == llm.RoleUser {
-			seen++
-			if seen == keepTurns {
-				return i
-			}
+		if !isUserTurn(h[i]) {
+			continue
+		}
+		seen++
+		if seen == keepTurns {
+			return i
 		}
 	}
 	return 0
 }
 
-func renderForSummary(m llm.Message) string {
-	const maxTool = 2000 // 工具结果只取开头，避免摘要请求本身爆窗口
-	switch m.Role {
-	case llm.RoleTool:
-		c := m.Content
-		if utf8.RuneCountInString(c) > maxTool {
-			c = string([]rune(c)[:maxTool]) + "…（已截断）"
-		}
-		return "【工具 " + m.Name + " 结果】" + c
-	case llm.RoleAssistant:
-		s := "【助手】" + m.Content
-		for _, tc := range m.ToolCalls {
-			s += "\n【助手调用工具】" + tc.Function.Name + " " + tc.Function.Arguments
-		}
-		return s
-	default:
-		return "【用户】" + m.Content
+func isUserTurn(m llm.Message) bool {
+	if m.Role != llm.RoleUser {
+		return false
 	}
+	c := strings.TrimSpace(m.Content)
+	if strings.HasPrefix(c, SummaryPrefix) {
+		return false
+	}
+	if isReminder(m) {
+		return false
+	}
+	return true
+}
+
+func dropLeadingBaseline(h []llm.Message) []llm.Message {
+	if len(h) > 0 && isBaselineReminder(h[0]) {
+		return h[1:]
+	}
+	return h
 }
 
 // TrimOldToolResults 把早于最近 keepTurns 轮的超长工具结果裁成摘要，返回折叠条数。
@@ -144,7 +169,7 @@ func (a *Agent) EstimateContext() int {
 func EstimateTokens(msgs []llm.Message) int {
 	n := 0
 	for _, m := range msgs {
-		n += estimateText(m.Content) + 4 + llm.ImageTokens*len(m.Images)
+		n += estimateText(m.Content) + estimateText(m.ReasoningContent) + 4 + llm.ImageTokens*len(m.Images)
 		for _, tc := range m.ToolCalls {
 			n += estimateText(tc.Function.Name+tc.Function.Arguments) + 4
 		}

@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
+	"time"
 )
 
 func TestGoVetArgs(t *testing.T) {
@@ -42,6 +43,40 @@ func TestDiagnoseGoVetsPackageNotSingleFile(t *testing.T) {
 	got := diagnoseFile(context.Background(), dir, "pkg/a.go")
 	if got != "" {
 		t.Fatalf("同一包内的符号应能解析，不应报假错误：%q", got)
+	}
+}
+
+func TestFlushDiagnoseBatchesAndClears(t *testing.T) {
+	t.Setenv("MIAO_DIAGNOSE", "0")
+	r, err := NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if got := r.FlushDiagnose(context.Background()); got != "" {
+		t.Fatalf("empty: %q", got)
+	}
+	r.noteEdited("pkg/a.go")
+	r.noteEdited("pkg/b.go")
+	if got := r.FlushDiagnose(context.Background()); got != "" {
+		t.Fatalf("disabled: %q", got)
+	}
+	if got := r.FlushDiagnose(context.Background()); got != "" {
+		t.Fatalf("cleared: %q", got)
+	}
+}
+
+func TestFormatDiagnoseTimeout(t *testing.T) {
+	parent := context.Background()
+	dctx, cancel := context.WithDeadline(parent, time.Now().Add(-time.Second))
+	defer cancel()
+	got := formatDiagnose(parent, dctx, "tsc", "signal: killed", dctx.Err())
+	if !strings.Contains(got, "诊断超时，已跳过") || strings.Contains(got, "killed") {
+		t.Fatalf("超时不应把 signal: killed 交给模型：%q", got)
+	}
+	canceled, c := context.WithCancel(context.Background())
+	c()
+	if got := formatDiagnose(canceled, dctx, "tsc", "x", context.Canceled); got != "" {
+		t.Fatalf("父上下文取消应静默：%q", got)
 	}
 }
 

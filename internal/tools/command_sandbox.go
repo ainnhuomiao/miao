@@ -8,7 +8,7 @@ import (
 )
 
 // wrapSandbox 在 bubblewrap 可用时把命令关进「根只读、工作区可写」的命名空间。
-// go / git 需要工作区外的缓存目录，不套沙箱；MIAO_SANDBOX=0 可关闭。
+// 默认关闭；设 MIAO_SANDBOX=1 开启。go / git 需要工作区外的缓存目录，不套沙箱。
 func wrapSandbox(dir, name string, args []string) (string, []string) {
 	if !sandboxEnabled() || !sandboxable(name) {
 		return name, args

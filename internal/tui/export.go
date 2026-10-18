@@ -34,7 +34,7 @@ func (m *Model) exportSession(path string) {
 		}
 		path = filepath.Join(dir, name)
 	}
-	body := session.RedactSecrets(sessionMarkdown(m.modelName, msgs))
+	body := session.RedactForExport(sessionMarkdown(m.modelName, msgs))
 	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		m.notice("导出失败：" + err.Error())
 		return

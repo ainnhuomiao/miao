@@ -133,7 +133,7 @@ func TestAgent_ToolRoundTrip(t *testing.T) {
 	}
 	var sawTool bool
 	for _, m := range a.History() {
-		if m.Role == llm.RoleTool && m.Content == "secret" {
+		if m.Role == llm.RoleTool && strings.Contains(m.Content, "secret") {
 			sawTool = true
 		}
 	}
@@ -145,7 +145,7 @@ func TestAgent_ToolRoundTrip(t *testing.T) {
 		if e.Kind == EventToolStart && e.ToolName == "read_file" {
 			sawStart = true
 		}
-		if e.Kind == EventToolEnd && e.ToolResult == "secret" {
+		if e.Kind == EventToolEnd && strings.Contains(e.ToolResult, "secret") {
 			sawEnd = true
 		}
 	}
@@ -169,8 +169,8 @@ func TestAgent_RejectLengthTruncatedTools(t *testing.T) {
 	if err == nil || !strings.Contains(err.Error(), "长度截断") {
 		t.Fatalf("err = %v", err)
 	}
-	if len(a.History()) != 0 {
-		t.Fatalf("should rollback, got %d", len(a.History()))
+	if h := a.History(); len(h) != 1 || !isBaselineReminder(h[0]) {
+		t.Fatalf("失败后应只保留基线 reminder，got %+v", h)
 	}
 }
 
@@ -201,5 +201,40 @@ func TestAgent_MaxRounds(t *testing.T) {
 	}
 	if n := len(a.History()); n == 0 {
 		t.Fatal("超限时应保留历史，而不是 rollback")
+	}
+}
+
+type failOnceClient struct {
+	captureClient
+	calls int
+}
+
+func (c *failOnceClient) StreamChat(ctx context.Context, req llm.ChatRequest, onDelta llm.DeltaHandler) (llm.ChatResult, error) {
+	c.calls++
+	if c.calls == 1 {
+		return llm.ChatResult{}, errors.New("primary down")
+	}
+	return c.captureClient.StreamChat(ctx, req, onDelta)
+}
+
+func TestFallbackRestoresPrimary(t *testing.T) {
+	c := &failOnceClient{captureClient: captureClient{model: "primary"}}
+	a := New(c, "SYS", nil)
+	a.SetFallbackModel("backup")
+	var notice string
+	err := a.Send(context.Background(), "hi", func(e Event) error {
+		if e.Kind == EventNotice {
+			notice = e.ToolResult
+		}
+		return nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if c.Model() != "primary" {
+		t.Fatalf("应切回主模型，got %q", c.Model())
+	}
+	if !strings.Contains(notice, "备用模型 backup") {
+		t.Fatalf("应提示备用模型：%q", notice)
 	}
 }

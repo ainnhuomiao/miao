@@ -92,8 +92,8 @@ func hasDef(r *tools.Registry, name string) bool {
 
 func TestExposureFollowsEnabled(t *testing.T) {
 	m, reg := newMgr(t, &fakeClient{}, Defaults())
-	if hasDef(reg, ToolName) {
-		t.Fatal("关闭时不应暴露 task")
+	if !hasDef(reg, ToolName) {
+		t.Fatal("关闭时仍应保留 task 工具定义")
 	}
 	if err := m.SetConfig(Config{Enabled: true, Max: 2}); err != nil {
 		t.Fatal(err)
@@ -105,8 +105,12 @@ func TestExposureFollowsEnabled(t *testing.T) {
 		t.Fatalf("应已保存：%+v", c)
 	}
 	_ = m.SetConfig(Config{Enabled: false})
-	if hasDef(reg, ToolName) || !strings.Contains(reg.Call(context.Background(), ToolName, `{}`).Content, "未知工具") {
-		t.Fatal("关闭后应移除 task")
+	if !hasDef(reg, ToolName) {
+		t.Fatal("关闭后仍应保留 task 定义")
+	}
+	got := reg.Call(context.Background(), ToolName, `{}`)
+	if !got.IsError || !strings.Contains(got.Content, "子代理已关闭") {
+		t.Fatalf("关闭后调用应拒绝：%+v", got)
 	}
 }
 

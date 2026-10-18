@@ -154,8 +154,15 @@ func TestAtImageAttach(t *testing.T) {
 	m.input.SetValue("看 @图片.png")
 	m.submit()
 	collectStream(t, m)
-	if im := ag.History()[0].Images; len(im) != 1 || im[0].Name != "图片.png" {
-		t.Fatalf("@图片 应作为图片附加：%+v", im)
+	var im []llm.Image
+	for _, msg := range ag.History() {
+		if len(msg.Images) > 0 {
+			im = msg.Images
+			break
+		}
+	}
+	if len(im) != 1 || im[0].Name != "图片.png" {
+		t.Fatalf("@图片 应作为图片附加：%+v history=%+v", im, ag.History())
 	}
 	if strings.Contains(m.viewport.View(), "不是文本文件") {
 		t.Fatal("不应提示二进制")

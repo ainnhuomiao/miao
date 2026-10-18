@@ -9,7 +9,10 @@ import (
 	"strings"
 )
 
-const maxCommandOutput = 64 << 10 // 64 KiB
+const (
+	maxCommandOutput  = 16 << 10 // 头尾合计 16KiB
+	commandOutputKeep = 8 << 10  // 超出时各留 8KiB
+)
 
 // 白名单内静默执行；名单外需 Approver 确认后才跑。
 // 带路径的命令名始终拒绝（不允许绕过）。
@@ -24,7 +27,7 @@ var commandAllowlist = map[string]struct{}{
 func registerRunCommand(r *Registry) {
 	r.Register(Tool{
 		Def: toolDef("run_command",
-			"在工作区根目录执行命令（无 shell）。白名单内的只读用法直接执行；写文件、执行任意程序、访问工作区外路径都要确认。go test / go build 会编译并运行仓库里的代码。参数用独立字段传入。",
+			"在工作区执行命令（无 shell、无管道）。看文本文件用 read_file，不要 cat/head。白名单只读用法可直接跑；写文件、任意程序、越界路径需确认。结果最后一行是 [exit code: N]，失败先查原因再继续。输出过长时保留开头和末尾。长时间命令设 background=true，再用 command_output 查看。",
 			map[string]any{
 				"type": "object",
 				"properties": map[string]any{
@@ -43,7 +46,7 @@ func registerRunCommand(r *Registry) {
 					},
 					"background": map[string]any{
 						"type":        "boolean",
-						"description": "为 true 时放到后台运行（适合开发服务器、go run 等不会自己结束的命令），之后用 command_output 查看输出",
+						"description": "true 时后台运行，之后用 command_output 查看",
 					},
 				},
 				"required": []string{"command"},
@@ -128,8 +131,19 @@ func allowlistSummary() string {
 }
 
 func truncateOutput(s string, max int) string {
-	if len(s) <= max {
+	if max <= 0 || len(s) <= max {
 		return s
 	}
-	return s[:max] + "\n\n…(已截断)"
+	keep := commandOutputKeep
+	if max < keep*2 {
+		keep = max / 2
+	}
+	if keep < 1 {
+		return s[:max] + "\n\n…(已截断：仅保留开头)"
+	}
+	if len(s) <= keep*2 {
+		return s
+	}
+	omitted := len(s) - keep*2
+	return s[:keep] + fmt.Sprintf("\n\n…(已截断：保留开头和末尾各 %d 字节，省略中间 %d 字节)\n\n", keep, omitted) + s[len(s)-keep:]
 }

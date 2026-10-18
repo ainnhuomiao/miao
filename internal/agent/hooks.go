@@ -45,6 +45,19 @@ func (a *Agent) callTool(ctx context.Context, name, args string) tools.Result {
 			res.Content += "\n\n[工具调用后的 hook 检查未通过]\n" + post.Output
 		}
 	}
+	key := name + "\n" + args
+	a.mu.Lock()
+	if key == a.repeatKey {
+		a.repeatN++
+	} else {
+		a.repeatKey = key
+		a.repeatN = 1
+	}
+	n := a.repeatN
+	a.mu.Unlock()
+	if n >= 3 {
+		res.Content += fmt.Sprintf("\n\n你已连续 %d 次用相同参数调用 %s，结果不会变化；换个做法或向用户说明情况。", n, name)
+	}
 	return res
 }
 

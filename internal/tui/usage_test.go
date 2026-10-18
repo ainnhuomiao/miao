@@ -19,6 +19,20 @@ func TestFormatTokens(t *testing.T) {
 	}
 }
 
+func TestFormatCacheHit(t *testing.T) {
+	if _, ok := formatCacheHit(nil); ok {
+		t.Fatal("nil")
+	}
+	got, ok := formatCacheHit(&llm.Usage{PromptTokens: 1000, PromptCacheHitTokens: 994})
+	if !ok || got != "99.4%" {
+		t.Fatalf("高命中应显示一位小数：%q %v", got, ok)
+	}
+	got, ok = formatCacheHit(&llm.Usage{PromptTokens: 1234, PromptCacheHitTokens: 1049})
+	if !ok || got != "85%" {
+		t.Fatalf("普通命中用整数：%q %v", got, ok)
+	}
+}
+
 func TestUsageLabel(t *testing.T) {
 	m := &Model{}
 	if got := m.usageLabel(true); got != "" {
@@ -45,6 +59,9 @@ func TestUsageAccumulatesWithinTurn(t *testing.T) {
 	if *m.usage != want {
 		t.Fatalf("usage = %+v, want %+v", *m.usage, want)
 	}
+	if m.lastReq == nil || m.lastReq.PromptCacheHitTokens != 150 {
+		t.Fatalf("lastReq 应为最近一次请求：%+v", m.lastReq)
+	}
 }
 
 func TestHintViewFitsWidth(t *testing.T) {
@@ -61,6 +78,9 @@ func TestHintViewFitsWidth(t *testing.T) {
 		}
 		if w >= 100 && !strings.Contains(ansi.Strip(got), "? 帮助") {
 			t.Errorf("width %d: 宽屏应显示 ? 帮助: %q", w, ansi.Strip(got))
+		}
+		if w >= 100 && !strings.Contains(ansi.Strip(got), "缓存") {
+			t.Errorf("width %d: 宽屏应显示缓存命中率: %q", w, ansi.Strip(got))
 		}
 	}
 }

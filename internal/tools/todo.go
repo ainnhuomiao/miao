@@ -112,9 +112,7 @@ func TodoSummary(items []TodoItem) string {
 	return fmt.Sprintf("任务清单已更新：共 %d 项，已完成 %d，进行中 %d，待办 %d。", len(items), c, ip, p)
 }
 
-const todoWriteDesc = "维护当前任务的待办清单（每次传入完整清单，整体替换）。" +
-	"对复杂的多步任务（3 步及以上），先列出全部步骤；同一时间只把一项标为 in_progress；" +
-	"每完成一项立刻标为 completed，再开始下一项。简单的单步任务不要使用。"
+const todoWriteDesc = "维护待办清单：每次传入完整清单（最多 50 项）。多步任务才用；同时只能有一项 in_progress。不要用它记录已经做完的单步小事。"
 
 // NewTodoWriteTool 返回绑定到 store 的 todo_write 工具。
 func NewTodoWriteTool(store *TodoStore) Tool {

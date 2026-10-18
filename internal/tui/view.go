@@ -241,8 +241,10 @@ func (m *Model) usageText() string {
 		return ""
 	}
 	t := "↑" + formatTokens(u.PromptTokens) + " ↓" + formatTokens(u.CompletionTokens)
-	if pct, ok := cachePercent(u); ok {
-		t += fmt.Sprintf(" · 缓存%d%%", pct)
+	if hit, ok := formatCacheHit(m.lastReq); ok {
+		t += " · 缓存" + hit
+	} else if hit, ok := formatCacheHit(u); ok {
+		t += " · 缓存" + hit
 	}
 	if c := m.costText(); c != "" {
 		t += " · " + c
@@ -254,10 +256,11 @@ func (m *Model) costText() string {
 	if m.usage == nil {
 		return ""
 	}
-	in, out := 0.0, 0.0
+	in, out, cache := 0.0, 0.0, 0.0
 	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_IN")), "%f", &in)
 	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_OUT")), "%f", &out)
-	usd, ok := llm.EstimateCostUSD(m.modelName, *m.usage, in, out)
+	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_CACHE")), "%f", &cache)
+	usd, ok := llm.EstimateCostUSD(m.modelName, *m.usage, in, out, cache)
 	if !ok {
 		return ""
 	}
@@ -314,9 +317,9 @@ func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	return lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(line), true
 }
 
-// hintView 是极简底栏。窄屏时先藏 token，再藏路径。
+// hintView 是极简底栏。窄屏时先藏路径，再藏用量，尽量保留缓存命中率。
 func (m *Model) hintView() string {
-	for _, t := range [][2]bool{{true, true}, {true, false}, {false, false}} {
+	for _, t := range [][2]bool{{true, true}, {false, true}, {false, false}} {
 		if out, ok := m.barView(t[0], t[1]); ok {
 			return out
 		}
@@ -335,19 +338,27 @@ func (m *Model) usageLabel(showCache bool) string {
 	muted := bg.Foreground(mutedColor)
 	out := muted.Render(" ↑" + formatTokens(u.PromptTokens) + " ↓" + formatTokens(u.CompletionTokens))
 	if showCache {
-		if pct, ok := cachePercent(u); ok {
-			out += muted.Render(" · ") + bg.Foreground(agentColor).Render(fmt.Sprintf("缓存 %d%%", pct))
+		cu := m.lastReq
+		if cu == nil {
+			cu = u
+		}
+		if hit, ok := formatCacheHit(cu); ok {
+			out += muted.Render(" · ") + bg.Foreground(agentColor).Render("缓存 "+hit)
 		}
 	}
 	return out + bg.Render(" ")
 }
 
-// cachePercent 返回缓存命中率（命中数 / prompt_tokens）；无缓存数据时 ok 为 false。
-func cachePercent(u *llm.Usage) (int, bool) {
-	if u.PromptCacheHitTokens <= 0 || u.PromptTokens <= 0 {
-		return 0, false
+// formatCacheHit 返回本次请求的缓存命中率；高命中（≥99%）显示一位小数。
+func formatCacheHit(u *llm.Usage) (string, bool) {
+	if u == nil || u.PromptCacheHitTokens <= 0 || u.PromptTokens <= 0 {
+		return "", false
 	}
-	return u.PromptCacheHitTokens * 100 / u.PromptTokens, true
+	pct := float64(u.PromptCacheHitTokens) * 100 / float64(u.PromptTokens)
+	if pct >= 99 {
+		return fmt.Sprintf("%.1f%%", pct), true
+	}
+	return fmt.Sprintf("%.0f%%", pct), true
 }
 
 // formatTokens 把 token 数缩写成 980 / 1.2k / 15k / 1.3M。

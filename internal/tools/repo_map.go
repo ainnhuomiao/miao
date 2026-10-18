@@ -18,7 +18,7 @@ const (
 
 func registerRepoMap(r *Registry) {
 	r.Register(Tool{
-		Def: toolDef("repo_map", "生成工作区的 Go 符号地图（包、类型、函数），适合快速了解项目结构，减少盲目 grep。path 默认整个工作区。", map[string]any{
+		Def: toolDef("repo_map", "生成工作区内 Go 代码的符号地图（包、类型、函数）。先摸清仓库结构时用；随后用 grep/read_file 看具体实现。path 默认整个工作区。结果有体积上限，目录太大时改 path 指向子包。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"path": map[string]any{
@@ -97,7 +97,7 @@ func buildRepoMap(ctx context.Context, workspace, root string) (string, error) {
 	}
 	out := strings.TrimSpace(b.String())
 	if n >= repoMapMaxFiles || b.Len() >= repoMapMaxBytes {
-		out += "\n…（已截断）"
+		out += "\n…（已截断。改 path 指向更小的子包再试。）"
 	}
 	return out, nil
 }

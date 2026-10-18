@@ -182,20 +182,19 @@ func (m *Model) subagentPanelLines(w int) []string {
 	return lines
 }
 
-// addSubagentUsage 把子代理用量计入本轮用量（底栏），不改 ctxTokens。
+// addSubagentUsage 把子代理用量单独累计，不混进主循环的 usage / 缓存命中。
 func (m *Model) addSubagentUsage(u *llm.Usage) {
 	if u == nil {
 		return
 	}
 	m.sub.tokens += u.TotalTokens
-	if m.usage == nil || m.usageFresh {
+	if m.subUsage == nil {
 		c := *u
-		m.usage = &c
-		m.usageFresh = false
+		m.subUsage = &c
 		return
 	}
-	m.usage.PromptTokens += u.PromptTokens
-	m.usage.CompletionTokens += u.CompletionTokens
-	m.usage.TotalTokens += u.TotalTokens
-	m.usage.PromptCacheHitTokens += u.PromptCacheHitTokens
+	m.subUsage.PromptTokens += u.PromptTokens
+	m.subUsage.CompletionTokens += u.CompletionTokens
+	m.subUsage.TotalTokens += u.TotalTokens
+	m.subUsage.PromptCacheHitTokens += u.PromptCacheHitTokens
 }

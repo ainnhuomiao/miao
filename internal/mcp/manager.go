@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"sort"
 	"strings"
 	"sync"
 	"time"
@@ -111,6 +112,24 @@ func StartWithConfig(reg *tools.Registry, path string) *Manager {
 // Wait 等待所有连接尝试结束（测试用）。
 func (m *Manager) Wait() { m.wg.Wait() }
 
+// WaitReady 最多等 d，让已经连上的服务器把工具注册完；超时也不阻塞后续请求。
+func (m *Manager) WaitReady(d time.Duration) {
+	if m == nil || d <= 0 {
+		return
+	}
+	done := make(chan struct{})
+	go func() {
+		m.wg.Wait()
+		close(done)
+	}()
+	t := time.NewTimer(d)
+	defer t.Stop()
+	select {
+	case <-done:
+	case <-t.C:
+	}
+}
+
 // Notices 返回提示消息通道（缓冲，满了丢弃）。
 func (m *Manager) Notices() <-chan string { return m.notices }
 
@@ -157,6 +176,7 @@ func (m *Manager) connect(reg *tools.Registry, s *server) {
 		return
 	}
 	s.client = c
+	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	var names []string
 	var defs []tools.Tool
 	for _, t := range list {

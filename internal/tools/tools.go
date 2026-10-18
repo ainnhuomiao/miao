@@ -36,7 +36,11 @@ type Registry struct {
 	order     []string
 	enabled   map[string]bool // 非 nil 时只暴露这些工具（--allowed-tools）
 	approver  Approver
-	webPolicy WebPolicy // web_fetch 免审批/重定向放行规则，见 web_policy.go
+	webPolicy WebPolicy     // web_fetch 免审批/重定向放行规则，见 web_policy.go
+	frozen    []llm.ToolDef // 非 nil 后 Definitions 不再随 MCP / 开关变化
+
+	diagMu sync.Mutex
+	dirty  map[string]struct{} // 本轮写过的相对路径，FlushDiagnose 时按包诊断
 }
 
 // NewRegistry 创建工具注册表。workspace 必须是绝对路径。
@@ -92,10 +96,25 @@ func (r *Registry) allowedLocked(name string) bool {
 	return r.enabled == nil || r.enabled[name]
 }
 
-// Definitions 返回发给模型的工具定义列表。
-func (r *Registry) Definitions() []llm.ToolDef {
-	r.mu.RLock()
-	defer r.mu.RUnlock()
+// Freeze 把当前工具列表固定下来，之后的 Register/Unregister 不再影响 Definitions。
+// 第一次请求前调用，避免 MCP 晚到或 /subagents 开关把 prompt cache 整段作废。
+func (r *Registry) Freeze() {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	if r.frozen != nil {
+		return
+	}
+	r.frozen = defsLocked(r)
+}
+
+// Unfreeze 解除冻结，下次 Freeze 会重新快照（新会话 / 加载会话时调用）。
+func (r *Registry) Unfreeze() {
+	r.mu.Lock()
+	r.frozen = nil
+	r.mu.Unlock()
+}
+
+func defsLocked(r *Registry) []llm.ToolDef {
 	out := make([]llm.ToolDef, 0, len(r.order))
 	for _, name := range r.order {
 		if !r.allowedLocked(name) {
@@ -104,6 +123,18 @@ func (r *Registry) Definitions() []llm.ToolDef {
 		out = append(out, r.tools[name].Def)
 	}
 	return out
+}
+
+// Definitions 返回发给模型的工具定义列表。
+func (r *Registry) Definitions() []llm.ToolDef {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	if r.frozen != nil {
+		out := make([]llm.ToolDef, len(r.frozen))
+		copy(out, r.frozen)
+		return out
+	}
+	return defsLocked(r)
 }
 
 // Call 按名称执行工具。

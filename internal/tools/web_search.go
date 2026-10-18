@@ -20,7 +20,7 @@ const (
 
 func registerWebSearch(r *Registry) {
 	r.Register(Tool{
-		Def: toolDef("web_search", "用公开搜索引擎查找资料，返回标题、链接和摘要。适合查文档、报错和库的用法；打开某个结果再用 web_fetch。", map[string]any{
+		Def: toolDef("web_search", "公开网页搜索，返回标题、链接和摘要。查外部资料时用；打开某条结果再用 web_fetch。不要用来搜工作区里的代码。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"query": map[string]any{"type": "string", "description": "搜索关键词"},

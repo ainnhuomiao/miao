@@ -70,8 +70,8 @@ func TestPacmanMeterMouthAndInvalid(t *testing.T) {
 
 func TestContextWindowLookup(t *testing.T) {
 	t.Setenv("MIAO_CONTEXT_WINDOW", "")
-	if contextWindow("deepseek-flash") != 128_000 {
-		t.Fatal("deepseek 应按 128k")
+	if contextWindow("deepseek-flash") != 1_000_000 {
+		t.Fatal("deepseek-flash 应按 1M")
 	}
 	if contextWindow("mystery-model") != 0 {
 		t.Fatal("未知模型应返回 0")
@@ -81,7 +81,7 @@ func TestContextWindowLookup(t *testing.T) {
 		t.Fatal("MIAO_CONTEXT_WINDOW 应覆盖")
 	}
 	t.Setenv("MIAO_CONTEXT_WINDOW", "abc")
-	if contextWindow("deepseek-flash") != 128_000 {
+	if contextWindow("deepseek-flash") != 1_000_000 {
 		t.Fatal("非法覆盖值应被忽略")
 	}
 }
@@ -96,7 +96,7 @@ func TestContextViewUnknownAndOverflow(t *testing.T) {
 		t.Fatalf("未知模型应只显示 token 数：%q", v)
 	}
 	m.modelName = "deepseek-flash"
-	m.ctxTokens = 500_000
+	m.ctxTokens = 2_000_000
 	if v := stripANSI(m.contextView()); !strings.Contains(v, "100%") {
 		t.Fatalf("超出窗口百分比应封顶 100%%：%q", v)
 	}

@@ -33,7 +33,7 @@ func TestExecStreamProgressAndTimeout(t *testing.T) {
 	var lines []string
 	ctx := WithProgress(context.Background(), func(l string) { mu.Lock(); lines = append(lines, l); mu.Unlock() })
 	res := execCommandStream(ctx, t.TempDir(), "sh", []string{"-c", "echo hello; echo world"}, time.Minute)
-	if res.IsError || !strings.Contains(res.Content, "world") {
+	if res.IsError || !strings.Contains(res.Content, "world") || !strings.Contains(res.Content, "[exit code: 0]") {
 		t.Fatalf("res=%+v", res)
 	}
 	mu.Lock()
@@ -42,7 +42,7 @@ func TestExecStreamProgressAndTimeout(t *testing.T) {
 	}
 	mu.Unlock()
 	res = execCommandStream(context.Background(), t.TempDir(), "sleep", []string{"5"}, 200*time.Millisecond)
-	if !res.IsError || !strings.Contains(res.Content, "超时") {
+	if !res.IsError || !strings.Contains(res.Content, "超时") || !strings.Contains(res.Content, "[exit code:") {
 		t.Fatalf("want timeout, got %+v", res)
 	}
 }

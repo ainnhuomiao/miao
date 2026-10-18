@@ -17,7 +17,7 @@ const maxDiffLines = 2000
 // registerWriteFile 注册 write_file：写工作区内文件，每次都需 Approver 确认。
 func registerWriteFile(r *Registry) {
 	r.Register(Tool{
-		Def: toolDef("write_file", "在工作区内创建或覆盖一个文本文件（每次写入都需用户确认）。", map[string]any{
+		Def: toolDef("write_file", "新建文本文件，或整文件覆盖重写（需确认）。已有文件的局部修改用 edit_file。写入前确认目标路径；覆盖已有文件会先给出 diff。上限 64KiB。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"path":    map[string]any{"type": "string", "description": "相对工作区根目录的文件路径"},
@@ -34,7 +34,7 @@ func registerWriteFile(r *Registry) {
 				return Result{Content: "参数解析失败: " + err.Error(), IsError: true}
 			}
 			if len(in.Content) > maxWriteBytes {
-				return Result{Content: "内容超过 64KiB 上限", IsError: true}
+				return Result{Content: "内容超过 64KiB 上限——缩小内容，或先 write_file 再分多次 edit_file", IsError: true}
 			}
 			if !utf8.ValidString(in.Content) {
 				return Result{Content: "只支持 UTF-8 文本", IsError: true}
@@ -116,7 +116,8 @@ func registerWriteFile(r *Registry) {
 				return Result{Content: "写入失败: " + err.Error(), IsError: true}
 			}
 			msg := fmt.Sprintf("已%s %s（%d 字节）", action, rel, len(in.Content))
-			return Result{Content: msg + diagnoseFile(ctx, r.workspace, rel)}
+			r.noteEdited(rel)
+			return Result{Content: msg}
 		},
 	})
 }

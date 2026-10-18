@@ -42,7 +42,7 @@ func run() error {
 	verbose := flag.Bool("v", false, "非交互模式下把工具调用过程打印到 stderr")
 	modelFlag := flag.String("model", "", "覆盖 MIAO_MODEL")
 	baseURLFlag := flag.String("base-url", "", "覆盖 MIAO_BASE_URL")
-	systemFlag := flag.String("system", "", "追加到默认系统提示词末尾")
+	systemFlag := flag.String("system", "", "追加到会话基线说明（不改系统提示词）")
 	debug := flag.Bool("debug", false, "把请求耗时、状态码写到 stderr")
 	listModels := flag.Bool("list-models", false, "列出服务端可用模型后退出")
 	protocolFlag := flag.String("protocol", "", "openai / anthropic / auto")
@@ -103,26 +103,22 @@ func run() error {
 		return printModels(client)
 	}
 
-	system := fmt.Sprintf(
-		"%s\n\n当前调用的模型标识是 \"%s\"。工作区根目录是 %q（工具只能访问此目录内的相对路径）。go test / go build 会编译并运行仓库里的代码。",
-		agent.DefaultSystemPrompt, agent.ModelPlaceholder, cfg.Workspace)
-	if extra := strings.TrimSpace(*systemFlag); extra != "" {
-		system += "\n\n" + extra
-	}
 	md, truncated, err := agent.LoadAgentsMD(cfg.Workspace)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "读取 %s 失败：%v\n", agent.AgentsMDName, err)
 	}
-	system = agent.WithAgentsMD(system, md, truncated)
 	if names := splitCSV(*allowedTools); len(names) > 0 {
 		reg.RestrictTo(names)
 	}
 
-	ag := agent.New(client, system, reg)
-	ag.SetAgentsMDLoaded(md != "")
+	ag := agent.New(client, agent.DefaultSystemPrompt, reg)
+	ag.SetProjectContext(md, truncated, strings.TrimSpace(*systemFlag))
 	ag.SetMaxToolRounds(cfg.MaxToolRounds)
 	ag.SetAllowedCommands(agent.AllowedCommandsFromEnv())
 	ag.SetFallbackModel(cfg.FallbackModel)
+	ag.SetPrepareTools(func() {
+		mcpMgr.WaitReady(1500 * time.Millisecond)
+	})
 	hookRunner, err := hooks.Load(cfg.Workspace, ag.HookApprover())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "读取 hook 配置失败（出错的部分已忽略）：%v\n", err)

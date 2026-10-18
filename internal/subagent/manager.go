@@ -111,11 +111,8 @@ func (m *Manager) Running() int {
 }
 
 func (m *Manager) apply() {
-	if m.Config().Enabled {
-		m.reg.Register(m.tool())
-	} else {
-		m.reg.Unregister(ToolName)
-	}
+	// 始终注册，避免开关改变工具列表导致整段 prompt cache 失效。
+	m.reg.Register(m.tool())
 }
 
 func (m *Manager) broadcastLocked() {
@@ -172,7 +169,7 @@ func (m *Manager) tool() tools.Tool {
 	return tools.Tool{
 		Def: llm.ToolDef{Type: "function", Function: llm.FunctionDef{
 			Name:        ToolName,
-			Description: "派出一个只读研究子代理：它有全新的上下文，只能读文件、搜索、抓网页，完成后只返回简洁结论（附 文件:行号）。适合大范围搜索/调研，避免撑大主上下文；多个独立任务可在同一轮并行调用。",
+			Description: "派出只读子代理，在全新上下文里做调研并返回结论。适合大范围搜索、阅读；子代理不能改文件或执行命令。不要用它做写入、修复或实现。关闭时调用会报错。",
 			Parameters:  params,
 		}},
 		Run: m.run,
@@ -180,6 +177,9 @@ func (m *Manager) tool() tools.Tool {
 }
 
 func (m *Manager) run(ctx context.Context, args json.RawMessage) tools.Result {
+	if !m.Config().Enabled {
+		return tools.Result{Content: "子代理已关闭", IsError: true}
+	}
 	var in struct {
 		Description string `json:"description"`
 		Prompt      string `json:"prompt"`

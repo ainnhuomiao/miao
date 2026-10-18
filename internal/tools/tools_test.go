@@ -9,6 +9,20 @@ import (
 	"testing"
 )
 
+func TestTruncateOutputHeadAndTail(t *testing.T) {
+	s := strings.Repeat("A", 100) + "MID" + strings.Repeat("B", 100)
+	got := truncateOutput(s, 40)
+	if !strings.HasPrefix(got, strings.Repeat("A", 20)) || !strings.HasSuffix(got, strings.Repeat("B", 20)) {
+		t.Fatalf("应保留头尾：%q", got)
+	}
+	if !strings.Contains(got, "保留开头和末尾") || !strings.Contains(got, "省略中间") {
+		t.Fatalf("应标明省略：%q", got)
+	}
+	if truncateOutput("short", 40) != "short" {
+		t.Fatal("短输出不应改")
+	}
+}
+
 func TestResolvePath_BlocksEscape(t *testing.T) {
 	dir := t.TempDir()
 	r, err := NewRegistry(dir)
@@ -46,7 +60,7 @@ func TestReadFileAndListDir(t *testing.T) {
 	RegisterBuiltins(r)
 
 	res := r.Call(context.Background(), "read_file", `{"path":"hello.txt"}`)
-	if res.IsError || res.Content != "hi" {
+	if res.IsError || !strings.Contains(res.Content, "hi") || !strings.Contains(res.Content, "第 1-1 行，共 1 行") {
 		t.Fatalf("read_file: %+v", res)
 	}
 
@@ -81,7 +95,7 @@ func TestRunCommand_AllowlistAndExec(t *testing.T) {
 	if ok.IsError {
 		t.Fatalf("echo failed: %+v", ok)
 	}
-	if !strings.Contains(ok.Content, "hello-miao") {
+	if !strings.Contains(ok.Content, "hello-miao") || !strings.Contains(ok.Content, "[exit code: 0]") {
 		t.Fatalf("output = %q", ok.Content)
 	}
 
@@ -90,7 +104,7 @@ func TestRunCommand_AllowlistAndExec(t *testing.T) {
 	if pwd.IsError {
 		t.Fatalf("pwd: %+v", pwd)
 	}
-	if strings.TrimSpace(pwd.Content) != dir {
+	if !strings.Contains(pwd.Content, dir) || !strings.Contains(pwd.Content, "[exit code: 0]") {
 		t.Fatalf("pwd = %q want %q", pwd.Content, dir)
 	}
 }
@@ -214,6 +228,34 @@ func TestCommandDenied(t *testing.T) {
 	}
 }
 
+func TestFreezeDefinitions(t *testing.T) {
+	r, err := NewRegistry(t.TempDir())
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.Register(Tool{
+		Def: toolDef("alpha", "a", map[string]any{"type": "object"}),
+		Run: func(ctx context.Context, args json.RawMessage) Result { return Result{} },
+	})
+	r.Freeze()
+	r.Register(Tool{
+		Def: toolDef("beta", "b", map[string]any{"type": "object"}),
+		Run: func(ctx context.Context, args json.RawMessage) Result { return Result{} },
+	})
+	defs := r.Definitions()
+	if len(defs) != 1 || defs[0].Function.Name != "alpha" {
+		t.Fatalf("冻结后不应暴露新工具: %+v", defs)
+	}
+	if !r.Has("beta") {
+		t.Fatal("冻结后仍应能注册供 Call 使用")
+	}
+	r.Unfreeze()
+	defs = r.Definitions()
+	if len(defs) != 2 {
+		t.Fatalf("解冻后应暴露新工具: %+v", defs)
+	}
+}
+
 func TestRestrictTo(t *testing.T) {
 	dir := t.TempDir()
 	r, err := NewRegistry(dir)
@@ -276,7 +318,29 @@ func TestReadFileSensitiveAndSymlink(t *testing.T) {
 		t.Fatalf("read symlink: %+v", res)
 	}
 	res = r.Call(context.Background(), "read_file", `{"path":"ok.txt"}`)
-	if res.IsError || res.Content != "hi" {
+	if res.IsError || !strings.Contains(res.Content, "hi") || !strings.Contains(res.Content, "共 1 行") {
 		t.Fatalf("read ok: %+v", res)
+	}
+}
+
+func TestReadFileOffsetAndLimit(t *testing.T) {
+	dir := t.TempDir()
+	if err := os.WriteFile(filepath.Join(dir, "n.txt"), []byte("one\ntwo\nthree\nfour\nfive\n"), 0o644); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRegistry(dir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	RegisterBuiltins(r)
+	res := r.Call(context.Background(), "read_file", `{"path":"n.txt","offset":2,"limit":2}`)
+	if res.IsError || !strings.Contains(res.Content, "     2|two") || !strings.Contains(res.Content, "     3|three") {
+		t.Fatalf("window: %+v", res)
+	}
+	if strings.Contains(res.Content, "one") || strings.Contains(res.Content, "four") {
+		t.Fatalf("不应含窗口外的行：%q", res.Content)
+	}
+	if !strings.Contains(res.Content, "第 2-3 行，共 5 行。用 offset=4 继续。") {
+		t.Fatalf("footer: %q", res.Content)
 	}
 }

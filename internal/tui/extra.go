@@ -17,6 +17,13 @@ import (
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
+func ringBell() {
+	if strings.HasSuffix(os.Args[0], ".test") {
+		return
+	}
+	_, _ = fmt.Fprint(os.Stderr, "\a")
+}
+
 func priceOverride(key string) float64 {
 	v := strings.TrimSpace(config.Getenv(key))
 	n, err := strconv.ParseFloat(v, 64)
@@ -41,7 +48,7 @@ func (m *Model) applyPlan() tea.Cmd {
 }
 
 func (m *Model) showCost() {
-	if m.usage == nil && m.costUSD == 0 {
+	if m.usage == nil && m.subUsage == nil && m.costUSD == 0 {
 		m.notice("本会话还没有用量数据。")
 		return
 	}
@@ -49,12 +56,22 @@ func (m *Model) showCost() {
 	b.WriteString("本会话花费（估算）\n")
 	fmt.Fprintf(&b, "  模型：%s\n", m.modelName)
 	if m.usage != nil {
-		fmt.Fprintf(&b, "  输入：%s token", formatTokens(m.usage.PromptTokens))
-		if m.usage.PromptCacheHitTokens > 0 {
+		fmt.Fprintf(&b, "  主循环输入：%s token", formatTokens(m.usage.PromptTokens))
+		if hit, ok := formatCacheHit(m.lastReq); ok {
+			fmt.Fprintf(&b, "（最近一次缓存 %s）", hit)
+		} else if m.usage.PromptCacheHitTokens > 0 {
 			fmt.Fprintf(&b, "（缓存命中 %s）", formatTokens(m.usage.PromptCacheHitTokens))
 		}
 		b.WriteByte('\n')
-		fmt.Fprintf(&b, "  输出：%s token\n", formatTokens(m.usage.CompletionTokens))
+		fmt.Fprintf(&b, "  主循环输出：%s token\n", formatTokens(m.usage.CompletionTokens))
+	}
+	if m.subUsage != nil && (m.subUsage.PromptTokens > 0 || m.subUsage.CompletionTokens > 0) {
+		fmt.Fprintf(&b, "  子代理输入：%s token", formatTokens(m.subUsage.PromptTokens))
+		if hit, ok := formatCacheHit(m.subUsage); ok {
+			fmt.Fprintf(&b, "（缓存 %s）", hit)
+		}
+		b.WriteByte('\n')
+		fmt.Fprintf(&b, "  子代理输出：%s token\n", formatTokens(m.subUsage.CompletionTokens))
 	}
 	if m.costUSD > 0 {
 		fmt.Fprintf(&b, "  累计：%s\n", llm.FormatCost(m.costUSD))
@@ -80,7 +97,7 @@ func (m *Model) initAgentsMD() {
 		return
 	}
 	m.ag.ApplyAgentsMD(content, false)
-	m.notice("已写入 AGENTS.md，并已加入当前会话的系统提示词。")
+	m.notice("已写入 AGENTS.md，并已加入当前会话。")
 }
 
 func (m *Model) trustProject() {

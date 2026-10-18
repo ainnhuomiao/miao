@@ -3,6 +3,7 @@ package tools
 import (
 	"bytes"
 	"context"
+	"errors"
 	"fmt"
 	"os/exec"
 	"strings"
@@ -28,7 +29,7 @@ type liveBuffer struct {
 func (b *liveBuffer) Write(p []byte) (int, error) {
 	b.mu.Lock()
 	defer b.mu.Unlock()
-	if b.buf.Len() < maxCommandOutput*2 { // 超出部分丢弃，最终仍会截断
+	if b.buf.Len() < commandOutputKeep*4 { // 超出部分丢弃，最终仍会截断
 		b.buf.Write(p)
 	}
 	if line := lastLine(string(p)); line != "" {
@@ -75,7 +76,8 @@ func execCommandStream(ctx context.Context, dir, name string, args []string, tim
 	err := cmd.Run()
 	text := truncateOutput(strings.TrimRight(out.String(), "\n"), maxCommandOutput)
 	if runCtx.Err() == context.DeadlineExceeded {
-		return Result{Content: fmt.Sprintf("命令超时（>%s），已终止。长时间运行的命令可以设 background=true 放到后台。\n%s", timeout, text), IsError: true}
+		msg := fmt.Sprintf("命令超时（>%s），已终止。长时间运行的命令可以设 background=true 放到后台。\n%s", timeout, text)
+		return Result{Content: withExitCode(msg, -1), IsError: true}
 	}
 	if err != nil {
 		if text == "" {
@@ -83,12 +85,31 @@ func execCommandStream(ctx context.Context, dir, name string, args []string, tim
 		} else {
 			text += "\n(" + err.Error() + ")"
 		}
-		return Result{Content: text, IsError: true}
+		return Result{Content: withExitCode(text, commandExitCode(err)), IsError: true}
 	}
 	if text == "" {
 		text = "(无输出)"
 	}
-	return Result{Content: text}
+	return Result{Content: withExitCode(text, 0)}
+}
+
+func withExitCode(text string, code int) string {
+	text = strings.TrimRight(text, "\n")
+	if text != "" {
+		text += "\n"
+	}
+	return text + fmt.Sprintf("[exit code: %d]", code)
+}
+
+func commandExitCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	var ee *exec.ExitError
+	if errors.As(err, &ee) {
+		return ee.ExitCode()
+	}
+	return -1
 }
 
 // commandTimeoutFor 把模型给的秒数换成超时：默认 2 分钟，上限 10 分钟。

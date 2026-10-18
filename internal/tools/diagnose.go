@@ -5,11 +5,62 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"sort"
 	"strings"
 	"time"
 
 	"github.com/ainnhuomiao/miao/internal/config"
 )
+
+func (r *Registry) noteEdited(rel string) {
+	rel = strings.TrimSpace(rel)
+	if rel == "" {
+		return
+	}
+	r.diagMu.Lock()
+	defer r.diagMu.Unlock()
+	if r.dirty == nil {
+		r.dirty = map[string]struct{}{}
+	}
+	r.dirty[rel] = struct{}{}
+}
+
+// FlushDiagnose 对本轮写过的包各跑一次诊断（go vet / tsc），避免每次编辑都同步等 15 秒。
+func (r *Registry) FlushDiagnose(ctx context.Context) string {
+	r.diagMu.Lock()
+	files := make([]string, 0, len(r.dirty))
+	for f := range r.dirty {
+		files = append(files, f)
+	}
+	r.dirty = nil
+	r.diagMu.Unlock()
+	sort.Strings(files)
+	if len(files) == 0 {
+		return ""
+	}
+	seenGo := map[string]bool{}
+	var tsRel string
+	var b strings.Builder
+	for _, rel := range files {
+		switch strings.ToLower(filepath.Ext(rel)) {
+		case ".go":
+			key := strings.Join(goVetArgs(rel), " ")
+			if seenGo[key] {
+				continue
+			}
+			seenGo[key] = true
+			b.WriteString(diagnoseFile(ctx, r.workspace, rel))
+		case ".ts", ".tsx", ".js", ".jsx":
+			if tsRel == "" {
+				tsRel = rel
+			}
+		}
+	}
+	if tsRel != "" {
+		b.WriteString(diagnoseFile(ctx, r.workspace, tsRel))
+	}
+	return b.String()
+}
 
 func diagnoseFile(ctx context.Context, workspace, rel string) string {
 	if strings.TrimSpace(strings.ToLower(config.Getenv("DIAGNOSE"))) == "0" {
@@ -46,7 +97,17 @@ func diagnoseFile(ctx context.Context, workspace, rel string) string {
 	cmd := exec.CommandContext(dctx, name, args...)
 	cmd.Dir = workspace
 	out, err := cmd.CombinedOutput()
-	text := strings.TrimSpace(string(out))
+	return formatDiagnose(ctx, dctx, label, string(out), err)
+}
+
+func formatDiagnose(parent, dctx context.Context, label, out string, err error) string {
+	if parent.Err() != nil {
+		return ""
+	}
+	if dctx.Err() == context.DeadlineExceeded {
+		return "\n\n[诊断 " + label + "]\n诊断超时，已跳过"
+	}
+	text := strings.TrimSpace(out)
 	if text == "" && err == nil {
 		return ""
 	}

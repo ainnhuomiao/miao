@@ -118,7 +118,7 @@ func isPrivateIP(ip net.IP) bool {
 
 func registerWebFetch(r *Registry) {
 	r.Register(Tool{
-		Def: toolDef("web_fetch", "抓取一个 http/https 网页，HTML 会转成 Markdown 返回（上限 100KiB，超时 15 秒）。适合查文档、看报错说明。", map[string]any{
+		Def: toolDef("web_fetch", "抓取公开 http/https 网页并转成 Markdown。需要某页正文时用；先搜再用这个打开结果。拒绝内网地址。输出上限 100KiB，被截断时从已有内容判断是否够用，不够就换更具体的 URL。", map[string]any{
 			"type": "object",
 			"properties": map[string]any{
 				"url": map[string]any{"type": "string", "description": "完整网址，如 https://pkg.go.dev/net/http"},
@@ -206,7 +206,7 @@ func truncateUTF8(s string, n int) string {
 	for cut > 0 && !utf8.RuneStart(s[cut]) {
 		cut--
 	}
-	return s[:cut] + fmt.Sprintf("\n\n…（已截断，原文 %d 字节，只保留前 %dKiB）", len(s), n>>10)
+	return s[:cut] + fmt.Sprintf("\n\n…（已截断：保留开头，原文 %d 字节，只保留前 %dKiB。换更具体的 URL 再抓。）", len(s), n>>10)
 }
 
 var (

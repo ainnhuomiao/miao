@@ -9,6 +9,8 @@ import (
 	"path/filepath"
 	"strings"
 	"unicode/utf8"
+
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 // AgentsMDName 是工作区根目录下的项目记忆文件名。
@@ -49,31 +51,45 @@ func LoadAgentsMD(workspace string) (content string, truncated bool, err error) 
 	return strings.TrimSpace(string(buf)), truncated, nil
 }
 
-// WithAgentsMD 把 AGENTS.md 内容拼到系统提示词末尾。content 为空时原样返回。
-func WithAgentsMD(system, content string, truncated bool) string {
+func agentsMDBlock(content string, truncated bool) string {
+	content = strings.TrimSpace(content)
 	if content == "" {
-		return system
+		return ""
 	}
 	note := ""
 	if truncated {
 		note = fmt.Sprintf("（文件超过 %dKiB，已截断）", MaxAgentsMDBytes/1024)
 	}
-	return fmt.Sprintf("%s\n\n以下是项目根目录 %s 中的项目说明%s，请遵守：\n<agents_md>\n%s\n</agents_md>",
-		system, AgentsMDName, note, content)
+	return fmt.Sprintf("以下是项目根目录 %s 中的项目说明%s，请遵守：\n<agents_md>\n%s\n</agents_md>",
+		AgentsMDName, note, content)
 }
 
-const agentsMDMarker = "\n\n以下是项目根目录 "
+// WithAgentsMD 把 AGENTS.md 内容拼到文本末尾。content 为空时原样返回。
+func WithAgentsMD(system, content string, truncated bool) string {
+	block := agentsMDBlock(content, truncated)
+	if block == "" {
+		return system
+	}
+	if system == "" {
+		return block
+	}
+	return system + "\n\n" + block
+}
 
-// ApplyAgentsMD 把 AGENTS.md 写进当前会话的系统提示词（去掉旧块再拼上）。
+// ApplyAgentsMD 更新项目说明并追加一条 reminder，不改系统提示词。
 func (a *Agent) ApplyAgentsMD(content string, truncated bool) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
-	base := a.system
-	if i := strings.Index(base, agentsMDMarker); i >= 0 {
-		base = strings.TrimRight(base[:i], "\n")
+	a.projectMD = strings.TrimSpace(content)
+	a.projectTrunc = truncated
+	a.agentsMD = a.projectMD != ""
+	if a.projectMD == "" {
+		return
 	}
-	a.system = WithAgentsMD(base, content, truncated)
-	a.agentsMD = strings.TrimSpace(content) != ""
+	a.history = append(a.history, llm.Message{
+		Role:    llm.RoleUser,
+		Content: wrapReminder("项目说明已更新。\n" + agentsMDBlock(a.projectMD, truncated)),
+	})
 }
 
 // SetAgentsMDLoaded 标记启动时是否加载了 AGENTS.md，供界面提示。

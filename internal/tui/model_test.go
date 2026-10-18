@@ -429,3 +429,26 @@ func TestChatMessagesFromHistoryWithTools(t *testing.T) {
 		t.Fatalf("工具卡数 = %d", tools)
 	}
 }
+
+func TestChatMessagesFromHistorySkipsReminders(t *testing.T) {
+	sess := &session.Session{
+		ID: "x",
+		Messages: []llm.Message{
+			{Role: llm.RoleUser, Content: "<system-reminder>\n工作区根目录是 \"/tmp\"。\n</system-reminder>"},
+			{Role: llm.RoleUser, Content: "hi"},
+			{Role: llm.RoleAssistant, Content: "yo"},
+		},
+	}
+	var users int
+	for _, cm := range chatMessagesFromHistory(sess) {
+		if cm.role == roleUser {
+			users++
+			if cm.content != "hi" {
+				t.Fatalf("不应显示 reminder：%q", cm.content)
+			}
+		}
+	}
+	if users != 1 {
+		t.Fatalf("用户气泡数 = %d", users)
+	}
+}
