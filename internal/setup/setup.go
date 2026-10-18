@@ -22,7 +22,7 @@ type Provider struct {
 	Name     string // 给人看的名字
 	Protocol string // openai / anthropic
 	BaseURL  string // 内置地址；为空表示需要用户填写
-	Model    string // 默认模型；为空时连接测试成功后取服务端列表里的第一个
+	Model    string // 默认模型：列模型失败或不支持时才用；为空时连接测试成功后取服务端列表里的第一个
 }
 
 // NeedsBaseURL 报告是否需要用户填写接口地址（只有 OpenAI 兼容需要）。
@@ -31,7 +31,7 @@ func (p Provider) NeedsBaseURL() bool { return p.BaseURL == "" }
 // Providers 是向导里列出的服务商，顺序即显示顺序。
 var Providers = []Provider{
 	{ID: "deepseek", Name: "DeepSeek", Protocol: "openai", BaseURL: "https://api.deepseek.com", Model: "deepseek-chat"},
-	{ID: "anthropic", Name: "Anthropic", Protocol: "anthropic", BaseURL: "https://api.anthropic.com", Model: "claude-sonnet-4-5"},
+	{ID: "anthropic", Name: "Anthropic", Protocol: "anthropic", BaseURL: "https://api.anthropic.com", Model: "claude-sonnet-5-5"},
 	{ID: "openai", Name: "OpenAI 兼容", Protocol: "openai"},
 }
 
@@ -147,9 +147,7 @@ func DefaultTester(ctx context.Context, c config.Credentials) (config.Credential
 	if lister, ok := client.(llm.ModelLister); ok {
 		names, err := lister.ListModels(ctx)
 		if err == nil {
-			if c.Model == "" && len(names) > 0 {
-				c.Model = names[0]
-			}
+			c.Model = pickModel(c, names)
 			return c, nil
 		}
 		if !listUnsupported(err) {
@@ -167,6 +165,26 @@ func DefaultTester(ctx context.Context, c config.Credentials) (config.Credential
 		return c, Classify(err)
 	}
 	return c, nil
+}
+
+// pickModel 在列出模型成功后选默认模型：Anthropic 选列表里最新的 sonnet（列表已按从新到旧排列），
+// 没有 sonnet 就选最新的一个；其它服务商保持原逻辑（已有默认模型就用它，否则取列表第一个）。
+func pickModel(c config.Credentials, names []string) string {
+	if len(names) == 0 {
+		return c.Model
+	}
+	if c.Provider == "anthropic" {
+		for _, n := range names {
+			if strings.Contains(strings.ToLower(n), "sonnet") {
+				return n
+			}
+		}
+		return names[0]
+	}
+	if c.Model == "" {
+		return names[0]
+	}
+	return c.Model
 }
 
 func listUnsupported(err error) bool {

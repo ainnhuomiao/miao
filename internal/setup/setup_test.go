@@ -2,6 +2,7 @@ package setup
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"net"
 	"net/http"
@@ -117,5 +118,81 @@ func TestValidateBaseURL(t *testing.T) {
 		if ValidateBaseURL(bad) == nil {
 			t.Fatal(bad)
 		}
+	}
+}
+
+func anthropicCreds(url string) config.Credentials {
+	p, _ := ProviderByID("anthropic")
+	c := Credentials(p, "sk-ant", "")
+	c.BaseURL = url
+	return c
+}
+
+func TestAnthropicPicksNewestSonnet(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/v1/models" || r.Header.Get("x-api-key") != "sk-ant" || r.Header.Get("anthropic-version") == "" {
+			t.Errorf("意外请求 %s", r.URL.Path)
+		}
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"claude-sonnet-4-5-20250929","created_at":"2025-09-29T00:00:00Z"},
+			{"id":"claude-opus-9","created_at":"2026-09-01T00:00:00Z"},
+			{"id":"claude-sonnet-5-6-20260801","created_at":"2026-08-01T00:00:00Z"},
+			{"id":"claude-haiku-4-5","created_at":"2025-10-01T00:00:00Z"}]}`))
+	}))
+	defer srv.Close()
+	c, err := DefaultTester(context.Background(), anthropicCreds(srv.URL))
+	if err != nil || c.Model != "claude-sonnet-5-6-20260801" {
+		t.Fatalf("应选最新的 sonnet：%q %v", c.Model, err)
+	}
+}
+
+func TestAnthropicNoSonnetPicksNewest(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"claude-old","created_at":"2024-01-01T00:00:00Z"},{"id":"claude-new","created_at":"2026-01-01T00:00:00Z"}]}`))
+	}))
+	defer srv.Close()
+	c, err := DefaultTester(context.Background(), anthropicCreds(srv.URL))
+	if err != nil || c.Model != "claude-new" {
+		t.Fatalf("没有 sonnet 时选最新的：%q %v", c.Model, err)
+	}
+}
+
+func TestAnthropicListUnsupportedFallsBackToDefault(t *testing.T) {
+	var chatModel string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path == "/v1/models" {
+			w.WriteHeader(404)
+			return
+		}
+		var body struct {
+			Model     string `json:"model"`
+			MaxTokens int    `json:"max_tokens"`
+		}
+		_ = json.NewDecoder(r.Body).Decode(&body)
+		chatModel = body.Model
+		if body.MaxTokens != 1 {
+			t.Errorf("max_tokens=%d", body.MaxTokens)
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		_, _ = w.Write([]byte("event: message_stop\ndata: {\"type\":\"message_stop\"}\n\n"))
+	}))
+	defer srv.Close()
+	c, err := DefaultTester(context.Background(), anthropicCreds(srv.URL))
+	if err != nil || c.Model != "claude-sonnet-5-5" || chatModel != "claude-sonnet-5-5" {
+		t.Fatalf("列模型不支持时用内置默认：%q chat=%q %v", c.Model, chatModel, err)
+	}
+}
+
+func TestDeepSeekKeepsDefaultModel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[{"id":"deepseek-reasoner"},{"id":"deepseek-chat"}]}`))
+	}))
+	defer srv.Close()
+	p, _ := ProviderByID("deepseek")
+	c := Credentials(p, "k", "")
+	c.BaseURL = srv.URL
+	got, err := DefaultTester(context.Background(), c)
+	if err != nil || got.Model != "deepseek-chat" {
+		t.Fatalf("DeepSeek 保持原逻辑：%q %v", got.Model, err)
 	}
 }
