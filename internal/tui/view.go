@@ -620,23 +620,9 @@ func truncateWidth(s string, width int) string {
 	if width <= 1 || lipgloss.Width(s) <= width {
 		return s
 	}
-	if strings.Contains(s, "\x1b") {
-		// 带颜色的字符串要跳过 ANSI 转义序列；逐 rune 截断会把颜色码切断，
-		// 留下半截转义序列吞掉后面的字符，宽度也会算错。
-		return xansi.Truncate(s, width, "…")
-	}
-	var b strings.Builder
-	used := 0
-	for _, r := range s {
-		rw := runewidth.RuneWidth(r)
-		if used+rw > width-1 {
-			break
-		}
-		b.WriteRune(r)
-		used += rw
-	}
-	b.WriteString("…")
-	return b.String()
+	// 统一用 ANSI 感知、与 lipgloss.Width 同口径的截断：不会切断颜色码，
+	// 也不受 LC_ALL=zh_CN 等语言环境影响（runewidth 会把模糊宽度字符算成 2）。
+	return xansi.Truncate(s, width, "…")
 }
 
 // diffLineStyle 按 "+ "/"- " 前缀给 diff 行上色，其余行用弱化色。
