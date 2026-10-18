@@ -3,6 +3,7 @@ package session
 import (
 	"errors"
 	"os"
+	"strings"
 	"testing"
 	"time"
 
@@ -90,6 +91,25 @@ func TestDeleteAndBadIDs(t *testing.T) {
 		if _, err := s.Load(id); err == nil || errors.Is(err, ErrNotFound) {
 			t.Errorf("Load(%q) should reject id, got %v", id, err)
 		}
+	}
+}
+
+func TestSaveRedactsSecrets(t *testing.T) {
+	s := newTestStore(t)
+	sess := s.New("m", "")
+	sess.Messages = []llm.Message{{
+		Role:    llm.RoleTool,
+		Content: "MIAO_API_KEY=sk-abcdefghijklmnopqrstuvwxyz extra",
+	}}
+	if err := s.Save(sess); err != nil {
+		t.Fatal(err)
+	}
+	got, err := s.Load(sess.ID)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(got.Messages[0].Content, "sk-abcdefghijklmnopqrstuvwxyz") {
+		t.Fatalf("should redact secret: %q", got.Messages[0].Content)
 	}
 }
 

@@ -83,7 +83,9 @@ func (s *Store) Save(sess *Session) error {
 		sess.Title = TitleFrom(sess.Messages)
 	}
 	sess.Updated = s.now()
-	data, err := json.MarshalIndent(s.diskForm(sess), "", "  ")
+	toWrite := *sess
+	toWrite.Messages = redactMessages(sess.Messages)
+	data, err := json.MarshalIndent(s.diskForm(&toWrite), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -139,11 +141,11 @@ func (s *Store) List() ([]Meta, error) {
 		if e.IsDir() || !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		sess, err := s.Load(strings.TrimSuffix(name, ".json"))
+		meta, err := s.readMeta(filepath.Join(s.dir, name))
 		if err != nil {
 			continue
 		}
-		out = append(out, Meta{ID: sess.ID, Title: sess.Title, Updated: sess.Updated, MsgCount: len(sess.Messages)})
+		out = append(out, meta)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Updated.After(out[j].Updated) })
 	return out, nil
@@ -180,6 +182,105 @@ func TitleFrom(msgs []llm.Message) string {
 }
 
 func (s *Store) path(id string) string { return filepath.Join(s.dir, id+".json") }
+
+// readMeta 只解析侧栏需要的字段：消息数组逐项跳过，不把正文读进内存。
+func (s *Store) readMeta(path string) (Meta, error) {
+	f, err := os.Open(path)
+	if err != nil {
+		return Meta{}, err
+	}
+	defer f.Close()
+	dec := json.NewDecoder(f)
+	t, err := dec.Token()
+	if err != nil {
+		return Meta{}, err
+	}
+	if t != json.Delim('{') {
+		return Meta{}, fmt.Errorf("会话文件不是 JSON 对象")
+	}
+	var meta Meta
+	for dec.More() {
+		key, err := dec.Token()
+		if err != nil {
+			return Meta{}, err
+		}
+		name, _ := key.(string)
+		switch name {
+		case "id":
+			if err := dec.Decode(&meta.ID); err != nil {
+				return Meta{}, err
+			}
+		case "title":
+			if err := dec.Decode(&meta.Title); err != nil {
+				return Meta{}, err
+			}
+		case "updated":
+			if err := dec.Decode(&meta.Updated); err != nil {
+				return Meta{}, err
+			}
+		case "messages":
+			n, err := countJSONArray(dec)
+			if err != nil {
+				return Meta{}, err
+			}
+			meta.MsgCount = n
+		default:
+			if err := skipJSONValue(dec); err != nil {
+				return Meta{}, err
+			}
+		}
+	}
+	return meta, nil
+}
+
+func countJSONArray(dec *json.Decoder) (int, error) {
+	t, err := dec.Token()
+	if err != nil {
+		return 0, err
+	}
+	if t != json.Delim('[') {
+		if err := skipJSONRest(dec, t); err != nil {
+			return 0, err
+		}
+		return 0, nil
+	}
+	n := 0
+	for dec.More() {
+		if err := skipJSONValue(dec); err != nil {
+			return 0, err
+		}
+		n++
+	}
+	_, err = dec.Token()
+	return n, err
+}
+
+func skipJSONValue(dec *json.Decoder) error {
+	t, err := dec.Token()
+	if err != nil {
+		return err
+	}
+	return skipJSONRest(dec, t)
+}
+
+func skipJSONRest(dec *json.Decoder, t json.Token) error {
+	delim, ok := t.(json.Delim)
+	if !ok {
+		return nil
+	}
+	for dec.More() {
+		if delim == '{' {
+			if _, err := dec.Token(); err != nil {
+				return err
+			}
+		}
+		if err := skipJSONValue(dec); err != nil {
+			return err
+		}
+	}
+	_, err := dec.Token()
+	return err
+}
 
 func newID(t time.Time) string {
 	b := make([]byte, 3)
