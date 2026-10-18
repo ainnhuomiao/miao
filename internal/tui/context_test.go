@@ -4,7 +4,7 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 func pacPos(t *testing.T, s string) int {
@@ -100,7 +100,7 @@ func TestContextViewUnknownAndOverflow(t *testing.T) {
 	if v := stripANSI(m.contextView()); !strings.Contains(v, "100%") {
 		t.Fatalf("超出窗口百分比应封顶 100%%：%q", v)
 	}
-	if n := len(strings.Split(m.View(), "\n")); n != 30 {
+	if n := len(strings.Split(m.View().Content, "\n")); n != 30 {
 		t.Fatalf("顶栏加吃豆人后渲染 %d 行，想要 30", n)
 	}
 }

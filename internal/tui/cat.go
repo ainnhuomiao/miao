@@ -4,7 +4,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // ---- A：顶栏 logo「=^･ω･^= miao」，思考时偶尔眨眼 ----

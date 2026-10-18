@@ -4,8 +4,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ainnhuomiao/miao/internal/session"
 )
@@ -64,7 +64,7 @@ func (m *Model) toggleSidebar() {
 }
 
 // sidebarKey 处理侧栏聚焦时的按键；返回 false 表示交给输入框。
-func (m *Model) sidebarKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) sidebarKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if !m.side.focus || !m.sidebarVisible() {
 		return false, nil
 	}

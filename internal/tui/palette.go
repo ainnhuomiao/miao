@@ -3,8 +3,8 @@ package tui
 import (
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // paletteMaxRows 是斜杠命令菜单最多显示的行数，超出滚动。
@@ -178,7 +178,7 @@ func (m *Model) paletteScroll() {
 }
 
 // handlePaletteKey 在菜单打开时处理按键；返回 false 表示不处理。
-func (m *Model) handlePaletteKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if !m.paletteOpen() {
 		return false, nil
 	}

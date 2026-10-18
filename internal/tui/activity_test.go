@@ -5,8 +5,7 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
 
 func toolMsg(name, args, result string, done, isErr bool) chatMessage {
@@ -20,13 +19,13 @@ func TestActivityIdlePlaceholder(t *testing.T) {
 	if !strings.Contains(v, "工具待命") {
 		t.Fatalf("空闲时应显示「工具待命」，得到 %q", v)
 	}
-	before := len(strings.Split(m.View(), "\n"))
+	before := len(strings.Split(m.View().Content, "\n"))
 	if before != 30 {
 		t.Fatalf("空闲时整屏 %d 行，应为 30（状态条占位）", before)
 	}
 	m.messages = append(m.messages, toolMsg("list_dir", `{"path":"."}`, "a", true, false))
 	m.layout()
-	if after := len(strings.Split(m.View(), "\n")); after != before {
+	if after := len(strings.Split(m.View().Content, "\n")); after != before {
 		t.Fatalf("出现工具调用后行数从 %d 变成 %d，输入框会跳", before, after)
 	}
 	if !strings.Contains(m.activityView(), "list_dir") {
@@ -79,16 +78,13 @@ func TestActivityFitsWidthAndLayout(t *testing.T) {
 		if lw := lipgloss.Width(m.activityView()); lw > w {
 			t.Errorf("宽 %d：状态条宽 %d 超出", w, lw)
 		}
-		if n := len(strings.Split(m.View(), "\n")); n != 24 {
+		if n := len(strings.Split(m.View().Content, "\n")); n != 24 {
 			t.Errorf("宽 %d：有状态条时渲染 %d 行，想要 24", w, n)
 		}
 	}
 }
 
 func TestMinimalBarsHaveNoBackground(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 
 	m := newTestModel(t, 120, 30, "ok")
 	idle := m.activityView()

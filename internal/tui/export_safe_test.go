@@ -6,13 +6,13 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestExportConfirmsOverwriteAndRefusesSymlink(t *testing.T) {
 	m := newTestModel(t, 100, 30, "回答")
 	m.input.SetValue("问题")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	collectStream(t, m)
 	dir := t.TempDir()
 	p := filepath.Join(dir, "out.md")

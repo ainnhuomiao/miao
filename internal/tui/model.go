@@ -10,11 +10,11 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/bubbles/spinner"
-	"github.com/charmbracelet/bubbles/textarea"
-	"github.com/charmbracelet/bubbles/viewport"
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/bubbles/v2/spinner"
+	"charm.land/bubbles/v2/textarea"
+	"charm.land/bubbles/v2/viewport"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/llm"
@@ -104,6 +104,7 @@ type Model struct {
 	viewport       viewport.Model
 	drawerViewport viewport.Model
 	input          textarea.Model
+	inputOrigin    [2]int // 上一帧输入框文字区左上角（列, 行）；-1 表示本帧没有输入框
 	spinner        spinner.Model
 
 	messages []chatMessage
@@ -169,8 +170,8 @@ func New(ag *agent.Agent, modelName string) *Model {
 	ta.ShowLineNumbers = false
 	ta.CharLimit = 0
 	ta.SetHeight(1)
-	ta.SetPromptFunc(2, func(i int) string {
-		if i == 0 {
+	ta.SetPromptFunc(2, func(info textarea.PromptInfo) string {
+		if info.LineNumber == 0 {
 			return "› "
 		}
 		return "  "
@@ -178,20 +179,24 @@ func New(ag *agent.Agent, modelName string) *Model {
 	ta.SetWidth(60)
 	ta.KeyMap.InsertNewline.SetKeys("ctrl+j")
 
-	ta.FocusedStyle.Base = lipgloss.NewStyle()
-	ta.FocusedStyle.CursorLine = lipgloss.NewStyle()
-	ta.FocusedStyle.Prompt = promptStyle
-	ta.FocusedStyle.Placeholder = mutedStyle
-	ta.Cursor.Style = lipgloss.NewStyle().Foreground(accentColor)
+	// 用真实终端光标（View 里返回 tea.Cursor），输入法候选框/预编辑才能跟着插入点。
+	ta.SetVirtualCursor(false)
+	tst := ta.Styles()
+	tst.Focused.Base = lipgloss.NewStyle()
+	tst.Focused.CursorLine = lipgloss.NewStyle()
+	tst.Focused.Prompt = promptStyle
+	tst.Focused.Placeholder = mutedStyle
+	tst.Cursor.Color = accentColor
+	ta.SetStyles(tst)
 	_ = ta.Focus()
 
 	sp := spinner.New()
 	sp.Spinner = spinner.Dot
 	sp.Style = lipgloss.NewStyle().Foreground(accentColor)
 
-	vp := viewport.New(0, 0)
+	vp := viewport.New()
 	vp.MouseWheelEnabled = true
-	dvp := viewport.New(0, 0)
+	dvp := viewport.New()
 	dvp.MouseWheelEnabled = true
 
 	m := &Model{
@@ -284,7 +289,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case clipImageMsg:
 		return m, m.onClipImage(msg)
 
-	case tea.KeyMsg:
+	case tea.KeyPressMsg:
 		if m.keysCard { // 速查卡打开时任意键关闭
 			m.keysCard = false
 			m.layout()
@@ -374,11 +379,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func (m *Model) View() string {
-	return m.view()
+func (m *Model) View() tea.View {
+	v := tea.NewView(m.view())
+	v.AltScreen = true
+	v.MouseMode = tea.MouseModeCellMotion
+	v.Cursor = m.inputCursor()
+	return v
 }
 
-func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
+func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	// 审批叠层优先吃键。
 	if m.approval != nil {
 		switch msg.String() {
@@ -1063,7 +1072,7 @@ func (m *Model) layout() {
 	if vh < 3 {
 		vh = 3
 	}
-	m.viewport.Width = m.width - m.sidebarCols()
+	m.viewport.SetWidth(m.width - m.sidebarCols())
 	if h := m.paletteHeight(); h > 0 {
 		vh -= h // 命令菜单替代工具状态条
 	} else {
@@ -1075,7 +1084,7 @@ func (m *Model) layout() {
 		vh -= keysCardHeight()
 	}
 	vh -= m.pickerHeight()
-	m.viewport.Height = max(3, vh)
+	m.viewport.SetHeight(max(3, vh))
 	m.input.SetWidth(max(10, m.columnWidth()-4))
 	m.input.SetHeight(m.inputHeight())
 }
@@ -1105,7 +1114,7 @@ func (m *Model) refreshDrawer() {
 }
 
 func (m *Model) renderDrawer() string {
-	width := max(8, m.drawerViewport.Width)
+	width := max(8, m.drawerViewport.Width())
 	var b strings.Builder
 	if m.approval != nil {
 		b.WriteString(titleStyle.Render(truncateWidth("待确认 · "+m.approval.title(), width)))
@@ -1269,7 +1278,7 @@ func (m *Model) fitInput() {
 
 // columnWidth 是对话区和输入框共用的列宽：最多 columnMax，宽屏居中。
 func (m *Model) columnWidth() int {
-	w := m.viewport.Width
+	w := m.viewport.Width()
 	if w <= 0 {
 		w = m.width
 	}
@@ -1277,7 +1286,7 @@ func (m *Model) columnWidth() int {
 }
 
 func (m *Model) columnMargin() int {
-	return max(0, (m.viewport.Width-m.columnWidth())/2)
+	return max(0, (m.viewport.Width()-m.columnWidth())/2)
 }
 
 // isFileEdit 判断审批卡是否为文件写入类（标题 + diff 行）。

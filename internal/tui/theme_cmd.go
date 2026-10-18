@@ -103,9 +103,11 @@ func (m *Model) applyTheme(name string) {
 
 // restyle 把新配色同步到创建时就固定的组件样式，并重绘对话。
 func (m *Model) restyle() {
-	m.input.FocusedStyle.Prompt = promptStyle
-	m.input.FocusedStyle.Placeholder = mutedStyle
-	m.input.Cursor.Style = m.input.Cursor.Style.Foreground(accentColor)
+	tst := m.input.Styles()
+	tst.Focused.Prompt = promptStyle
+	tst.Focused.Placeholder = mutedStyle
+	tst.Cursor.Color = accentColor
+	m.input.SetStyles(tst)
 	m.spinner.Style = m.spinner.Style.Foreground(accentColor)
 	if m.width > 0 {
 		m.layout()

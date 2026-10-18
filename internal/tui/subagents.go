@@ -5,8 +5,8 @@ import (
 	"fmt"
 	"strings"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ainnhuomiao/miao/internal/llm"
 	"github.com/ainnhuomiao/miao/internal/subagent"
@@ -77,7 +77,7 @@ func (m *Model) subagentsMatches() []paletteCmd {
 }
 
 // handleSubagentsKey 处理菜单里的 Enter / ←→ / +-；其余按键交给通用菜单逻辑。
-func (m *Model) handleSubagentsKey(msg tea.KeyMsg, matches []paletteCmd) (bool, tea.Cmd) {
+func (m *Model) handleSubagentsKey(msg tea.KeyPressMsg, matches []paletteCmd) (bool, tea.Cmd) {
 	if !m.subagentsMode() || len(matches) == 0 {
 		return false, nil
 	}

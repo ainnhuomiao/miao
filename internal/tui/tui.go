@@ -6,7 +6,7 @@ import (
 	"encoding/json"
 	"os"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/mcp"
@@ -21,9 +21,8 @@ func Run(ag *agent.Agent, modelName string) error {
 	loadSavedTheme()
 	defer resetFill()
 	m := New(ag, modelName)
+	// 备用屏和鼠标模式在 v2 里由 View() 的字段声明。
 	p := tea.NewProgram(m,
-		tea.WithAltScreen(),
-		tea.WithMouseCellMotion(),
 		tea.WithFPS(30), // 与流式合并刷新的 33ms 对齐，降低空闲 CPU
 	)
 

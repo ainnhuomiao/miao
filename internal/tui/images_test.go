@@ -9,8 +9,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/llm"
@@ -64,7 +64,7 @@ func TestReadClipboardImageOrder(t *testing.T) {
 func TestCtrlVPastesImageElseText(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
 	fakeClip(t, map[string][]byte{"wl-paste": tuiPNG})
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
 	if cmd == nil {
 		t.Fatal("Ctrl+V 应读剪贴板")
 	}
@@ -78,7 +78,7 @@ func TestCtrlVPastesImageElseText(t *testing.T) {
 		t.Fatal("应提示需要 wl-paste 或 xclip")
 	}
 	// 括号粘贴的文本不受影响
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune("粘贴的文字"), Paste: true})
+	m.Update(tea.PasteMsg{Content: "粘贴的文字"})
 	if m.input.Value() != "粘贴的文字" {
 		t.Fatalf("文本粘贴应照常：%q", m.input.Value())
 	}
@@ -88,12 +88,12 @@ func TestBackspaceRemovesLastImage(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
 	m.addPendingImage("a.png", tuiPNG)
 	m.addPendingImage("b.png", tuiPNG)
-	m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if len(m.img.pending) != 1 {
 		t.Fatal("空输入 Backspace 应移除最后一张")
 	}
 	m.input.SetValue("x")
-	m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if len(m.img.pending) != 1 || m.input.Value() != "" {
 		t.Fatal("有文字时 Backspace 正常删字")
 	}

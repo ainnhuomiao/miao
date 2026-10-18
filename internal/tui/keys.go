@@ -3,7 +3,7 @@ package tui
 import (
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // keyBinding 是一条快捷键说明。keys 是 msg.String() 的写法（多个用逗号分隔），

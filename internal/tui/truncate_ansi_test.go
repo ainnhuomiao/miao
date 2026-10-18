@@ -4,15 +4,11 @@ import (
 	"strings"
 	"testing"
 
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	"charm.land/lipgloss/v2"
 )
 
 // 带颜色的字符串截断后不能留下半截转义序列，宽度也要准。
 func TestTruncateWidthKeepsANSIIntact(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
 
 	s := "   " + lipgloss.NewStyle().Foreground(agentColor).Render("●") + " " +
 		lipgloss.NewStyle().Foreground(textColor).Render("compact_test.go") + "  +2 −0"

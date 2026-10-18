@@ -11,7 +11,7 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
@@ -86,7 +86,7 @@ func clipImageCmd() tea.Cmd {
 }
 
 // handleImageKey：Ctrl+V 先查剪贴板图片；输入为空时 Backspace 移除最后一张待发图片。
-func (m *Model) handleImageKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) handleImageKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+v":
 		return true, clipImageCmd()
@@ -106,7 +106,7 @@ func (m *Model) onClipImage(msg clipImageMsg) tea.Cmd {
 			m.notice(clipNoToolsHint)
 		}
 		var cmd tea.Cmd
-		m.input, cmd = m.input.Update(tea.KeyMsg{Type: tea.KeyCtrlV})
+		m.input, cmd = m.input.Update(tea.KeyPressMsg{Code: 'v', Mod: tea.ModCtrl})
 		m.fitInput()
 		m.syncPalette()
 		return cmd

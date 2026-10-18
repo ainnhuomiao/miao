@@ -12,7 +12,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 )
@@ -79,7 +79,7 @@ func newBenchModel(tb testing.TB, width, height int) *Model {
 // fullViewport 返回视口里的全部内容（不只是可见窗口）。
 func fullViewport(m *Model) string {
 	v := m.viewport
-	v.Height = max(1, v.TotalLineCount())
+	v.SetHeight(max(1, v.TotalLineCount()))
 	v.GotoTop()
 	return v.View()
 }
@@ -129,12 +129,12 @@ func TestRenderGolden(t *testing.T) {
 			name := fmt.Sprintf("w%d_reason%v", w, reasoning)
 			t.Run(name, func(t *testing.T) {
 				m := newBenchModel(t, w, 40)
-				checkGolden(t, name+"_empty_view", m.View())
+				checkGolden(t, name+"_empty_view", m.View().Content)
 				fillHistory(m, 200)
 				m.showReasoning = reasoning
 				m.refreshViewport(true)
 				checkGolden(t, name+"_done_full", fullViewport(m))
-				checkGolden(t, name+"_done_view", m.View())
+				checkGolden(t, name+"_done_view", m.View().Content)
 
 				startMidStream(m)
 				m.refreshViewport(true)
@@ -181,7 +181,7 @@ func benchStream(b *testing.B, n int) {
 			m.messages[len(m.messages)-1].content = ""
 		}
 		m.Update(streamEventMsg{kind: agent.EventDelta, content: "一些流式输出的文字 some words "})
-		_ = m.View()
+		_ = m.View().Content
 	}
 }
 
@@ -204,7 +204,7 @@ func BenchmarkStreamLongFlush(b *testing.B) {
 		}
 		m.Update(streamEventMsg{kind: agent.EventDelta, content: "一些流式输出的文字 some words "})
 		m.refreshViewport(false)
-		_ = m.View()
+		_ = m.View().Content
 	}
 }
 
@@ -215,6 +215,6 @@ func BenchmarkView200(b *testing.B) {
 	b.ReportAllocs()
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
-		_ = m.View()
+		_ = m.View().Content
 	}
 }

@@ -5,13 +5,13 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 )
 
 func typeText(m *Model, s string) {
 	for _, r := range s {
-		m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m.Update(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 }
 
@@ -32,7 +32,7 @@ func TestPaletteSlashShowsAll(t *testing.T) {
 	if got := len(m.paletteMatches()); got != len(m.paletteCommands()) {
 		t.Fatalf("匹配 %d 条，想要全部 %d 条", got, len(m.paletteCommands()))
 	}
-	view := ansi.Strip(m.View())
+	view := ansi.Strip(m.View().Content)
 	for i, c := range m.paletteCommands() {
 		if i >= paletteMaxRows { // 超出 8 行的部分靠滚动显示
 			break
@@ -44,8 +44,8 @@ func TestPaletteSlashShowsAll(t *testing.T) {
 	if !strings.Contains(view, "↓") {
 		t.Fatal("命令超过 8 条时最后一行应有灰字 ↓")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyUp}) // 第一项按 ↑ 跳到最后一项
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "/exit") {
+	m.Update(tea.KeyPressMsg{Code: tea.KeyUp}) // 第一项按 ↑ 跳到最后一项
+	if v := ansi.Strip(m.View().Content); !strings.Contains(v, "/exit") {
 		t.Fatal("↑ 回到最后一项后 /exit 应滚出来")
 	}
 	if strings.Contains(view, "工具待命") {
@@ -71,10 +71,10 @@ func TestPaletteFuzzyAndNoMatch(t *testing.T) {
 		t.Fatalf("/rsn 匹配 %v", got)
 	}
 	typeText(m, "zzz")
-	if !strings.Contains(ansi.Strip(m.View()), "没有匹配的命令") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "没有匹配的命令") {
 		t.Fatal("无匹配时应显示提示")
 	}
-	if n := len(strings.Split(m.View(), "\n")); n != 20 {
+	if n := len(strings.Split(m.View().Content, "\n")); n != 20 {
 		t.Fatalf("无匹配时渲染 %d 行，想要 20", n)
 	}
 }
@@ -82,16 +82,16 @@ func TestPaletteFuzzyAndNoMatch(t *testing.T) {
 func TestPaletteArrowSelect(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
 	typeText(m, "/")
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if m.palette.sel != 2 {
 		t.Fatalf("sel=%d，想要 2", m.palette.sel)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	if m.palette.sel != 1 {
 		t.Fatalf("sel=%d，想要 1", m.palette.sel)
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "› /new") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "› /new") {
 		t.Fatal("选中行应显示 › /new")
 	}
 }
@@ -99,7 +99,7 @@ func TestPaletteArrowSelect(t *testing.T) {
 func TestPaletteTabComplete(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
 	typeText(m, "/mod")
-	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if v := m.input.Value(); v != "/model " {
 		t.Fatalf("补全后=%q，想要 \"/model \"", v)
 	}
@@ -108,7 +108,7 @@ func TestPaletteTabComplete(t *testing.T) {
 func TestPaletteEnterLoadCompletes(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
 	typeText(m, "/model")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if v := m.input.Value(); v != "/model " {
 		t.Fatalf("/model Enter 后=%q，想要补全", v)
 	}
@@ -121,7 +121,7 @@ func TestPaletteEnterRunsNew(t *testing.T) {
 	}
 	old := m.sess.ID
 	typeText(m, "/ne")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.sess.ID == old {
 		t.Fatal("Enter 执行 /new 后会话 id 应变化")
 	}
@@ -133,7 +133,7 @@ func TestPaletteEnterRunsNew(t *testing.T) {
 func TestPaletteEscCloses(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
 	typeText(m, "/h")
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.paletteOpen() {
 		t.Fatal("Esc 后菜单应关闭")
 	}
@@ -144,9 +144,9 @@ func TestPaletteEscCloses(t *testing.T) {
 	if !m.paletteOpen() {
 		t.Fatal("内容变化后菜单应重新打开")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
-	m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if m.input.Value() != "" || m.paletteOpen() {
 		t.Fatal("删掉 / 后菜单应关闭")
 	}
@@ -168,13 +168,13 @@ func TestPaletteViewFitsHeight(t *testing.T) {
 			m.input.Reset()
 			m.syncPalette()
 			typeText(m, s)
-			if n := len(strings.Split(m.View(), "\n")); n != h {
+			if n := len(strings.Split(m.View().Content, "\n")); n != h {
 				t.Fatalf("高 %d 输入 %q 渲染 %d 行", h, s, n)
 			}
 		}
 		m.input.Reset()
 		m.syncPalette()
-		if n := len(strings.Split(m.View(), "\n")); n != h {
+		if n := len(strings.Split(m.View().Content, "\n")); n != h {
 			t.Fatalf("高 %d 关闭菜单后渲染 %d 行", h, n)
 		}
 	}
@@ -188,12 +188,12 @@ func TestPaletteScrollKeepsSelectionVisible(t *testing.T) {
 		t.Skipf("窗口 %d 行放得下全部命令", win)
 	}
 	for i := 0; i < len(m.paletteCommands())-1; i++ {
-		m.Update(tea.KeyMsg{Type: tea.KeyDown})
+		m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "› /exit") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "› /exit") {
 		t.Fatal("滚动后选中的 /exit 应可见")
 	}
-	if n := len(strings.Split(m.View(), "\n")); n != 14 {
+	if n := len(strings.Split(m.View().Content, "\n")); n != 14 {
 		t.Fatalf("渲染 %d 行，想要 14", n)
 	}
 }
@@ -201,7 +201,7 @@ func TestPaletteScrollKeepsSelectionVisible(t *testing.T) {
 func TestPaletteTabCompleteClosesMenu(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
 	typeText(m, "/hel")
-	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if v := m.input.Value(); v != "/help" && v != "/help " {
 		t.Fatalf("补全后=%q，想要 \"/help\"", v)
 	}

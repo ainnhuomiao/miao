@@ -6,9 +6,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func TestInputHeightGrowsAndClamps(t *testing.T) {
@@ -51,7 +50,7 @@ func TestInputShrinksAfterSubmit(t *testing.T) {
 	m := newTestModel(t, 80, 30, "ok")
 	m.input.SetValue("a\nb\nc\nd")
 	m.fitInput()
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	collectStream(t, m)
 	if m.input.Height() != 1 {
 		t.Fatalf("发送后输入框高度=%d，想要 1", m.input.Height())
@@ -62,7 +61,7 @@ func TestViewStillFitsWithTallInput(t *testing.T) {
 	m := newTestModel(t, 80, 24, "ok")
 	m.input.SetValue(strings.Repeat("x\n", 10))
 	m.fitInput()
-	if n := len(strings.Split(m.View(), "\n")); n != 24 {
+	if n := len(strings.Split(m.View().Content, "\n")); n != 24 {
 		t.Fatalf("输入框长高后渲染 %d 行，想要 24", n)
 	}
 }
@@ -86,7 +85,7 @@ func TestColumnWidthAndCentering(t *testing.T) {
 		if got := m.columnMargin(); got != c.wantMargin {
 			t.Errorf("宽 %d：columnMargin=%d，想要 %d", c.width, got, c.wantMargin)
 		}
-		for i, l := range strings.Split(m.View(), "\n") {
+		for i, l := range strings.Split(m.View().Content, "\n") {
 			if lw := lipgloss.Width(l); lw > c.width {
 				t.Errorf("宽 %d：第 %d 行宽 %d 超出", c.width, i, lw)
 			}
@@ -108,7 +107,7 @@ func TestActivityBarAboveInput(t *testing.T) {
 	if len(rows) != activityMaxRows || rows[len(rows)-1].toolName != "t4" {
 		t.Fatalf("应显示最近 %d 条且最新在下：%+v", activityMaxRows, rows)
 	}
-	lines := strings.Split(m.View(), "\n")
+	lines := strings.Split(m.View().Content, "\n")
 	if len(lines) != 30 {
 		t.Fatalf("整屏 %d 行，应刚好 30", len(lines))
 	}
@@ -124,9 +123,6 @@ func TestActivityBarAboveInput(t *testing.T) {
 }
 
 func TestInputBorderMutedWhenEmpty(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev) })
 
 	m := newTestModel(t, 80, 24, "ok")
 	top := func(v string) string { m.input.SetValue(v); return firstLine(m.inputView()) }

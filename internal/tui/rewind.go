@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/llm"
@@ -60,7 +60,7 @@ func (m *Model) rewindPointAt(idx int) (rewindPoint, bool) {
 }
 
 // rewindKey 处理 Esc Esc 和回退菜单的按键；返回 false 交给常规处理。
-func (m *Model) rewindKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) rewindKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	k := msg.String()
 	if m.rewind.open {
 		switch k {

@@ -6,10 +6,8 @@ import (
 	"testing"
 	"time"
 
-	"github.com/charmbracelet/lipgloss"
 	"github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
-	"github.com/muesli/termenv"
 )
 
 func TestCatHalfwidthDot(t *testing.T) {
@@ -25,16 +23,15 @@ func TestCatHalfwidthDot(t *testing.T) {
 // MIAO_DUMP=目录 时导出带颜色的画面，用来截图给设计看。
 func dumpColors(t *testing.T) {
 	if os.Getenv("MIAO_DUMP") != "" {
-		lipgloss.SetColorProfile(termenv.TrueColor)
 		setTheme("mocha")
-		t.Cleanup(func() { lipgloss.SetColorProfile(termenv.Ascii); setTheme("auto") })
+		t.Cleanup(func() { setTheme("auto") })
 	}
 }
 
 func TestWelcomeCat(t *testing.T) {
 	dumpColors(t)
 	m := newTestModel(t, 100, 30, "")
-	v := ansi.Strip(m.View())
+	v := ansi.Strip(m.View().Content)
 	if !strings.Contains(v, "( ･ω･ )") || !strings.Contains(v, welcomeHint) {
 		t.Fatalf("空会话应显示小猫：\n%s", v)
 	}
@@ -42,17 +39,17 @@ func TestWelcomeCat(t *testing.T) {
 		t.Fatal("小猫替代了「已就绪」提示")
 	}
 	if os.Getenv("MIAO_DUMP") != "" {
-		_ = os.WriteFile(os.Getenv("MIAO_DUMP")+"/empty.ansi", []byte(m.View()), 0o644)
+		_ = os.WriteFile(os.Getenv("MIAO_DUMP")+"/empty.ansi", []byte(m.View().Content), 0o644)
 	}
 
 	short := newTestModel(t, 100, 16, "")
-	sv := ansi.Strip(short.View())
+	sv := ansi.Strip(short.View().Content)
 	if strings.Contains(sv, "( ･ω･ )") || !strings.Contains(sv, welcomeHint) {
 		t.Fatalf("矮于 20 行只留提示：\n%s", sv)
 	}
 
 	m.messages = append(m.messages, chatMessage{role: roleUser, content: "hi", done: true})
-	if strings.Contains(ansi.Strip(m.View()), welcomeHint) {
+	if strings.Contains(ansi.Strip(m.View().Content), welcomeHint) {
 		t.Fatal("发出消息后小猫应消失")
 	}
 }

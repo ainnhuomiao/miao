@@ -5,9 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
-	"github.com/muesli/termenv"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 )
@@ -15,9 +13,7 @@ import (
 // 缓存路径与原始整段渲染（MarginLeft(...).Render(renderTranscript())）逐字节一致，
 // 并在各种修改后正确失效。
 func TestTranscriptCacheMatchesSlowPath(t *testing.T) {
-	prev := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor) // 有颜色时主题才影响输出
-	t.Cleanup(func() { lipgloss.SetColorProfile(prev); setTheme("auto") })
+	t.Cleanup(func() { setTheme("auto") })
 
 	m := newBenchModel(t, 120, 40)
 	check := func(step string) {

@@ -2,7 +2,6 @@ package tui
 
 import (
 	"fmt"
-	"github.com/muesli/termenv"
 	"os"
 	"os/exec"
 	"path/filepath"
@@ -10,8 +9,8 @@ import (
 	"testing"
 	"unicode/utf8"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 // gitRepo 在临时目录建一个有一次提交的仓库并切进去。
@@ -51,7 +50,7 @@ func gitRepo(t *testing.T) string {
 func TestFileTreeShowsChanges(t *testing.T) {
 	gitRepo(t)
 	m := newTestModel(t, 120, 30, "ok")
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	if !m.side.open || !m.side.focus || !m.sidebarVisible() {
 		t.Fatal("ctrl+b should open and focus the file tree")
 	}
@@ -59,14 +58,14 @@ func TestFileTreeShowsChanges(t *testing.T) {
 	if ch["src/a.go"].code != 'M' || ch["src/a.go"].add != 2 || ch["src/gone.go"].code != 'D' || ch["src/new.go"].code != 'A' {
 		t.Fatalf("changes wrong: %+v", ch)
 	}
-	v := m.View()
+	v := m.View().Content
 	for i, line := range strings.Split(v, "\n") {
 		if w := lipgloss.Width(line); w > 120 {
 			t.Fatalf("line %d too wide: %d", i, w)
 		}
 	}
 	for _, want := range []string{"改动 3 · Ctrl+B 关闭", "src/", "a.go", "+2 −0", "新", "gone.go", "docs/"} {
-		if !strings.Contains(v, want) {
+		if !strings.Contains(stripANSI(v), want) {
 			t.Fatalf("view missing %q", want)
 		}
 	}
@@ -75,12 +74,12 @@ func TestFileTreeShowsChanges(t *testing.T) {
 			t.Fatalf("view should not show %q", bad)
 		}
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.side.focus || !m.side.open {
 		t.Fatal("esc should only return focus")
 	}
 	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
-	if m.sidebarVisible() || m.viewport.Width != 100 {
+	if m.sidebarVisible() || m.viewport.Width() != 100 {
 		t.Fatal("should hide under 110 cols")
 	}
 }
@@ -99,51 +98,48 @@ func selectTree(t *testing.T, m *Model, p string) {
 func TestFileTreePreviewAndMention(t *testing.T) {
 	gitRepo(t)
 	m := newTestModel(t, 120, 30, "ok")
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 
 	selectTree(t, m, "src/a.go")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if !strings.Contains(m.View(), "+ func A() {}") {
-		t.Fatalf("enter on changed file should show its diff in the drawer: %v %q", m.side.tree.preview != nil, m.View())
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if !strings.Contains(m.View().Content, "+ func A() {}") {
+		t.Fatalf("enter on changed file should show its diff in the drawer: %v %q", m.side.tree.preview != nil, m.View().Content)
 	}
 
 	selectTree(t, m, "docs")
-	m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	selectTree(t, m, "docs/readme.md")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
-	if d := m.View(); !strings.Contains(d, "只读预览") || !strings.Contains(d, "1  hi") {
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if d := m.View().Content; !strings.Contains(d, "只读预览") || !strings.Contains(d, "1  hi") {
 		t.Fatalf("unchanged file should get read-only preview: %q", d)
 	}
 
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'@'}})
+	m.Update(tea.KeyPressMsg{Code: '@', Text: string('@')})
 	if got := m.input.Value(); got != "@docs/readme.md " {
 		t.Fatalf("@ should insert reference, got %q", got)
 	}
 	if m.side.focus {
 		t.Fatal("@ should return focus to input")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.side.tree.preview != nil {
 		t.Fatal("esc should close the preview")
 	}
 }
 
 func TestFileTreeFitsWindow(t *testing.T) {
-	old := lipgloss.ColorProfile()
-	lipgloss.SetColorProfile(termenv.TrueColor)
-	defer lipgloss.SetColorProfile(old)
 	gitRepo(t)
 	os.MkdirAll("big", 0o755)
 	for i := 0; i < 60; i++ {
 		os.WriteFile(filepath.Join("big", fmt.Sprintf("a_very_long_file_name_number_%02d_test.go", i)), []byte("x\n"), 0o644)
 	}
 	m := newTestModel(t, 120, 30, "ok")
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlB})
+	m.Update(tea.KeyPressMsg{Code: 'b', Mod: tea.ModCtrl})
 	selectTree(t, m, "big")
-	m.Update(tea.KeyMsg{Type: tea.KeyRight})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	for i := 0; i < 70; i++ {
-		m.Update(tea.KeyMsg{Type: tea.KeyDown})
-		lines := strings.Split(m.View(), "\n")
+		m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+		lines := strings.Split(m.View().Content, "\n")
 		if len(lines) != 30 {
 			t.Fatalf("step %d: view has %d lines, want 30", i, len(lines))
 		}

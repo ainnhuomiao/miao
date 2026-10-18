@@ -7,7 +7,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func newThemeModel(t *testing.T) *Model {
@@ -87,14 +87,14 @@ func TestThemeMenuPreviewAndEsc(t *testing.T) {
 	if got[0].name != "auto" || !strings.Contains(got[0].desc, "当前") {
 		t.Fatalf("当前主题应排第一：%v", got[0])
 	}
-	if v := stripANSI(m.View()); !strings.Contains(v, "●●●●") || !strings.Contains(v, "Tokyo Night") {
+	if v := stripANSI(m.View().Content); !strings.Contains(v, "●●●●") || !strings.Contains(v, "Tokyo Night") {
 		t.Fatal("菜单应显示色块和主题名")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	if currentTheme != "mocha" {
 		t.Fatalf("↓ 应实时预览，got %s", currentTheme)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if currentTheme != "auto" {
 		t.Fatalf("Esc 应恢复原主题，got %s", currentTheme)
 	}
@@ -109,7 +109,7 @@ func TestThemeMenuEnterConfirms(t *testing.T) {
 	if got := m.paletteMatches(); len(got) != 1 || got[0].name != "gruvbox" {
 		t.Fatalf("matches=%v", got)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if currentTheme != "gruvbox" || savedConfig(t)["theme"] != "gruvbox" || m.input.Value() != "" {
 		t.Fatalf("Enter 应确认并保存，theme=%s input=%q", currentTheme, m.input.Value())
 	}
@@ -118,10 +118,10 @@ func TestThemeMenuEnterConfirms(t *testing.T) {
 func TestThemePreviewRevertsWhenLeavingMenu(t *testing.T) {
 	m := newThemeModel(t)
 	typeText(m, "/theme ")
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
-	m.Update(tea.KeyMsg{Type: tea.KeyDown})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
 	for range "/theme " {
-		m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+		m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	}
 	if currentTheme != "auto" {
 		t.Fatalf("删掉 /theme 后应恢复，got %s", currentTheme)

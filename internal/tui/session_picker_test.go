@@ -5,7 +5,7 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ainnhuomiao/miao/internal/session"
 )
@@ -16,7 +16,7 @@ func TestSessionPickerFilterAndRelTime(t *testing.T) {
 		{ID: "a", Title: "修复表格渲染"}, {ID: "b", Title: "子代理开关"}, {ID: "c", Title: "Nix flake"},
 	}}
 	for _, r := range "子代理" {
-		m.sessionPickerKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{r}})
+		m.sessionPickerKey(tea.KeyPressMsg{Code: r, Text: string(r)})
 	}
 	got := m.pickerMatches()
 	if len(got) != 1 || got[0].ID != "b" {
@@ -26,7 +26,7 @@ func TestSessionPickerFilterAndRelTime(t *testing.T) {
 	if s := relTime(now.Add(-3*time.Hour), now); s != "3 小时前" {
 		t.Fatalf("relTime: %q", s)
 	}
-	m.sessionPickerKey(tea.KeyMsg{Type: tea.KeyEsc})
+	m.sessionPickerKey(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.picker.open {
 		t.Fatal("esc should close")
 	}
@@ -38,11 +38,11 @@ func TestSessionPickerFilterAndRelTime(t *testing.T) {
 func TestSessionPickerDLetterFilters(t *testing.T) {
 	m := newTestModel(t, 120, 40, "ok")
 	m.picker = pickerState{open: true, all: []session.Meta{{ID: "a", Title: "debug"}, {ID: "b", Title: "nix"}}}
-	m.sessionPickerKey(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'d'}})
+	m.sessionPickerKey(tea.KeyPressMsg{Code: 'd', Text: string('d')})
 	if m.picker.confirmDel || m.picker.query != "d" || len(m.pickerMatches()) != 1 {
 		t.Fatalf("d should filter: %+v", m.picker)
 	}
-	m.sessionPickerKey(tea.KeyMsg{Type: tea.KeyCtrlD})
+	m.sessionPickerKey(tea.KeyPressMsg{Code: 'd', Mod: tea.ModCtrl})
 	if !m.picker.confirmDel {
 		t.Fatal("ctrl+d should ask to confirm")
 	}

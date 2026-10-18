@@ -1,12 +1,13 @@
 package tui
 
 import (
+	"os"
 	"strings"
 
-	"github.com/charmbracelet/glamour"
-	"github.com/charmbracelet/glamour/ansi"
-	"github.com/charmbracelet/glamour/styles"
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/glamour/v2"
+	"charm.land/glamour/v2/ansi"
+	"charm.land/glamour/v2/styles"
+	"charm.land/lipgloss/v2"
 	xansi "github.com/charmbracelet/x/ansi"
 )
 
@@ -18,7 +19,7 @@ var (
 )
 
 // initMarkdown 在程序启动前探测一次背景色，避免在 Bubble Tea 运行中查询终端。
-func initMarkdown() { mdDark = lipgloss.HasDarkBackground() }
+func initMarkdown() { mdDark = lipgloss.HasDarkBackground(os.Stdin, os.Stdout) }
 
 // renderMarkdown 用 Glamour 渲染 Markdown；失败时退回纯文本折行。
 func renderMarkdown(s string, width int) string {

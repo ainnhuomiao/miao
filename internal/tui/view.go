@@ -8,7 +8,8 @@ import (
 	"time"
 	"unicode/utf8"
 
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 	xansi "github.com/charmbracelet/x/ansi"
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
@@ -55,6 +56,7 @@ const helpText = `命令:
   /exit       退出`
 
 func (m *Model) view() string {
+	m.inputOrigin = [2]int{-1, -1}
 	if !m.ready {
 		return "正在启动…"
 	}
@@ -65,7 +67,7 @@ func (m *Model) view() string {
 
 	main := m.viewport.View()
 	if m.isEmptySession() && m.side.tree.preview == nil {
-		main = m.welcomeView(m.viewport.Width, m.viewport.Height)
+		main = m.welcomeView(m.viewport.Width(), m.viewport.Height())
 	}
 
 	header := m.headerView()
@@ -96,6 +98,11 @@ func (m *Model) view() string {
 	}
 	if m.keysCard {
 		parts = append(parts, m.keysCardView())
+	}
+	// 记下输入框文字区左上角在整帧里的位置，供 inputCursor 放置真实光标。
+	m.inputOrigin = [2]int{
+		side + m.columnMargin() + inputBoxStyle.GetBorderLeftSize() + inputBoxStyle.GetPaddingLeft(),
+		lipgloss.Height(parts[0]) + lipgloss.Height(strings.Join(parts[1:], "\n")) + inputBoxStyle.GetBorderTopSize() + inputBoxStyle.GetPaddingTop(),
 	}
 	parts = append(parts, m.inputView(), m.hintView())
 	return m.withSidebar(side, parts[0], strings.Join(parts[1:], "\n"))
@@ -146,6 +153,21 @@ func (m *Model) lastAssistantContent() string {
 		}
 	}
 	return ""
+}
+
+// inputCursor 返回输入框插入点处的真实终端光标（相对整帧左上角），
+// 让输入法（fcitx5 等）的候选框和预编辑跟着光标走。须在 view() 之后调用。
+func (m *Model) inputCursor() *tea.Cursor {
+	if m.inputOrigin[0] < 0 {
+		return nil
+	}
+	c := m.input.Cursor()
+	if c == nil {
+		return nil
+	}
+	c.X += m.inputOrigin[0]
+	c.Y += m.inputOrigin[1]
+	return c
 }
 
 func (m *Model) inputView() string {
@@ -353,7 +375,7 @@ func (m *Model) renderTranscript() string {
 
 // transcriptLogo 是还没有用户消息时顶部的大 logo，没有时返回空串。
 func (m *Model) transcriptLogo() string {
-	if m.hasUserMessage() || m.viewport.Height < 6 {
+	if m.hasUserMessage() || m.viewport.Height() < 6 {
 		return ""
 	}
 	width := m.contentWidth()

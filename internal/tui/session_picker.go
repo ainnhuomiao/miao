@@ -5,8 +5,8 @@ import (
 	"strings"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ainnhuomiao/miao/internal/session"
 )
@@ -69,7 +69,7 @@ func pickerTitle(s session.Meta) string {
 }
 
 // sessionPickerKey 处理列表打开时的按键；返回 false 表示不归它管。
-func (m *Model) sessionPickerKey(msg tea.KeyMsg) (bool, tea.Cmd) {
+func (m *Model) sessionPickerKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	if !m.picker.open {
 		return false, nil
 	}
@@ -136,11 +136,8 @@ func (m *Model) sessionPickerKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 			m.picker.confirmDel = true
 		}
 	default:
-		if msg.Type == tea.KeyRunes || msg.Type == tea.KeySpace {
-			m.picker.query += string(msg.Runes)
-			if msg.Type == tea.KeySpace {
-				m.picker.query += " "
-			}
+		if msg.Text != "" {
+			m.picker.query += msg.Text
 			m.picker.sel, m.picker.top = 0, 0
 		}
 	}

@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
@@ -57,7 +57,7 @@ func TestModelPaletteShowsCurrent(t *testing.T) {
 	if got := paletteNames(m); len(got) == 0 || got[0] != "/model" {
 		t.Fatalf("/mod 匹配 %v", got)
 	}
-	if v := ansi.Strip(m.View()); !strings.Contains(v, "当前：test-model") {
+	if v := ansi.Strip(m.View().Content); !strings.Contains(v, "当前：test-model") {
 		t.Fatalf("菜单应显示当前模型:\n%s", v)
 	}
 }
@@ -66,7 +66,7 @@ func TestModelSecondLevelFetchFilterAndSwitch(t *testing.T) {
 	srv := modelsServer(t)
 	m, c := newOpenAIModel(t, srv.URL, "deepseek-chat")
 	typeText(m, "/model")
-	_, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.input.Value() != "/model " {
 		t.Fatalf("Enter 应补全为 /model ，得 %q", m.input.Value())
 	}
@@ -79,14 +79,14 @@ func TestModelSecondLevelFetchFilterAndSwitch(t *testing.T) {
 	if got := paletteNames(m); len(got) != 1 || got[0] != "gpt-4.1-mini" {
 		t.Fatalf("筛选 gpt 得 %v", got)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.modelName != "gpt-4.1-mini" || c.Model() != "gpt-4.1-mini" {
 		t.Fatalf("未切换：tui=%s client=%s", m.modelName, c.Model())
 	}
 	if m.sess.Model != "gpt-4.1-mini" {
 		t.Fatalf("会话模型未更新: %s", m.sess.Model)
 	}
-	v := ansi.Strip(m.View())
+	v := ansi.Strip(m.View().Content)
 	if !strings.Contains(v, "已切换到 gpt-4.1-mini") || !strings.Contains(v, "gpt-4.1-mini") {
 		t.Fatalf("应显示切换提示:\n%s", v)
 	}
@@ -100,7 +100,7 @@ func TestModelDirectSwitchUpdatesWindow(t *testing.T) {
 	t.Setenv("MIAO_CONTEXT_WINDOW", "")
 	before := ansi.Strip(m.contextView())
 	typeText(m, "/model claude-x")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.modelName != "claude-x" {
 		t.Fatalf("modelName=%s", m.modelName)
 	}
@@ -108,7 +108,7 @@ func TestModelDirectSwitchUpdatesWindow(t *testing.T) {
 	if before == after || !strings.Contains(after, "200k") {
 		t.Fatalf("上下文窗口未更新: %q -> %q", before, after)
 	}
-	if !strings.Contains(ansi.Strip(m.View()), "claude-x") {
+	if !strings.Contains(ansi.Strip(m.View().Content), "claude-x") {
 		t.Fatal("顶栏应显示新模型名")
 	}
 	t.Setenv("MIAO_CONTEXT_WINDOW", "5000")
@@ -151,7 +151,7 @@ func TestModelRefuseWhileBusy(t *testing.T) {
 	m.streaming = true
 	m.switchModel("other")
 	typeText(m, "/model ")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.modelName != "test-model" {
 		t.Fatalf("生成中不应切换，得 %s", m.modelName)
 	}
@@ -164,7 +164,7 @@ func TestModelRefuseWhileBusy(t *testing.T) {
 func TestModelRestoredOnLoad(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
 	typeText(m, "hi")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	collectStream(t, m)
 	m.switchModel("deepseek-reasoner")
 	m.saveCurrentSession()

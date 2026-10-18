@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/tools"
@@ -41,10 +41,10 @@ func TestAtMenuOpensAndCompletes(t *testing.T) {
 	if len(got) == 0 || got[0].name != "internal/tui/view.go" {
 		t.Fatalf("matches=%v", got)
 	}
-	if !strings.Contains(stripANSI(m.View()), "internal/tui/view.go") {
+	if !strings.Contains(stripANSI(m.View().Content), "internal/tui/view.go") {
 		t.Fatal("菜单应渲染文件路径")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if v := m.input.Value(); v != "看看 @internal/tui/view.go " {
 		t.Fatalf("补全后=%q", v)
 	}
@@ -69,7 +69,7 @@ func TestAtMenuNotForCommandsOrEmail(t *testing.T) {
 func TestAtMenuEscHides(t *testing.T) {
 	m := newMentionModel(t)
 	typeText(m, "@ma")
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.paletteOpen() {
 		t.Fatal("Esc 后应收起")
 	}

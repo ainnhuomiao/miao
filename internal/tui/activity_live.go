@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/charmbracelet/lipgloss"
+	"charm.land/lipgloss/v2"
 )
 
 // activityRight 是工具行右侧固定区：思考动画（含 esc 中断）· 工具 N；宽度不够时只留工具 N。

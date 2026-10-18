@@ -4,13 +4,13 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func sendMsg(t *testing.T, m *Model, text string) {
 	t.Helper()
 	m.input.SetValue(text)
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	collectStream(t, m)
 }
 
@@ -20,18 +20,18 @@ func TestDoubleEscRewind(t *testing.T) {
 	sendMsg(t, m, "第二条")
 	before := len(m.ag.History())
 
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.rewind.open {
 		t.Fatal("单次 Esc 不应打开回退菜单")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if !m.rewind.open || len(m.rewind.items) != 2 || m.rewind.items[0].text != "第二条" {
 		t.Fatalf("Esc Esc 应列出消息（最新在上）: %+v", m.rewind.items)
 	}
-	if !strings.Contains(m.View(), "回到哪条消息") {
+	if !strings.Contains(m.View().Content, "回到哪条消息") {
 		t.Fatal("菜单没有渲染")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.rewind.open || m.input.Value() != "第二条" {
 		t.Fatalf("回退后输入框应是原文，got %q", m.input.Value())
 	}
@@ -49,8 +49,8 @@ func TestEscWithInputDoesNotRewind(t *testing.T) {
 	m := newTestModel(t, 100, 30, "好的")
 	sendMsg(t, m, "第一条")
 	m.input.SetValue("草稿")
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.rewind.open {
 		t.Fatal("输入框有内容时不应打开回退菜单")
 	}

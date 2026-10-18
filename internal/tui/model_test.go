@@ -8,8 +8,8 @@ import (
 	"testing"
 	"time"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/llm"
@@ -100,7 +100,7 @@ func TestViewFitsTerminal(t *testing.T) {
 		name := fmt.Sprintf("%dx%d", size.width, size.height)
 		t.Run(name, func(t *testing.T) {
 			m := newTestModel(t, size.width, size.height, "你好，这是一条测试回答。")
-			view := m.View()
+			view := m.View().Content
 
 			lines := strings.Split(view, "\n")
 			if len(lines) != size.height {
@@ -120,7 +120,7 @@ func TestSubmitStreamsIntoTranscript(t *testing.T) {
 	m := newTestModel(t, 80, 24, "你好！")
 
 	m.input.SetValue("hi")
-	if _, cmd := m.Update(tea.KeyMsg{Type: tea.KeyEnter}); cmd == nil {
+	if _, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}); cmd == nil {
 		t.Fatal("发送后应返回等待事件的命令")
 	}
 	if !m.streaming {
@@ -138,7 +138,7 @@ func TestSubmitStreamsIntoTranscript(t *testing.T) {
 	if got := m.messages[2].content; got != "你好！" {
 		t.Errorf("助手回答 = %q, 想要 %q", got, "你好！")
 	}
-	if !strings.Contains(m.View(), "你好！") {
+	if !strings.Contains(m.View().Content, "你好！") {
 		t.Error("界面上应显示完整回答")
 	}
 	if got := len(m.ag.History()); got != 2 {
@@ -153,7 +153,7 @@ func TestEscCancelsStream(t *testing.T) {
 	m.Update(tea.WindowSizeMsg{Width: 80, Height: 24})
 
 	m.input.SetValue("请写一篇很长的文章")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	select {
 	case <-fc.started:
@@ -161,22 +161,22 @@ func TestEscCancelsStream(t *testing.T) {
 		t.Fatal("请求没有开始")
 	}
 
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	collectStream(t, m)
 
 	if m.streaming {
 		t.Error("取消后 streaming 应变为 false")
 	}
-	if !strings.Contains(m.View(), "已取消") {
+	if !strings.Contains(m.View().Content, "已取消") {
 		t.Error("界面上应提示已取消")
 	}
 }
 
 func TestTabIsNoop(t *testing.T) {
 	m := newTestModel(t, 100, 24, "")
-	before := m.View()
-	m.Update(tea.KeyMsg{Type: tea.KeyTab})
-	if m.drawerOpen || m.View() != before {
+	before := m.View().Content
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.drawerOpen || m.View().Content != before {
 		t.Fatal("工具状态条常驻后 Tab 不应改变界面")
 	}
 }
@@ -191,15 +191,15 @@ func TestReasoningToggle(t *testing.T) {
 	})
 	m.refreshViewport(true)
 
-	if !strings.Contains(m.View(), "思考 6 字") {
+	if !strings.Contains(m.View().Content, "思考 6 字") {
 		t.Error("默认应折叠思考过程，只显示字数")
 	}
-	if strings.Contains(m.View(), "这是思考过程") {
+	if strings.Contains(m.View().Content, "这是思考过程") {
 		t.Error("默认不应显示思考内容")
 	}
 
-	m.Update(tea.KeyMsg{Type: tea.KeyCtrlR})
-	if !strings.Contains(m.View(), "这是思考过程") {
+	m.Update(tea.KeyPressMsg{Code: 'r', Mod: tea.ModCtrl})
+	if !strings.Contains(m.View().Content, "这是思考过程") {
 		t.Error("Ctrl+R 后应展开思考内容")
 	}
 }
@@ -207,7 +207,7 @@ func TestReasoningToggle(t *testing.T) {
 func TestClearCommand(t *testing.T) {
 	m := newTestModel(t, 80, 24, "回答")
 	m.input.SetValue("问题")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	collectStream(t, m)
 
 	if len(m.ag.History()) != 2 {
@@ -215,7 +215,7 @@ func TestClearCommand(t *testing.T) {
 	}
 
 	m.input.SetValue("/clear")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 
 	if len(m.ag.History()) != 0 {
 		t.Errorf("清空后历史长度 = %d, 想要 0", len(m.ag.History()))
@@ -227,7 +227,7 @@ func TestClearCommand(t *testing.T) {
 
 func TestSmallTerminalFallback(t *testing.T) {
 	m := newTestModel(t, 20, 8, "")
-	if !strings.Contains(m.View(), "太小") {
+	if !strings.Contains(m.View().Content, "太小") {
 		t.Error("小终端应显示提示而不是破版")
 	}
 }
@@ -261,10 +261,10 @@ func TestApprovalOverlayKeys(t *testing.T) {
 	if m.approval == nil {
 		t.Fatal("approval should be pending")
 	}
-	if !strings.Contains(m.View(), "确认执行") || !strings.Contains(m.View(), "sleep 0") {
-		t.Fatalf("view missing approval card:\n%s", m.View())
+	if !strings.Contains(m.View().Content, "确认执行") || !strings.Contains(m.View().Content, "sleep 0") {
+		t.Fatalf("view missing approval card:\n%s", m.View().Content)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'y'}})
+	m.Update(tea.KeyPressMsg{Code: 'y', Text: string('y')})
 	select {
 	case allow := <-resp:
 		if !allow {
@@ -279,7 +279,7 @@ func TestApprovalOverlayKeys(t *testing.T) {
 
 	resp2 := make(chan bool, 1)
 	m.Update(approvalRequestMsg{toolName: "run_command", display: "rm -rf /", resp: resp2})
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	select {
 	case allow := <-resp2:
 		if allow {
@@ -298,7 +298,7 @@ func TestSessionAutoSaveAndCommands(t *testing.T) {
 	oldID := m.sess.ID
 
 	m.input.SetValue("hi")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	collectStream(t, m)
 
 	loaded, err := m.store.Load(oldID)
@@ -310,14 +310,14 @@ func TestSessionAutoSaveAndCommands(t *testing.T) {
 	}
 
 	m.input.SetValue("/sessions")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.picker.open || len(m.pickerMatches()) == 0 || m.pickerMatches()[0].ID != oldID {
 		t.Fatalf("/sessions 应弹出列表并包含 %s", oldID)
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 
 	m.input.SetValue("/new")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.sess.ID == oldID {
 		t.Fatal("/new 应换新会话 id")
 	}
@@ -329,7 +329,7 @@ func TestSessionAutoSaveAndCommands(t *testing.T) {
 	}
 
 	m.input.SetValue("/load " + oldID)
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.sess.ID != oldID {
 		t.Fatalf("加载后 id = %s, 想要 %s", m.sess.ID, oldID)
 	}
@@ -353,21 +353,21 @@ func TestSessionAutoSaveAndCommands(t *testing.T) {
 func TestLoadMissingAndEmptySessions(t *testing.T) {
 	m := newTestModel(t, 80, 24, "")
 	m.input.SetValue("/load nosuch-id-zzz")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	last := m.messages[len(m.messages)-1].content
 	if !strings.Contains(last, "不存在") {
 		t.Fatalf("缺失会话提示不符: %q", last)
 	}
 
 	m.input.SetValue("/sessions")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	last = m.messages[len(m.messages)-1].content
 	if !strings.Contains(last, "暂无") {
 		t.Fatalf("空列表提示不符: %q", last)
 	}
 
 	m.input.SetValue("/load")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter}) // /load 已不在菜单里，无参直接给用法
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // /load 已不在菜单里，无参直接给用法
 	last = m.messages[len(m.messages)-1].content
 	if !strings.Contains(last, "用法") {
 		t.Fatalf("/load 无参提示不符: %q", last)
@@ -378,11 +378,11 @@ func TestClearRotatesSessionID(t *testing.T) {
 	m := newTestModel(t, 80, 24, "回答")
 	oldID := m.sess.ID
 	m.input.SetValue("问题")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	collectStream(t, m)
 
 	m.input.SetValue("/clear")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.sess.ID == oldID {
 		t.Fatal("/clear 应换新 id，避免覆盖已保存会话")
 	}

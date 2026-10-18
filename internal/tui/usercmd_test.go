@@ -6,7 +6,7 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
+	tea "charm.land/bubbletea/v2"
 )
 
 func TestUserCommandInPaletteAndSend(t *testing.T) {
@@ -23,15 +23,15 @@ func TestUserCommandInPaletteAndSend(t *testing.T) {
 	if len(names) != 1 || names[0] != "/review" {
 		t.Fatalf("菜单=%v", names)
 	}
-	if !strings.Contains(stripANSI(m.View()), "审查代码（用户命令）") {
+	if !strings.Contains(stripANSI(m.View().Content), "审查代码（用户命令）") {
 		t.Fatal("菜单应显示描述和来源")
 	}
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if m.input.Value() != "/review " {
 		t.Fatalf("带 $ARGS 的命令 Enter 应先补全，got %q", m.input.Value())
 	}
 	typeText(m, "main.go")
-	m.Update(tea.KeyMsg{Type: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !m.streaming {
 		t.Fatal("应发送给模型")
 	}

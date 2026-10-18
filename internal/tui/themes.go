@@ -8,8 +8,8 @@ import (
 	"path/filepath"
 	"strings"
 
+	"charm.land/lipgloss/v2"
 	catppuccin "github.com/catppuccin/go"
-	"github.com/charmbracelet/lipgloss"
 
 	"github.com/ainnhuomiao/miao/internal/appdir"
 )
@@ -61,10 +61,25 @@ var (
 	currentTheme = "auto"
 )
 
+// adaptiveColor 取代 lipgloss v1 的 AdaptiveColor：按启动时探测到的终端背景（termDark）选深/浅色值。
+type adaptiveColor struct{ Light, Dark string }
+
+// RGBA 实现 color.Color。
+func (c adaptiveColor) RGBA() (r, g, b, a uint32) {
+	h := c.Dark
+	if !termDark {
+		h = c.Light
+	}
+	if h == "" {
+		return 0, 0, 0, 0
+	}
+	return lipgloss.Color(h).RGBA()
+}
+
 // 配色槽，由 setTheme 赋值。
 var (
-	accentColor, userColor, agentColor, toolColor, errorColor, textColor, mutedColor lipgloss.AdaptiveColor
-	surface0Color, subtext0Color, pacYellowColor                                     lipgloss.AdaptiveColor
+	accentColor, userColor, agentColor, toolColor, errorColor, textColor, mutedColor adaptiveColor
+	surface0Color, subtext0Color, pacYellowColor                                     adaptiveColor
 )
 
 // 由 buildStyles 按当前配色生成的样式。
@@ -104,7 +119,7 @@ func setTheme(name string) bool {
 	if !ok {
 		return false
 	}
-	c := func(hex string) lipgloss.AdaptiveColor { return lipgloss.AdaptiveColor{Light: hex, Dark: hex} }
+	c := func(hex string) adaptiveColor { return adaptiveColor{Light: hex, Dark: hex} }
 	accentColor, userColor, agentColor, toolColor = c(t.accent), c(t.user), c(t.agent), c(t.tool)
 	errorColor, textColor, mutedColor = c(t.error_), c(t.text), c(t.muted)
 	surface0Color = c(t.surface0)

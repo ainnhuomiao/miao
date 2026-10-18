@@ -4,8 +4,8 @@ import (
 	"strings"
 	"testing"
 
-	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
+	tea "charm.land/bubbletea/v2"
+	"charm.land/lipgloss/v2"
 )
 
 func TestPaletteNotOpenMidText(t *testing.T) {
@@ -24,7 +24,7 @@ func TestPaletteClosesAfterArgOrBackspace(t *testing.T) {
 	}
 	m.input.Reset()
 	typeText(m, "/")
-	m.Update(tea.KeyMsg{Type: tea.KeyBackspace})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyBackspace})
 	if m.paletteOpen() {
 		t.Fatal("删掉 / 后菜单应收起")
 	}
@@ -33,7 +33,7 @@ func TestPaletteClosesAfterArgOrBackspace(t *testing.T) {
 func TestPaletteUpWrapsToLast(t *testing.T) {
 	m := newTestModel(t, 80, 30, "ok")
 	typeText(m, "/")
-	m.Update(tea.KeyMsg{Type: tea.KeyUp})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
 	all := m.paletteMatches()
 	if m.palette.sel != len(all)-1 {
 		t.Fatalf("在第一项按 ↑ 应跳到最后一项，sel=%d", m.palette.sel)
@@ -43,14 +43,14 @@ func TestPaletteUpWrapsToLast(t *testing.T) {
 func TestPaletteSelectionClampedWhenFilterNarrows(t *testing.T) {
 	m := newTestModel(t, 80, 30, "ok")
 	typeText(m, "/")
-	m.Update(tea.KeyMsg{Type: tea.KeyUp}) // 选中最后一项
-	typeText(m, "ne")                     // 只剩 /new
+	m.Update(tea.KeyPressMsg{Code: tea.KeyUp}) // 选中最后一项
+	typeText(m, "ne")                          // 只剩 /new
 	defer func() {
 		if r := recover(); r != nil {
 			t.Fatalf("筛选变窄后按 Tab 不应崩溃：%v", r)
 		}
 	}()
-	m.Update(tea.KeyMsg{Type: tea.KeyTab})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
 	if got := m.input.Value(); got != "/new " {
 		t.Fatalf("Tab 补全得到 %q，想要 \"/new \"", got)
 	}
@@ -59,7 +59,7 @@ func TestPaletteSelectionClampedWhenFilterNarrows(t *testing.T) {
 func TestPaletteReopensAfterEscWhenTyping(t *testing.T) {
 	m := newTestModel(t, 80, 20, "ok")
 	typeText(m, "/s")
-	m.Update(tea.KeyMsg{Type: tea.KeyEsc})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
 	if m.paletteOpen() {
 		t.Fatal("Esc 后菜单应关闭")
 	}
@@ -73,7 +73,7 @@ func TestPaletteFitsWidth(t *testing.T) {
 	for _, w := range []int{40, 80, 160} {
 		m := newTestModel(t, w, 24, "ok")
 		typeText(m, "/")
-		for i, l := range strings.Split(m.View(), "\n") {
+		for i, l := range strings.Split(m.View().Content, "\n") {
 			if lw := lipgloss.Width(l); lw > w {
 				t.Errorf("宽 %d：第 %d 行宽 %d 超出", w, i, lw)
 			}

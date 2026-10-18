@@ -35,7 +35,7 @@ func TestNeedAutoCompact(t *testing.T) {
 func TestThinkingShowsCompacting(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
 	m.streaming, m.compacting = true, true
-	if !strings.Contains(m.thinkingView(), "压缩上下文") {
+	if !strings.Contains(stripANSI(m.thinkingView()), "压缩上下文") {
 		t.Fatalf("压缩时工具行应显示压缩上下文：%q", m.thinkingView())
 	}
 }
