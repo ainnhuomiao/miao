@@ -174,3 +174,22 @@ func TestProjectHooksOldDirAndTrustSurvivesRename(t *testing.T) {
 		t.Fatalf("内容变化应重新确认：asked=%d", asked)
 	}
 }
+
+// PoC：hook 子进程原先继承完整环境，能读到 MIAO_API_KEY。
+func TestHookEnvDoesNotLeakAPIKey(t *testing.T) {
+	ws := setup(t, `{"hooks":{"stop":[{"command":"env > envout"}]}}`, "")
+	t.Setenv("MIAO_API_KEY", "sk-hook-leak")
+	t.Setenv("GITHUB_TOKEN", "ghp-hook-leak")
+	r, _ := Load(ws, nil)
+	r.Stop(context.Background())
+	b, err := os.ReadFile(filepath.Join(ws, "envout"))
+	if err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(b), "sk-hook-leak") || strings.Contains(string(b), "ghp-hook-leak") {
+		t.Fatalf("hook 环境泄露密钥:\n%s", b)
+	}
+	if !strings.Contains(string(b), "MIAO_EVENT=stop") {
+		t.Fatalf("hook 应仍能拿到 MIAO_EVENT:\n%s", b)
+	}
+}

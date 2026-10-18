@@ -9,6 +9,8 @@ import (
 	"sync"
 	"syscall"
 	"time"
+
+	"github.com/ainnhuomiao/miao/internal/childenv"
 )
 
 // bgJob 是一个后台运行的命令。
@@ -58,6 +60,7 @@ func (r *Registry) startBackground(name string, args []string, display string) R
 	name, args = wrapSandbox(r.Workspace(), name, args)
 	cmd := exec.Command(name, args...)
 	cmd.Dir = r.Workspace()
+	cmd.Env = childenv.Environ()
 	out := &liveBuffer{progress: func(string) {}}
 	cmd.Stdout, cmd.Stderr = out, out
 	setProcessGroup(cmd)

@@ -9,6 +9,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ainnhuomiao/miao/internal/childenv"
 	"github.com/ainnhuomiao/miao/internal/config"
 )
 
@@ -96,6 +97,7 @@ func diagnoseFile(ctx context.Context, workspace, rel string) string {
 	defer cancel()
 	cmd := exec.CommandContext(dctx, name, args...)
 	cmd.Dir = workspace
+	cmd.Env = childenv.Environ()
 	out, err := cmd.CombinedOutput()
 	return formatDiagnose(ctx, dctx, label, string(out), err)
 }

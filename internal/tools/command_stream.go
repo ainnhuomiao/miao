@@ -9,6 +9,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"github.com/ainnhuomiao/miao/internal/childenv"
 )
 
 const (
@@ -68,6 +70,7 @@ func execCommandStream(ctx context.Context, dir, name string, args []string, tim
 	name, args = wrapSandbox(dir, name, args)
 	cmd := exec.CommandContext(runCtx, name, args...)
 	cmd.Dir = dir
+	cmd.Env = childenv.Environ()
 	out := &liveBuffer{progress: progressFrom(ctx)}
 	cmd.Stdout, cmd.Stderr = out, out
 	setProcessGroup(cmd)

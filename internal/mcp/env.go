@@ -1,6 +1,10 @@
 package mcp
 
-import "strings"
+import (
+	"strings"
+
+	"github.com/ainnhuomiao/miao/internal/childenv"
+)
 
 // safeEnvKeys 是允许从 miao 继承给 MCP 子进程的环境变量（精确匹配）。
 var safeEnvKeys = map[string]bool{
@@ -10,24 +14,8 @@ var safeEnvKeys = map[string]bool{
 	"LOCALE_ARCHIVE": true,
 }
 
-// sensitive 报告变量名是否像密钥，或属于 miao 自身（含旧前缀 AGNET_）配置。
-func sensitive(key string) bool {
-	k := strings.ToUpper(key)
-	for _, s := range []string{"KEY", "TOKEN", "SECRET", "PASSWORD"} {
-		if strings.Contains(k, s) {
-			return true
-		}
-	}
-	for _, p := range []string{"MIAO_", "AGNET_", "OPENAI_", "DEEPSEEK_"} {
-		if strings.HasPrefix(k, p) {
-			return true
-		}
-	}
-	return false
-}
-
 func inheritable(key string) bool {
-	if sensitive(key) {
+	if childenv.Sensitive(key) {
 		return false
 	}
 	return safeEnvKeys[key] || strings.HasPrefix(key, "LC_") || strings.HasPrefix(key, "XDG_")

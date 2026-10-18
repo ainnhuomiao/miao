@@ -35,6 +35,7 @@ import (
 	"github.com/ainnhuomiao/miao/internal/atomicfile"
 
 	"github.com/ainnhuomiao/miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/childenv"
 )
 
 const (
@@ -316,7 +317,7 @@ func (r *Runner) exec(ctx context.Context, h Hook, event, tool, args, result str
 	cmd := exec.Command("sh", "-c", h.Command)
 	cmd.Dir = r.workspace
 	cmd.Stdin = bytes.NewReader(payload)
-	cmd.Env = append(os.Environ(),
+	cmd.Env = append(childenv.Environ(),
 		"MIAO_EVENT="+event,
 		"MIAO_TOOL="+tool,
 		"MIAO_TOOL_ARGS="+truncate(args, maxEnvArgs),
