@@ -179,14 +179,6 @@ func pathCandidates(args []string) []string {
 	return out
 }
 
-func pathOutsideWorkspace(workspace, arg string) bool {
-	rel, ok := workspaceRel(workspace, arg)
-	if !ok {
-		return true
-	}
-	return rel == ".." || strings.HasPrefix(rel, ".."+string(filepath.Separator))
-}
-
 func workspaceRel(workspace, arg string) (string, bool) {
 	if arg == "" || arg == "-" || arg == "." {
 		return ".", true

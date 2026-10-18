@@ -12,7 +12,6 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 
-	"github.com/ainnhuomiao/miao/internal/config"
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
@@ -101,23 +100,6 @@ func (m *Model) view() string {
 	return m.withSidebar(side, parts[0], strings.Join(parts[1:], "\n"))
 }
 
-func (m *Model) drawerBoxView() string {
-	w := m.drawerViewport.Width + 2
-	h := m.drawerViewport.Height
-	box := drawerBoxStyle.Width(w).Height(h).Render(m.drawerViewport.View())
-	// 把标题嵌进上边框：╭ 工具 · 1 ───╮
-	lines := strings.Split(box, "\n")
-	if len(lines) > 0 {
-		title := m.drawerTitle()
-		fill := w - lipgloss.Width(title)
-		if fill >= 1 {
-			lines[0] = drawerBorderStyle.Render("╭─") + titleStyle.Render(title) +
-				drawerBorderStyle.Render(strings.Repeat("─", fill-1)+"╮")
-		}
-	}
-	return strings.Join(lines, "\n")
-}
-
 func (m *Model) headerView() string {
 	suffix := " · " + m.modelName
 	// 先按 猫+miao → 只有猫 → 都不要 降级，再走吃豆人自己的降级。
@@ -154,32 +136,6 @@ func (m *Model) headerView() string {
 	rule := " " + lipgloss.NewStyle().Foreground(surface0Color).Render(strings.Repeat("─", max(0, m.width-2)))
 
 	return line + "\n" + rule
-}
-
-func (m *Model) statusView() string {
-	if m.streaming {
-		label := "生成中"
-		if m.lastAssistantContent() == "" {
-			label = "思考中"
-		}
-		for i := len(m.messages) - 1; i >= 0; i-- {
-			if m.messages[i].role == roleTool && !m.messages[i].done {
-				label = "工具中"
-				break
-			}
-		}
-		sp := m.spinner
-		color := accentColor
-		if label == "工具中" {
-			color = toolColor
-		}
-		sp.Style = lipgloss.NewStyle().Foreground(color).Background(surface0Color)
-		elapsed := time.Since(m.streamStart).Truncate(100 * time.Millisecond)
-		bg := lipgloss.NewStyle().Background(surface0Color)
-		return sp.View() + bg.Foreground(color).Render(label) +
-			bg.Foreground(mutedColor).Render(fmt.Sprintf(" %.1fs", elapsed.Seconds()))
-	}
-	return agentLabelStyle.Render("●") + mutedStyle.Render(" 就绪")
 }
 
 func (m *Model) lastAssistantContent() string {
@@ -256,11 +212,7 @@ func (m *Model) costText() string {
 	if m.usage == nil {
 		return ""
 	}
-	in, out, cache := 0.0, 0.0, 0.0
-	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_IN")), "%f", &in)
-	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_OUT")), "%f", &out)
-	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_CACHE")), "%f", &cache)
-	usd, ok := llm.EstimateCostUSD(m.modelName, *m.usage, in, out, cache)
+	usd, ok := llm.EstimateCostUSD(m.modelName, *m.usage, priceOverride("PRICE_IN"), priceOverride("PRICE_OUT"), priceOverride("PRICE_CACHE"))
 	if !ok {
 		return ""
 	}
@@ -373,15 +325,6 @@ func formatTokens(n int) string {
 	default:
 		return strings.TrimSuffix(fmt.Sprintf("%.1f", float64(n)/1_000_000), ".0") + "M"
 	}
-}
-
-// barStatus 是底栏状态段：就绪，或生成时 spinner + 状态 + 计时。
-func (m *Model) barStatus() string {
-	bg := lipgloss.NewStyle().Background(surface0Color)
-	if !m.streaming {
-		return bg.Foreground(agentColor).Render("● ") + bg.Foreground(textColor).Render("就绪")
-	}
-	return m.statusView()
 }
 
 func (m *Model) workspaceLabel() string {

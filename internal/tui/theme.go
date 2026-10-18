@@ -5,13 +5,6 @@ import (
 	"unicode/utf8"
 
 	"github.com/charmbracelet/lipgloss"
-
-	"github.com/ainnhuomiao/miao/internal/config"
-)
-
-var (
-	// nerdFont 为真时底栏用 powerline 箭头分段；设置 MIAO_NERD_FONT=1 开启。
-	nerdFont = config.Getenv("NERD_FONT") == "1"
 )
 
 const logoArt = "▄▀█ █▀▀ █▄ █ █▀▀ ▀█▀\n█▀█ █▄█ █ ▀█ ██▄  █ "

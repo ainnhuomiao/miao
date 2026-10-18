@@ -881,38 +881,6 @@ func (m *Model) beginNewSession(notice string) {
 	m.refreshSidebar()
 }
 
-func (m *Model) listSessions() {
-	if m.store == nil {
-		m.notice("会话存储不可用。")
-		return
-	}
-	list, err := m.store.List()
-	if err != nil {
-		m.notice("列出会话失败: " + err.Error())
-		return
-	}
-	if len(list) == 0 {
-		m.notice("暂无已保存会话。")
-		return
-	}
-	var b strings.Builder
-	b.WriteString("已保存会话（最近在前）：\n")
-	for _, meta := range list {
-		title := meta.Title
-		if title == "" {
-			title = "（无标题）"
-		}
-		b.WriteString(fmt.Sprintf("  %s  %s  %s  (%d 条)\n",
-			meta.ID,
-			meta.Updated.Local().Format("2006-01-02 15:04"),
-			title,
-			meta.MsgCount,
-		))
-	}
-	b.WriteString("加载：/load <id>")
-	m.notice(strings.TrimRight(b.String(), "\n"))
-}
-
 func (m *Model) loadSession(id string) {
 	if m.store == nil {
 		m.notice("会话存储不可用。")
@@ -1162,20 +1130,6 @@ func (m *Model) renderDrawer() string {
 		}
 	}
 	return strings.TrimRight(b.String(), "\n")
-}
-
-// drawerTitle 是抽屉标题：工具 · 本轮调用次数。
-func (m *Model) drawerTitle() string {
-	n := 0
-	for i := len(m.messages) - 1; i >= 0; i-- {
-		if m.messages[i].role == roleUser {
-			break
-		}
-		if m.messages[i].role == roleTool {
-			n++
-		}
-	}
-	return fmt.Sprintf(" 工具 · %d ", n)
 }
 
 // formatArgs 把工具参数 JSON 写成 key: value；run_command 写成命令行。

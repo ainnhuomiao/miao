@@ -63,15 +63,15 @@ var (
 
 // 配色槽，由 setTheme 赋值。
 var (
-	accentColor, userColor, agentColor, toolColor, errorColor, textColor, mutedColor     lipgloss.AdaptiveColor
-	surface0Color, crustColor, mantleColor, surface1Color, subtext0Color, pacYellowColor lipgloss.AdaptiveColor
+	accentColor, userColor, agentColor, toolColor, errorColor, textColor, mutedColor lipgloss.AdaptiveColor
+	surface0Color, subtext0Color, pacYellowColor                                     lipgloss.AdaptiveColor
 )
 
 // 由 buildStyles 按当前配色生成的样式。
 var (
-	titleStyle, userLabelStyle, agentLabelStyle, toolLabelStyle, mutedStyle, errorStyle, promptStyle lipgloss.Style
-	inputBoxStyle, drawerBorderStyle, drawerBoxStyle, userTagStyle, agentTagStyle                    lipgloss.Style
-	segAccentStyle, segStyle, approvalBoxStyle, diffAddStyle, diffDelStyle                           lipgloss.Style
+	titleStyle, toolLabelStyle, mutedStyle, errorStyle, promptStyle lipgloss.Style
+	inputBoxStyle, userTagStyle, agentTagStyle                      lipgloss.Style
+	approvalBoxStyle, diffAddStyle, diffDelStyle                    lipgloss.Style
 )
 
 func init() { setTheme("auto") }
@@ -107,7 +107,7 @@ func setTheme(name string) bool {
 	c := func(hex string) lipgloss.AdaptiveColor { return lipgloss.AdaptiveColor{Light: hex, Dark: hex} }
 	accentColor, userColor, agentColor, toolColor = c(t.accent), c(t.user), c(t.agent), c(t.tool)
 	errorColor, textColor, mutedColor = c(t.error_), c(t.text), c(t.muted)
-	surface0Color, surface1Color, crustColor, mantleColor = c(t.surface0), c(t.surface1), c(t.crust), c(t.mantle)
+	surface0Color = c(t.surface0)
 	subtext0Color, pacYellowColor = c(t.subtext0), c(t.yellow)
 	currentTheme = t.name
 	if mdDark != t.dark {
@@ -151,19 +151,13 @@ func resetFill() {
 
 func buildStyles() {
 	titleStyle = lipgloss.NewStyle().Bold(true).Foreground(accentColor)
-	userLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(userColor)
-	agentLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(agentColor)
 	toolLabelStyle = lipgloss.NewStyle().Bold(true).Foreground(toolColor)
 	mutedStyle = lipgloss.NewStyle().Foreground(mutedColor)
 	errorStyle = lipgloss.NewStyle().Foreground(errorColor)
 	promptStyle = lipgloss.NewStyle().Foreground(accentColor)
 	inputBoxStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accentColor).Padding(0, 1)
-	drawerBorderStyle = lipgloss.NewStyle().Foreground(toolColor)
-	drawerBoxStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(toolColor).Padding(0, 1)
 	userTagStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(userColor).Background(surface0Color)
 	agentTagStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(agentColor).Background(surface0Color)
-	segAccentStyle = lipgloss.NewStyle().Bold(true).Padding(0, 1).Foreground(crustColor).Background(accentColor)
-	segStyle = lipgloss.NewStyle().Padding(0, 1).Foreground(textColor).Background(surface0Color)
 	approvalBoxStyle = lipgloss.NewStyle().Border(lipgloss.RoundedBorder()).BorderForeground(accentColor).Padding(0, 1)
 	diffAddStyle = lipgloss.NewStyle().Foreground(agentColor)
 	diffDelStyle = lipgloss.NewStyle().Foreground(errorColor)

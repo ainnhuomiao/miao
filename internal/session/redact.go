@@ -5,7 +5,6 @@ import (
 	"strings"
 
 	"github.com/ainnhuomiao/miao/internal/config"
-	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 var (
@@ -31,24 +30,4 @@ func RedactForExport(s string) string {
 func redactEnabled() bool {
 	v := strings.TrimSpace(strings.ToLower(config.Getenv("SESSION_REDACT")))
 	return v != "0" && v != "false" && v != "off"
-}
-
-func redactMessages(msgs []llm.Message) []llm.Message {
-	if !redactEnabled() {
-		return msgs
-	}
-	out := make([]llm.Message, len(msgs))
-	copy(out, msgs)
-	for i := range out {
-		out[i].Content = RedactSecrets(out[i].Content)
-		if len(out[i].ToolCalls) == 0 {
-			continue
-		}
-		tcs := append([]llm.ToolCall(nil), out[i].ToolCalls...)
-		for j := range tcs {
-			tcs[j].Function.Arguments = RedactSecrets(tcs[j].Function.Arguments)
-		}
-		out[i].ToolCalls = tcs
-	}
-	return out
 }

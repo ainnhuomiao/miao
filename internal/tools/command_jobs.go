@@ -109,7 +109,7 @@ func (r *Registry) KillJobs() {
 	t.mu.Lock()
 	defer t.mu.Unlock()
 	for _, j := range t.jobs {
-		killGroup(j.cmd)
+		_ = killGroup(j.cmd)
 	}
 }
 
@@ -191,7 +191,7 @@ func registerCommandOutput(r *Registry) {
 				select {
 				case <-j.done:
 				default:
-					killGroup(j.cmd)
+					_ = killGroup(j.cmd)
 					select {
 					case <-j.done:
 					case <-time.After(2 * time.Second):
