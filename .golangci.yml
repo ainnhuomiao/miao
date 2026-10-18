@@ -33,3 +33,7 @@ formatters:
       - third_party$
       - builtin$
       - examples$
+issues:
+  # 0 表示不限，避免同类问题只报前 3 条导致漏报
+  max-issues-per-linter: 0
+  max-same-issues: 0
