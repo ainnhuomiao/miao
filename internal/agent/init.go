@@ -7,6 +7,7 @@ import (
 	"path/filepath"
 	"regexp"
 	"strings"
+	"syscall"
 )
 
 var makefileTargetRe = regexp.MustCompile(`^([A-Za-z0-9][A-Za-z0-9._-]*):`)
@@ -199,10 +200,26 @@ func readHead(path string, maxLines int) string {
 // WriteAgentsMD 把内容写入工作区 AGENTS.md；已存在且 overwrite 为 false 时拒绝。
 func WriteAgentsMD(workspace, content string, overwrite bool) error {
 	path := filepath.Join(workspace, AgentsMDName)
-	if !overwrite {
-		if _, err := os.Stat(path); err == nil {
+	// 符号链接可能指向工作区外，一律拒绝；打开时也不跟随链接。
+	if fi, err := os.Lstat(path); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			return fmt.Errorf("%s 是符号链接，拒绝写入", AgentsMDName)
+		}
+		if !overwrite {
 			return os.ErrExist
 		}
 	}
-	return os.WriteFile(path, []byte(content), 0o644)
+	flags := os.O_WRONLY | os.O_CREATE | os.O_TRUNC | syscall.O_NOFOLLOW
+	if !overwrite {
+		flags |= os.O_EXCL
+	}
+	f, err := os.OpenFile(path, flags, 0o644)
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteString(content); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }

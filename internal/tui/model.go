@@ -86,15 +86,16 @@ type approvalState struct {
 
 // Model 是 TUI 的全部状态。
 type Model struct {
-	side      sidebarState // 左侧会话侧栏
-	keysCard  bool         // ? 快捷键速查卡，见 keys.go
-	picker    pickerState  // /sessions 会话选择列表
-	git       gitState     // /commit 进行中
-	rewind    rewindState  // Esc Esc 回退
-	img       imageState   // Ctrl+V / @ 图片，见 images.go
-	sub       subagentState
-	ag        *agent.Agent
-	modelName string
+	side          sidebarState // 左侧会话侧栏
+	keysCard      bool         // ? 快捷键速查卡，见 keys.go
+	picker        pickerState  // /sessions 会话选择列表
+	exportConfirm string       // /export 覆盖已有文件前待确认的路径
+	git           gitState     // /commit 进行中
+	rewind        rewindState  // Esc Esc 回退
+	img           imageState   // Ctrl+V / @ 图片，见 images.go
+	sub           subagentState
+	ag            *agent.Agent
+	modelName     string
 
 	width  int
 	height int

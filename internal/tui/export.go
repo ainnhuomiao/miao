@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/ainnhuomiao/miao/internal/appdir"
@@ -34,12 +35,37 @@ func (m *Model) exportSession(path string) {
 		}
 		path = filepath.Join(dir, name)
 	}
+	if fi, err := os.Lstat(path); err == nil {
+		if fi.Mode()&os.ModeSymlink != 0 {
+			m.notice("导出失败：" + path + " 是符号链接，不会跟随写入。")
+			return
+		}
+		if m.exportConfirm != path {
+			m.exportConfirm = path
+			m.notice(path + " 已存在。再执行一次同样的 /export 覆盖它。")
+			return
+		}
+	}
+	m.exportConfirm = ""
 	body := session.RedactForExport(sessionMarkdown(m.modelName, msgs))
-	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+	if err := writeNoFollow(path, body); err != nil {
 		m.notice("导出失败：" + err.Error())
 		return
 	}
 	m.notice("已导出到 " + path)
+}
+
+// writeNoFollow 写文件但不跟随符号链接（防止检查和写入之间被换成链接）。
+func writeNoFollow(path, body string) error {
+	f, err := os.OpenFile(path, os.O_WRONLY|os.O_CREATE|os.O_TRUNC|syscall.O_NOFOLLOW, 0o600)
+	if err != nil {
+		return err
+	}
+	if _, err := f.WriteString(body); err != nil {
+		f.Close()
+		return err
+	}
+	return f.Close()
 }
 
 func defaultExportDir() (string, error) {
