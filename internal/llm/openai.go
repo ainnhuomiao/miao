@@ -127,7 +127,7 @@ func (c *OpenAIClient) streamChatOnce(ctx context.Context, req ChatRequest, onDe
 		}
 		return ChatResult{}, fmt.Errorf("连接模型服务失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 
 	if c.debug {
 		slog.Debug("llm response", "status", resp.StatusCode, "elapsed", time.Since(start).String(), "model", firstNonEmptyModel(req.Model, c.Model()))
@@ -184,6 +184,7 @@ func (c *OpenAIClient) streamChatOnce(ctx context.Context, req ChatRequest, onDe
 			delta := Delta{
 				Content:   choice.Delta.Content,
 				Reasoning: choice.Delta.ReasoningContent,
+				ToolCall:  len(choice.Delta.ToolCalls) > 0,
 			}
 			if delta.Content != "" {
 				content.WriteString(delta.Content)
@@ -191,7 +192,7 @@ func (c *OpenAIClient) streamChatOnce(ctx context.Context, req ChatRequest, onDe
 			if delta.Reasoning != "" {
 				reasoning.WriteString(delta.Reasoning)
 			}
-			if delta.Content == "" && delta.Reasoning == "" {
+			if delta.Content == "" && delta.Reasoning == "" && !delta.ToolCall {
 				continue
 			}
 			if err := onDelta(delta); err != nil {

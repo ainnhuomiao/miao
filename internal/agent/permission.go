@@ -34,14 +34,14 @@ func (m PermissionMode) String() string {
 // AllowCommandsEnv 是命令白名单环境变量，逗号分隔，按前缀匹配，如 "go test,git status,make"。
 const AllowCommandsEnv = config.EnvPrefix + "ALLOW_COMMANDS"
 
-const planModeNote = `<system-reminder>
-已进入只读规划模式，直到用户用 /apply 批准或切换模式。用户说“实现某某”时，意思是规划如何实现，而不是动手。
-先用只读的读取、搜索、检查把方案落到仓库的真实代码上；不要写文件、改配置、运行会改写已跟踪文件的格式化或生成命令，也不要提交。
-为了保持请求缓存稳定，各模式下工具列表不变；写入类工具仍会列出，但在本模式下不要使用。
-能查到的事实自己查，只有需要用户做决定的问题才问。
-方案要完整到可以直接实施：目标与验收标准、按模块列出改动、涉及的接口和数据变化、边界情况、测试，以及明确的假设。
-写完方案就停下，等用户 /apply；不要再问“要我开始吗”。
-</system-reminder>`
+const planModeNote = "<system-reminder>\n" +
+	"已进入只读规划模式，直到用户用 /apply 批准或切换模式。用户说“实现某某”时，意思是规划如何实现，而不是动手。\n" +
+	"先用只读的读取、搜索、检查把方案落到仓库的真实代码上；不要写文件、改配置、运行会改写已跟踪文件的格式化或生成命令，也不要提交。\n" +
+	"为了保持请求缓存稳定，各模式下工具列表不变；写入类工具仍会列出，但在本模式下不要使用。\n" +
+	"能查到的事实自己查，只有需要用户做决定的问题才问。\n" +
+	"方案要完整到可以直接实施：目标与验收标准、按模块列出改动、涉及的接口和数据变化、边界情况、测试，以及明确的假设。\n" +
+	"写完方案就停下，等用户 /apply；不要再问“要我开始吗”。\n" +
+	"</system-reminder>"
 
 type permissions struct {
 	mu         sync.Mutex
@@ -247,6 +247,9 @@ func (a *Agent) wrapApprover(fn tools.Approver) tools.Approver {
 		if toolName == "web_fetch" {
 			return a.approveWebFetch(ctx, fn, display, args)
 		}
+		if toolName == "web_search" {
+			return a.approveWebSearch(ctx, fn, display, args)
+		}
 		if decided, allow := a.perm.decide(toolName, args, a.Workspace()); decided {
 			return allow, nil
 		}
@@ -255,4 +258,19 @@ func (a *Agent) wrapApprover(fn tools.Approver) tools.Approver {
 		}
 		return fn(ctx, toolName, display, args)
 	}
+}
+
+// approveWebSearch：查询串会发往外部搜索引擎，和 web_fetch 一样需审批（卡片显示完整查询串）。
+// 只读规划模式下也不直接拒绝；本会话按 A 放行后不再询问；无审批回调（-p）时拒绝。
+func (a *Agent) approveWebSearch(ctx context.Context, fn tools.Approver, display string, args json.RawMessage) (bool, error) {
+	a.perm.mu.Lock()
+	ok := a.perm.session[sessionKey("web_search", args)]
+	a.perm.mu.Unlock()
+	if ok {
+		return true, nil
+	}
+	if fn == nil {
+		return false, nil
+	}
+	return fn(ctx, "web_search", display, args)
 }

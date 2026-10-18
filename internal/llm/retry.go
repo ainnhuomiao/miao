@@ -100,7 +100,7 @@ type countingDelta struct {
 }
 
 func (c *countingDelta) handle(d Delta) error {
-	if d.Content != "" || d.Reasoning != "" {
+	if d.Content != "" || d.Reasoning != "" || d.ToolCall {
 		c.n++
 	}
 	return c.fn(d)

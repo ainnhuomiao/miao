@@ -134,7 +134,7 @@ func (c *AnthropicClient) streamOnce(ctx context.Context, req ChatRequest, onDel
 		}
 		return ChatResult{}, fmt.Errorf("连接模型服务失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if c.debug {
 		slog.Debug("llm response", "protocol", "anthropic", "status", resp.StatusCode, "elapsed", time.Since(start).String())
 	}
@@ -176,6 +176,9 @@ func (c *AnthropicClient) streamOnce(ctx context.Context, req ChatRequest, onDel
 			if ev.ContentBlock != nil && ev.ContentBlock.Type == "tool_use" {
 				flushTool()
 				cur = &ToolCall{ID: ev.ContentBlock.ID, Type: "function", Function: FunctionCall{Name: ev.ContentBlock.Name}}
+				if err := onDelta(Delta{ToolCall: true}); err != nil {
+					return ChatResult{}, err
+				}
 			}
 		case "content_block_delta":
 			if ev.Delta == nil {

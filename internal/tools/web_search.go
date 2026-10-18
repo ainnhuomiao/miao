@@ -38,6 +38,9 @@ func registerWebSearch(r *Registry) {
 			if q == "" {
 				return Result{Content: "query 不能为空", IsError: true}
 			}
+			if res, ok := r.gateWebSearch(ctx, q, args); !ok {
+				return res
+			}
 			out, err := webSearch(ctx, q)
 			if err != nil {
 				return Result{Content: err.Error(), IsError: true}
@@ -65,7 +68,7 @@ func webSearch(ctx context.Context, query string) (string, error) {
 	if err != nil {
 		return "", fmt.Errorf("搜索失败: %w", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode != http.StatusOK {
 		return "", fmt.Errorf("搜索失败: HTTP %d", resp.StatusCode)
 	}

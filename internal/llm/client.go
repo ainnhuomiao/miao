@@ -65,6 +65,8 @@ type FunctionDef struct {
 type Delta struct {
 	Content   string
 	Reasoning string
+	// ToolCall 为 true 表示收到了工具调用增量（本身不带文本），用于判断是否已有输出、不可再重试/切换模型。
+	ToolCall bool
 }
 
 // DeltaHandler 处理一个增量片段。返回错误会中止本次流式请求。

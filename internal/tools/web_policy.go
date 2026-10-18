@@ -41,6 +41,25 @@ func (r *Registry) gateWebFetch(ctx context.Context, raw string, args json.RawMe
 	return ctx, Result{}, true
 }
 
+// gateWebSearch 在搜索前走审批回调：查询串会发给外部搜索引擎，可能外传数据，
+// 因此和 web_fetch 一样必须审批；审批卡显示完整查询串。未配置审批（如 -p 无审批）一律拒绝。
+func (r *Registry) gateWebSearch(ctx context.Context, query string, args json.RawMessage) (Result, bool) {
+	approver := r.Approver()
+	if approver == nil {
+		return Result{Content: "web_search 需要审批但未配置审批: " + query, IsError: true}, false
+	}
+	allow, err := approver(ctx, "web_search", "搜索 "+query, args)
+	if err != nil {
+		return Result{Content: "审批中断: " + err.Error(), IsError: true}, false
+	}
+	if !allow {
+		auditEvent(r.workspace, "web_search", query, "reject")
+		return Result{Content: "用户拒绝搜索: " + query, IsError: true}, false
+	}
+	auditEvent(r.workspace, "web_search", query, "allow")
+	return Result{}, true
+}
+
 // checkRedirectPolicy 对重定向目标重跑放行规则：哪怕原地址是审批卡单独批准的，跳转也必须满足规则。
 func checkRedirectPolicy(req *http.Request) error {
 	p, _ := req.Context().Value(webPolicyKey{}).(WebPolicy)
