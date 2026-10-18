@@ -37,11 +37,11 @@ func renderMarkdown(s string, width int) string {
 		cfg.Document.BlockPrefix = ""
 		cfg.Document.BlockSuffix = ""
 		cfg.Document.StylePrimitive = ansi.StylePrimitive{}
-		cfg.Code.StylePrimitive.Prefix = ""
-		cfg.Code.StylePrimitive.Suffix = ""
+		cfg.Code.Prefix = ""
+		cfg.Code.Suffix = ""
 		// 行内代码：主题 peach 色文字，不加底色。
-		cfg.Code.StylePrimitive.Color = &codeFG
-		cfg.Code.StylePrimitive.BackgroundColor = nil
+		cfg.Code.Color = &codeFG
+		cfg.Code.BackgroundColor = nil
 		r, err := glamour.NewTermRenderer(glamour.WithStyles(cfg), glamour.WithWordWrap(width), glamour.WithChromaFormatter(chromaFormatterName))
 		if err != nil {
 			return wrapText(s, width)

@@ -70,13 +70,13 @@ func (m *Model) paletteOpen() bool {
 	}
 	v := m.input.Value()
 	if _, ok := m.atMode(); ok {
-		return !(m.palette.esc && v == m.palette.hidden)
+		return !m.palette.esc || v != m.palette.hidden
 	}
 	if m.subagentsMode() {
-		return !(m.palette.esc && v == m.palette.hidden)
+		return !m.palette.esc || v != m.palette.hidden
 	}
 	if _, ok := m.themeMode(); ok {
-		return !(m.palette.esc && v == m.palette.hidden)
+		return !m.palette.esc || v != m.palette.hidden
 	}
 	if _, ok := m.modelMode(); !ok && (!strings.HasPrefix(v, "/") || strings.ContainsAny(v, " \t\n")) {
 		return false
