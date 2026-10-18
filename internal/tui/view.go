@@ -63,7 +63,7 @@ func (m *Model) view() string {
 	}
 
 	main := m.viewport.View()
-	if m.isEmptySession() {
+	if m.isEmptySession() && m.side.tree.preview == nil {
 		main = m.welcomeView(m.viewport.Width, m.viewport.Height)
 	}
 

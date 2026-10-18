@@ -36,7 +36,7 @@ func TestKeyBindingsCoverHandledKeys(t *testing.T) {
 
 func TestKeymapTextAligned(t *testing.T) {
 	txt := keymapText()
-	if !strings.Contains(txt, "Ctrl+B") || !strings.Contains(txt, "会话侧栏") {
+	if !strings.Contains(txt, "Ctrl+B") || !strings.Contains(txt, "文件树") {
 		t.Fatalf("快捷键表缺少 Ctrl+B：\n%s", txt)
 	}
 }

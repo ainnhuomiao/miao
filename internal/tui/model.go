@@ -420,6 +420,10 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 		return m, tea.Quit
 
 	case "esc":
+		if m.side.tree.preview != nil {
+			m.closeTreePreview()
+			return m, nil
+		}
 		// 定稿：关抽屉 → 取消审批（上面已处理）→ 取消生成
 		if m.drawerOpen {
 			m.drawerOpen = false
@@ -1048,6 +1052,10 @@ func (m *Model) layout() {
 }
 
 func (m *Model) refreshViewport(forceBottom bool) {
+	if m.side.tree.preview != nil { // 文件树预览占用对话区，Esc 关闭
+		m.viewport.SetContent(lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.renderTreePreview(m.columnWidth())))
+		return
+	}
 	atBottom := m.viewport.AtBottom()
 	m.viewport.SetContent(lipgloss.NewStyle().MarginLeft(m.columnMargin()).Render(m.renderTranscript()))
 	if forceBottom || atBottom {

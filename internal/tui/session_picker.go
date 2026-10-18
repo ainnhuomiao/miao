@@ -83,10 +83,7 @@ func (m *Model) sessionPickerKey(msg tea.KeyMsg) (bool, tea.Cmd) {
 	if m.picker.confirmDel {
 		m.picker.confirmDel = false
 		if k == "ctrl+d" && m.picker.sel < len(list) {
-			m.side.list = []session.Meta{list[m.picker.sel]}
-			m.side.sel = 0
-			m.deleteSelectedSession()
-			m.refreshSidebar()
+			m.deleteSession(list[m.picker.sel])
 			if list, err := m.store.List(); err == nil {
 				m.picker.all = list
 			}
@@ -218,7 +215,7 @@ func (m *Model) sessionPickerView() string {
 		}
 		lines = append(lines, line)
 	}
-	lines = append(lines, " "+mutedStyle.Render("Ctrl+B 侧栏"))
+	lines = append(lines, " "+mutedStyle.Render("Ctrl+D 删除 · Esc 关闭"))
 	return pad.Render(strings.Join(lines, "\n"))
 }
 

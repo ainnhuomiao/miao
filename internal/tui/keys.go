@@ -17,7 +17,7 @@ var keyBindings = []keyBinding{
 	{"enter", "Enter", "发送"},
 	{"ctrl+j", "Ctrl+J", "换行"},
 	{"ctrl+v", "Ctrl+V", "粘贴剪贴板里的图片"},
-	{"ctrl+b", "Ctrl+B", "会话侧栏"},
+	{"ctrl+b", "Ctrl+B", "文件树：看改动、预览、@ 引用、u 撤销"},
 	{"ctrl+t", "Ctrl+T", "任务清单与子代理结果"},
 	{"ctrl+r", "Ctrl+R", "展开或收起思考过程"},
 	{"shift+tab", "Shift+Tab", "切换权限模式"},
