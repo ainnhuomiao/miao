@@ -29,6 +29,11 @@
             "-s"
             "-w"
           ];
+          # grep 工具优先用 ripgrep；--suffix 让用户自己 PATH 里的 rg 优先
+          nativeBuildInputs = [ pkgs.makeWrapper ];
+          postInstall = ''
+            wrapProgram $out/bin/miao --suffix PATH : ${pkgs.lib.makeBinPath [ pkgs.ripgrep ]}
+          '';
           # 只构建 cmd/miao（产物就是 bin/miao），这里不跑测试；完整测试用 make check
           meta = {
             description = "终端里的 AI 编程助手";
@@ -53,6 +58,7 @@
             gcc
             golangci-lint
             goreleaser
+            ripgrep
           ];
         };
       });

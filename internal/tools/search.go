@@ -266,19 +266,14 @@ func registerSearchTools(r *Registry) {
 			if err != nil {
 				return Result{Content: "无法访问: " + err.Error(), IsError: true}
 			}
+			if out, ok := r.grepRipgrep(ctx, in.Pattern, in.IgnoreCase, in.Glob, base, info.IsDir()); ok {
+				return Result{Content: out}
+			}
 			var lines []string
 			total := 0
 			search := func(full, rel string) error {
-				if in.Glob != "" {
-					sub := rel
-					if info.IsDir() {
-						s, _ := filepath.Rel(base, full)
-						sub = filepath.ToSlash(s)
-					}
-					okBase, _ := path.Match(in.Glob, path.Base(rel))
-					if !matchGlob(in.Glob, sub) && !(!strings.Contains(in.Glob, "/") && okBase) {
-						return nil
-					}
+				if !grepGlobOK(in.Glob, base, full, rel, info.IsDir()) {
+					return nil
 				}
 				f, err := os.Open(full)
 				if err != nil {
@@ -304,14 +299,7 @@ func registerSearchTools(r *Registry) {
 					}
 					total++
 					if len(lines) < maxSearchResults {
-						if len(text) > maxGrepLineLen {
-							cut := maxGrepLineLen
-							for cut > 0 && (text[cut]&0xC0) == 0x80 {
-								cut--
-							}
-							text = text[:cut] + "…(行过长已截断)"
-						}
-						lines = append(lines, fmt.Sprintf("%s:%d: %s", rel, ln, text))
+						lines = append(lines, fmt.Sprintf("%s:%d: %s", rel, ln, truncGrepLine(text)))
 					}
 				}
 				return nil
@@ -328,4 +316,30 @@ func registerSearchTools(r *Registry) {
 			return Result{Content: formatResults(lines, total)}
 		},
 	})
+}
+
+// grepGlobOK 判断文件是否满足 grep 的 glob 过滤（Go 实现与 ripgrep 实现共用）。
+func grepGlobOK(glob, base, full, rel string, baseIsDir bool) bool {
+	if glob == "" {
+		return true
+	}
+	sub := rel
+	if baseIsDir {
+		s, _ := filepath.Rel(base, full)
+		sub = filepath.ToSlash(s)
+	}
+	okBase, _ := path.Match(glob, path.Base(rel))
+	return matchGlob(glob, sub) || (!strings.Contains(glob, "/") && okBase)
+}
+
+// truncGrepLine 把过长的匹配行截到 maxGrepLineLen 字节（不切断 UTF-8 字符）。
+func truncGrepLine(text string) string {
+	if len(text) <= maxGrepLineLen {
+		return text
+	}
+	cut := maxGrepLineLen
+	for cut > 0 && (text[cut]&0xC0) == 0x80 {
+		cut--
+	}
+	return text[:cut] + "…(行过长已截断)"
 }
