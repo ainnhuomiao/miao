@@ -1,8 +1,6 @@
 # miao
 
-终端里的 AI 编程助手，用 Go 编写，支持任何 OpenAI Chat Completions 兼容的模型服务。
-
-<!-- TODO: 替换为 docs/screenshot.png -->
+终端里的 AI 编程助手，用 Go 编写，支持 OpenAI Chat Completions 兼容服务，以及 Anthropic Messages API。
 
 ```text
  /\_/\ 
@@ -13,8 +11,8 @@
 ## 功能
 
 - 全屏 TUI（Bubble Tea），回答流式输出；`-plain` 逐行 REPL；`-p` 非交互模式，方便脚本和管道
-- 内置工具：`read_file`、`list_dir`、`grep`、`glob`、`write_file`、`edit_file`、`run_command`、`web_fetch`、`todo_write`，路径锁定在工作区内
-- 只读工具并行执行
+- 内置工具：`read_file`、`list_dir`、`grep`、`glob`、`repo_map`、`write_file`、`edit_file`、`run_command`、`web_fetch`、`web_search`、`todo_write`、`task`；路径锁定在工作区内，不跟随越界符号链接，不读取 `.env`
+- 只读工具并行执行；文件编辑审批卡显示 diff，`B` 允许本轮其余写入
 - 任务清单（todo），`Ctrl+T` 查看
 - 只读子代理（`task` 工具），可配置并发、模型和是否允许联网
 - MCP 客户端（stdio），兼容 Claude Desktop / Cursor 的 `mcp.json` 格式
@@ -24,7 +22,10 @@
 - `/undo` 撤销文件修改，`/diff` 查看改动，`/commit` 让模型写提交信息
 - 图片输入：`Ctrl+V` 粘贴剪贴板图片，或用 `@` 引用图片文件；`@` 也能引用普通文件
 - `/model` 运行时切换模型
-- `/compact` 压缩上下文
+- `/compact` 压缩上下文（用量到 80% 时自动触发，之前会先折叠早期工具输出）；`/export` 导出 Markdown 到数据目录（会脱敏）
+- `/apply` 确认只读规划方案并切到编辑模式执行；`/cost` 查看估算花费；`/init` 生成 `AGENTS.md`
+- `!<命令>` 在工作区直通执行 shell；`miao doctor` 检查 API、bwrap、剪贴板和终端
+- `-c` / `--resume` 启动时恢复最近一次会话
 - 自动加载工作区里的 `AGENTS.md` 作为项目记忆
 - 三种权限模式，`Shift+Tab` 切换
 - 多套主题，`/theme` 切换并持久化
@@ -54,7 +55,7 @@ go build ./cmd/miao     # 或 make build，产物在 bin/miao
 
 ## 首次配置
 
-连接配置从环境变量读取，也会读取**当前目录**下的 `.env`（真实环境变量优先）：
+连接配置从环境变量读取，也会读取**当前目录**下的 `.env`（真实环境变量优先）。工作区 `.env` **不能**设置 `MIAO_BASE_URL` / `MIAO_PROTOCOL`，避免不可信仓库把 API Key 转到别处；这两个请用真实环境变量或 `-base-url` / `-protocol`。
 
 | 变量 | 作用 | 默认值 |
 | --- | --- | --- |
@@ -80,7 +81,15 @@ miao
 | `MIAO_CONTEXT_WINDOW` | 模型上下文窗口大小（token） |
 | `MIAO_VISION` | `1` / `0` 强制开启 / 关闭图片输入 |
 | `MIAO_ALLOW_COMMANDS` | 免审批的命令前缀白名单，见下文 |
+| `MIAO_DENY_COMMANDS` | 硬拒绝的命令前缀，如 `curl,rm -rf`（命中后不询问、不执行） |
+| `MIAO_FALLBACK_MODEL` | 主模型在尚未产生任何输出时失败，改用这个备用模型 |
 | `MIAO_NERD_FONT` | `1` 时使用 Nerd Font 图标 |
+| `MIAO_PROTOCOL` | `openai` / `anthropic` / `auto`（Base URL 含 anthropic 时自动切） |
+| `MIAO_TIMEOUT` | 单次 LLM 请求超时秒数，默认 600 |
+| `MIAO_MAX_TOOL_ROUNDS` | 一轮对话最多工具循环次数，默认 32 |
+| `MIAO_SANDBOX` | `1` 时用 bubblewrap 把命令关在「根只读、工作区可写」的命名空间里（需安装 `bwrap`；`go`/`git` 不套） |
+| `MIAO_PRICE_IN` / `MIAO_PRICE_OUT` | 每百万 token 的美元单价，底栏显示累计花费 |
+| `MIAO_SESSION_REDACT` | `0` 时关闭会话落盘脱敏（默认会把 API Key 等替换成 `***`） |
 
 兼容旧名：连接配置的 `AGENT_API_KEY` / `AGENT_BASE_URL` / `AGENT_MODEL` / `AGENT_WORKSPACE` 仍然有效（还会回退到 `DEEPSEEK_API_KEY`、`DEEPSEEK_BASE_URL`、`DEEPSEEK_MODEL`）；其它变量的旧名 `AGNET_*`（如 `AGNET_MODELS`）也仍会读取。新旧都设置时 `MIAO_*` 优先。
 
@@ -91,6 +100,19 @@ miao
   "theme": "<主题名>",
   "subagents": { "enabled": true, "max": 3, "model": "", "allow_web": false },
   "hooks": {}
+}
+```
+
+命令行参数（覆盖环境变量）：`-model`、`-base-url`、`-system`、`-debug`、`-list-models`、`-protocol`、`-timeout`、`-c`/`-resume`、`-plain`、`-p`、`-mode`、`-version`、`-output-format`、`-max-turns`、`-allowed-tools`。子命令：`miao doctor`。
+
+项目级配置写在 `<工作区>/.miao/config.json`（不要放 API Key）。**未信任的仓库只能收紧权限**（降低工具轮次、打开沙箱）；`allow_commands` / `model` / `protocol` 要等你在 TUI 里输入 `/trust-project` 按文件哈希记住之后才生效。JSON 写错会在启动时提示，而不会静默忽略。
+
+```json
+{
+  "allow_commands": ["go test", "git status"],
+  "max_tool_rounds": 48,
+  "sandbox": true,
+  "protocol": "openai"
 }
 ```
 
@@ -124,7 +146,8 @@ miao
 | `/sessions` | 切换会话 |
 | `/clear` | 清空对话并换新会话 |
 | `/undo` | 撤销最近一次文件修改 |
-| `/compact` | 压缩上下文：把早期对话总结成摘要 |
+| `/compact` | 压缩上下文：把早期对话总结成摘要（用量到 80% 时自动触发） |
+| `/export` | 把当前会话导出为 Markdown（默认 `$XDG_DATA_HOME/miao/exports`，会脱敏） |
 | `/diff` | 查看本次会话改过的文件和 diff |
 | `/commit` | 让模型写提交信息，确认后提交本会话改过的文件 |
 | `/fork` | 把当前对话复制成新会话（原会话保留） |
@@ -144,13 +167,18 @@ miao
 - **自动同意编辑**：`write_file` / `edit_file` 自动同意，命令仍询问
 - **只读规划**：拒绝一切写入和需审批的命令，只读取、搜索、给方案
 
-审批卡上：`Y` 允许 · `A` 本会话总是允许 · `N` 拒绝 · `Esc` 取消。`A` 对文件编辑整类放行，对命令只放行完全相同的命令行。
+审批卡上：`Y` 允许 · `B` 本轮其余文件写入都允许 · `A` 本会话总是允许 · `N` 拒绝 · `Esc` 取消。`A` 对文件编辑整类放行，对命令只放行完全相同的命令行。
+
+`run_command` 白名单只覆盖只读用法。下面这些会弹审批，不会静默执行：`rg --pre`、`uniq` 写文件、`cat /etc/passwd` 这类工作区外路径、`git diff --no-index`。`go test` / `go build` 在白名单内，会编译并运行仓库里的代码。设 `MIAO_SANDBOX=1`（需 `bwrap`）可以从系统层禁止往工作区外写。
 
 `MIAO_ALLOW_COMMANDS` 是命令白名单，逗号分隔，按词边界前缀匹配：
 
 ```bash
 export MIAO_ALLOW_COMMANDS="go test,git status,make"
+export MIAO_DENY_COMMANDS="curl,rm -rf"   # 命中则直接拒绝，不询问
 ```
+
+审批过的命令会追加到 `~/.local/share/miao/audit.log`。
 
 `web_fetch` 的免审批规则：网址是 http/https、不带查询串，且主机名出现在你本会话亲手输入的消息里（`@` 引用的文件内容不算），或已在审批卡上按 `A` 放行；每一跳重定向都重新检查。其它情况弹审批卡并显示完整网址，只读规划模式下也一样。
 
@@ -164,7 +192,7 @@ export MIAO_ALLOW_COMMANDS="go test,git status,make"
 {
   "hooks": {
     "pre_tool":  [{ "match": "edit_file|write_file", "command": "echo \"$MIAO_TOOL\"", "timeout": 60 }],
-    "post_tool": [{ "match": "edit_file", "command": "gofmt -l ." }],
+    "post_tool": [{ "match": "edit_file|write_file", "command": "gofmt -l ." }],
     "stop":      [{ "command": "go test ./..." }]
   }
 }
@@ -228,8 +256,10 @@ description: 审查指定文件
 make run     # go run ./cmd/miao
 make build   # 构建到 bin/miao
 make test    # go test ./...
-make check   # 格式检查、编译、vet、测试、竞态测试
+make check   # 格式检查、编译、vet、测试、竞态测试、golangci-lint
 ```
+
+GitHub Actions 会跑测试、竞态、golangci-lint 和 `nix flake check`。打 `v*` 标签会用 goreleaser 发布各平台二进制。
 
 ## 许可证
 

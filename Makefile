@@ -1,6 +1,6 @@
 BINARY := bin/miao
 
-.PHONY: run build fmt fmt-check vet test race check clean
+.PHONY: run build fmt fmt-check vet test race lint check clean
 
 run:
 	go run ./cmd/miao
@@ -25,8 +25,12 @@ race:
 	@if command -v gcc >/dev/null 2>&1; then CGO_ENABLED=1 go test -race ./...; \
 	else nix-shell -p gcc go --run 'CGO_ENABLED=1 go test -race ./...'; fi
 
+lint:
+	@if command -v golangci-lint >/dev/null 2>&1; then golangci-lint run; \
+	else echo "未安装 golangci-lint，跳过（CI 会跑）"; fi
+
 # 提交前跑：格式、编译、vet、测试、竞态测试；不会改动任何文件
-check: fmt-check build vet test race
+check: fmt-check build vet test race lint
 
 clean:
 	rm -rf bin

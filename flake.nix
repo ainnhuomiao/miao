@@ -51,6 +51,8 @@
             gopls
             gnumake
             gcc
+            golangci-lint
+            goreleaser
           ];
         };
       });
