@@ -144,7 +144,20 @@ func DefaultTester(ctx context.Context, c config.Credentials) (config.Credential
 	client := llm.NewClient(c.Protocol, c.APIKey, c.BaseURL, c.Model)
 	llm.ApplySettings(client, TestTimeout, 0, false)
 
-	if lister, ok := client.(llm.ModelLister); ok {
+	if ac, ok := client.(*llm.AnthropicClient); ok && c.Provider == "anthropic" {
+		items, err := ac.ListModelInfo(ctx)
+		if err == nil {
+			if m := llm.NewestSonnet(items); m != "" {
+				c.Model = m
+			} else if len(items) > 0 {
+				c.Model = items[0].ID
+			}
+			return c, nil
+		}
+		if !listUnsupported(err) {
+			return c, Classify(err)
+		}
+	} else if lister, ok := client.(llm.ModelLister); ok {
 		names, err := lister.ListModels(ctx)
 		if err == nil {
 			c.Model = pickModel(c, names)
@@ -167,7 +180,8 @@ func DefaultTester(ctx context.Context, c config.Credentials) (config.Credential
 	return c, nil
 }
 
-// pickModel 在列出模型成功后选默认模型：Anthropic 选列表里最新的 sonnet（列表已按从新到旧排列），
+// pickModel 在列出模型成功后选默认模型（Anthropic 原生协议走 llm.NewestSonnet，这里是其它情况）：
+// Anthropic 选列表里最新的 sonnet（列表已按从新到旧排列），
 // 没有 sonnet 就选最新的一个；其它服务商保持原逻辑（已有默认模型就用它，否则取列表第一个）。
 func pickModel(c config.Credentials, names []string) string {
 	if len(names) == 0 {

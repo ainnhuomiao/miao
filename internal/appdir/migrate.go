@@ -188,7 +188,13 @@ func copyTreeNoOverwrite(src, dst string) migrateResult {
 				r.conflicts = append(r.conflicts, tilde(target))
 				return fs.SkipDir
 			}
-			if err := os.Mkdir(target, 0o700); err != nil && !errors.Is(err, fs.ErrExist) {
+			if err := os.Mkdir(target, 0o700); err != nil {
+				if !errors.Is(err, fs.ErrExist) {
+					r.errs = append(r.errs, err)
+					return fs.SkipDir
+				}
+			} else if err := os.Chmod(target, 0o700); err != nil {
+				// 新建的目录一律 0700（不受 umask 和源目录权限影响）；已存在的目录不动
 				r.errs = append(r.errs, err)
 				return fs.SkipDir
 			}
@@ -212,7 +218,7 @@ func copyTreeNoOverwrite(src, dst string) migrateResult {
 }
 
 // copyFileVerified 复制单个文件：目标已存在时内容相同算已完成，不同算冲突，都不覆盖。
-// 先写同目录临时文件并 fsync，校验哈希后用硬链接落到目标名（目标被抢先创建时不会覆盖）。
+// 目标文件权限固定为 0600。先写同目录临时文件并 fsync，校验哈希后用硬链接落到目标名（目标被抢先创建时不会覆盖）。
 func copyFileVerified(src, dst string) (copied, conflict bool, err error) {
 	if info, err := os.Lstat(dst); err == nil {
 		if info.Mode().IsRegular() && sameContent(src, dst) {
@@ -225,10 +231,6 @@ func copyFileVerified(src, dst string) (copied, conflict bool, err error) {
 		return false, false, err
 	}
 	defer func() { _ = in.Close() }()
-	st, err := in.Stat()
-	if err != nil {
-		return false, false, err
-	}
 	tmp, err := os.CreateTemp(filepath.Dir(dst), ".migrate-*")
 	if err != nil {
 		return false, false, err
@@ -240,7 +242,8 @@ func copyFileVerified(src, dst string) (copied, conflict bool, err error) {
 		_ = tmp.Close()
 		return false, false, err
 	}
-	if err := tmp.Chmod(st.Mode().Perm()); err != nil {
+	// 迁移的文件里可能有密钥，一律 0600，不沿用源文件权限
+	if err := tmp.Chmod(0o600); err != nil {
 		_ = tmp.Close()
 		return false, false, err
 	}

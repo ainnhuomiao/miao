@@ -19,8 +19,58 @@ func (c *AnthropicClient) modelsURL() string {
 	return b + "/v1/models"
 }
 
+// AnthropicModel 是 GET /v1/models 里的一项。Line 是模型系列（如 "sonnet"），
+// 服务端不返回时为空（也兼容 family 字段名）。
+type AnthropicModel struct {
+	ID        string
+	CreatedAt string
+	Line      string
+}
+
 // ListModels 调用 Anthropic 的 GET /v1/models，按发布时间从新到旧排列（时间相同按 id 倒序）。
 func (c *AnthropicClient) ListModels(ctx context.Context) ([]string, error) {
+	items, err := c.ListModelInfo(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]string, len(items))
+	for i, d := range items {
+		out[i] = d.ID
+	}
+	return out, nil
+}
+
+// NewestSonnet 从按新到旧排好的列表里选最新的 sonnet：只要有一项带系列字段，就只按系列字段选
+// （系列为 sonnet 的里 created_at 最新的）；都没有系列字段时退回按 id 含 "sonnet" 匹配。
+// 找不到返回空串。
+func NewestSonnet(items []AnthropicModel) string {
+	hasLine := false
+	for _, m := range items {
+		if m.Line != "" {
+			hasLine = true
+			break
+		}
+	}
+	best := -1
+	for i, m := range items {
+		var ok bool
+		if hasLine {
+			ok = strings.EqualFold(m.Line, "sonnet")
+		} else {
+			ok = strings.Contains(strings.ToLower(m.ID), "sonnet")
+		}
+		if ok && (best < 0 || m.CreatedAt > items[best].CreatedAt) {
+			best = i
+		}
+	}
+	if best < 0 {
+		return ""
+	}
+	return items[best].ID
+}
+
+// ListModelInfo 与 ListModels 相同，但保留发布时间和系列字段。
+func (c *AnthropicClient) ListModelInfo(ctx context.Context) ([]AnthropicModel, error) {
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, c.modelsURL()+"?limit=1000", nil)
 	if err != nil {
 		return nil, err
@@ -39,6 +89,8 @@ func (c *AnthropicClient) ListModels(ctx context.Context) ([]string, error) {
 		Data []struct {
 			ID        string `json:"id"`
 			CreatedAt string `json:"created_at"`
+			Line      string `json:"line"`
+			Family    string `json:"family"`
 		} `json:"data"`
 	}
 	if err := json.NewDecoder(io.LimitReader(resp.Body, maxModelsBody)).Decode(&body); err != nil {
@@ -60,9 +112,13 @@ func (c *AnthropicClient) ListModels(ctx context.Context) ([]string, error) {
 		}
 		return items[i].ID > items[j].ID
 	})
-	out := make([]string, len(items))
+	out := make([]AnthropicModel, len(items))
 	for i, d := range items {
-		out[i] = d.ID
+		line := d.Line
+		if line == "" {
+			line = d.Family
+		}
+		out[i] = AnthropicModel{ID: d.ID, CreatedAt: d.CreatedAt, Line: line}
 	}
 	return out, nil
 }

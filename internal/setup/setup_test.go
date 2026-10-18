@@ -196,3 +196,34 @@ func TestDeepSeekKeepsDefaultModel(t *testing.T) {
 		t.Fatalf("DeepSeek 保持原逻辑：%q %v", got.Model, err)
 	}
 }
+
+func TestAnthropicPicksSonnetByLine(t *testing.T) {
+	// 带 line 字段时只按 line 选：id 含 sonnet 但 line 不是 sonnet 的不算，
+	// id 不含 sonnet 但 line 是 sonnet 的算；sonnet 中按 created_at 取最新（与返回顺序无关）
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"claude-sonnet-lookalike","created_at":"2026-10-01T00:00:00Z","line":"opus"},
+			{"id":"claude-s-5-4","created_at":"2026-03-01T00:00:00Z","line":"sonnet"},
+			{"id":"claude-s-5-7","created_at":"2026-09-01T00:00:00Z","line":"sonnet"},
+			{"id":"claude-haiku-5","created_at":"2026-09-15T00:00:00Z","line":"haiku"}]}`))
+	}))
+	defer srv.Close()
+	c, err := DefaultTester(context.Background(), anthropicCreds(srv.URL))
+	if err != nil || c.Model != "claude-s-5-7" {
+		t.Fatalf("应按 line 选最新的 sonnet：%q %v", c.Model, err)
+	}
+}
+
+func TestAnthropicNoLineFallsBackToIDMatch(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte(`{"data":[
+			{"id":"claude-opus-9","created_at":"2026-09-01T00:00:00Z"},
+			{"id":"claude-sonnet-5-1","created_at":"2026-01-01T00:00:00Z"},
+			{"id":"claude-sonnet-5-6","created_at":"2026-08-01T00:00:00Z"}]}`))
+	}))
+	defer srv.Close()
+	c, err := DefaultTester(context.Background(), anthropicCreds(srv.URL))
+	if err != nil || c.Model != "claude-sonnet-5-6" {
+		t.Fatalf("没有 line 时按 id 匹配 sonnet：%q %v", c.Model, err)
+	}
+}

@@ -266,3 +266,30 @@ func TestProjectDirNotGlobalHome(t *testing.T) {
 		t.Fatalf("普通工作区不受影响：%q", got)
 	}
 }
+
+func TestMigratePermissions(t *testing.T) {
+	home := setHome(t)
+	src := filepath.Join(home, ".local/share/miao")
+	write(t, filepath.Join(src, "sub/deep/a.json"), `{}`)
+	write(t, filepath.Join(src, "b.txt"), "b")
+	if err := os.Chmod(filepath.Join(src, "b.txt"), 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.Chmod(filepath.Join(src, "sub/deep"), 0o777); err != nil {
+		t.Fatal(err)
+	}
+	Migrate()
+	d := filepath.Join(home, ".miao/data")
+	for _, f := range []string{"sub/deep/a.json", "b.txt"} {
+		info, err := os.Stat(filepath.Join(d, f))
+		if err != nil || info.Mode().Perm() != 0o600 {
+			t.Fatalf("%s 权限应为 0600：%v %v", f, info, err)
+		}
+	}
+	for _, dir := range []string{"", "sub", "sub/deep"} {
+		info, err := os.Stat(filepath.Join(d, dir))
+		if err != nil || info.Mode().Perm() != 0o700 {
+			t.Fatalf("目录 %q 权限应为 0700：%v %v", dir, info, err)
+		}
+	}
+}
