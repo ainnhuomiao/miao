@@ -20,6 +20,14 @@ func RedactSecrets(s string) string {
 	return s
 }
 
+// RedactForExport 在导出时脱敏；MIAO_SESSION_REDACT=0 时原样返回。
+func RedactForExport(s string) string {
+	if !redactEnabled() {
+		return s
+	}
+	return RedactSecrets(s)
+}
+
 func redactEnabled() bool {
 	v := strings.TrimSpace(strings.ToLower(config.Getenv("SESSION_REDACT")))
 	return v != "0" && v != "false" && v != "off"

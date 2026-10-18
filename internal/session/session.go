@@ -31,12 +31,14 @@ type Session struct {
 	Messages  []llm.Message `json:"messages"`
 }
 
+const indexFile = "index.json"
+
 // Meta 是侧栏列表用的摘要，不含消息正文。
 type Meta struct {
-	ID       string
-	Title    string
-	Updated  time.Time
-	MsgCount int
+	ID       string    `json:"id"`
+	Title    string    `json:"title"`
+	Updated  time.Time `json:"updated"`
+	MsgCount int       `json:"msg_count"`
 }
 
 // Store 管理一个目录下的会话文件（每个会话一个 <id>.json）。
@@ -83,9 +85,7 @@ func (s *Store) Save(sess *Session) error {
 		sess.Title = TitleFrom(sess.Messages)
 	}
 	sess.Updated = s.now()
-	toWrite := *sess
-	toWrite.Messages = redactMessages(sess.Messages)
-	data, err := json.MarshalIndent(s.diskForm(&toWrite), "", "  ")
+	data, err := json.MarshalIndent(s.diskForm(sess), "", "  ")
 	if err != nil {
 		return err
 	}
@@ -106,6 +106,7 @@ func (s *Store) Save(sess *Session) error {
 		os.Remove(tmp.Name())
 		return err
 	}
+	s.upsertIndex(Meta{ID: sess.ID, Title: sess.Title, Updated: sess.Updated, MsgCount: len(sess.Messages)})
 	return nil
 }
 
@@ -129,25 +130,52 @@ func (s *Store) Load(id string) (*Session, error) {
 	return &sess, nil
 }
 
-// List 按最近更新倒序列出会话；损坏的文件跳过。
+// List 按最近更新倒序列出会话；优先读 index.json，缺项再扫文件头。
 func (s *Store) List() ([]Meta, error) {
 	entries, err := os.ReadDir(s.dir)
 	if err != nil {
 		return nil, err
 	}
-	var out []Meta
+	idx := s.loadIndex()
+	byID := make(map[string]Meta, len(idx))
+	var ids []string
 	for _, e := range entries {
 		name := e.Name()
-		if e.IsDir() || !strings.HasSuffix(name, ".json") {
+		if e.IsDir() || name == indexFile || !strings.HasSuffix(name, ".json") {
 			continue
 		}
-		meta, err := s.readMeta(filepath.Join(s.dir, name))
+		id := strings.TrimSuffix(name, ".json")
+		if validID(id) != nil {
+			continue
+		}
+		ids = append(ids, id)
+		if m, ok := idx[id]; ok {
+			byID[id] = m
+		}
+	}
+	dirty := false
+	for _, id := range ids {
+		if _, ok := byID[id]; ok {
+			continue
+		}
+		meta, err := s.readMeta(s.path(id))
 		if err != nil {
 			continue
 		}
-		out = append(out, meta)
+		byID[id] = meta
+		dirty = true
+	}
+	if len(idx) != len(byID) {
+		dirty = true
+	}
+	out := make([]Meta, 0, len(byID))
+	for _, m := range byID {
+		out = append(out, m)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Updated.After(out[j].Updated) })
+	if dirty {
+		s.writeIndex(out)
+	}
 	return out, nil
 }
 
@@ -160,7 +188,11 @@ func (s *Store) Delete(id string) error {
 	if errors.Is(err, os.ErrNotExist) {
 		return ErrNotFound
 	}
-	return err
+	if err != nil {
+		return err
+	}
+	s.removeIndex(id)
+	return nil
 }
 
 // TitleFrom 取第一条用户消息的首行，最多 24 个字。
@@ -169,7 +201,11 @@ func TitleFrom(msgs []llm.Message) string {
 		if m.Role != llm.RoleUser {
 			continue
 		}
-		line, _, _ := strings.Cut(strings.TrimSpace(m.Content), "\n")
+		c := strings.TrimSpace(m.Content)
+		if strings.HasPrefix(c, "<system-reminder>") || strings.HasPrefix(c, "[早前对话摘要]") || strings.HasPrefix(c, "（已切换到「") {
+			continue
+		}
+		line, _, _ := strings.Cut(c, "\n")
 		r := []rune(line)
 		if len(r) > 24 {
 			return string(r[:24]) + "…"
@@ -280,6 +316,83 @@ func skipJSONRest(dec *json.Decoder, t json.Token) error {
 	}
 	_, err := dec.Token()
 	return err
+}
+
+type sessionIndex struct {
+	Sessions []Meta `json:"sessions"`
+}
+
+func (s *Store) indexPath() string { return filepath.Join(s.dir, indexFile) }
+
+func (s *Store) loadIndex() map[string]Meta {
+	data, err := os.ReadFile(s.indexPath())
+	if err != nil {
+		return nil
+	}
+	var idx sessionIndex
+	if json.Unmarshal(data, &idx) != nil {
+		return nil
+	}
+	out := make(map[string]Meta, len(idx.Sessions))
+	for _, m := range idx.Sessions {
+		if m.ID == "" {
+			continue
+		}
+		out[m.ID] = m
+	}
+	return out
+}
+
+func (s *Store) writeIndex(list []Meta) {
+	data, err := json.MarshalIndent(sessionIndex{Sessions: list}, "", "  ")
+	if err != nil {
+		return
+	}
+	tmp, err := os.CreateTemp(s.dir, ".tmp-index-*")
+	if err != nil {
+		return
+	}
+	if _, err := tmp.Write(data); err != nil {
+		tmp.Close()
+		os.Remove(tmp.Name())
+		return
+	}
+	if err := tmp.Close(); err != nil {
+		os.Remove(tmp.Name())
+		return
+	}
+	if err := os.Rename(tmp.Name(), s.indexPath()); err != nil {
+		os.Remove(tmp.Name())
+	}
+}
+
+func (s *Store) upsertIndex(m Meta) {
+	idx := s.loadIndex()
+	if idx == nil {
+		idx = map[string]Meta{}
+	}
+	idx[m.ID] = m
+	list := make([]Meta, 0, len(idx))
+	for _, v := range idx {
+		list = append(list, v)
+	}
+	s.writeIndex(list)
+}
+
+func (s *Store) removeIndex(id string) {
+	idx := s.loadIndex()
+	if idx == nil {
+		return
+	}
+	if _, ok := idx[id]; !ok {
+		return
+	}
+	delete(idx, id)
+	list := make([]Meta, 0, len(idx))
+	for _, v := range idx {
+		list = append(list, v)
+	}
+	s.writeIndex(list)
 }
 
 func newID(t time.Time) string {

@@ -3,7 +3,6 @@ package session
 import (
 	"errors"
 	"os"
-	"strings"
 	"testing"
 	"time"
 
@@ -76,6 +75,27 @@ func TestListOrderAndCorruptSkip(t *testing.T) {
 	}
 }
 
+func TestListSkipsIndexFile(t *testing.T) {
+	s := newTestStore(t)
+	sess := s.New("m", "")
+	sess.Messages = []llm.Message{{Role: llm.RoleUser, Content: "hi"}}
+	if err := s.Save(sess); err != nil {
+		t.Fatal(err)
+	}
+	list, err := s.List()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if len(list) != 1 || list[0].ID != sess.ID || list[0].MsgCount != 1 {
+		t.Fatalf("list = %+v", list)
+	}
+	for _, m := range list {
+		if m.ID == "index" {
+			t.Fatal("index.json 不应出现在会话列表")
+		}
+	}
+}
+
 func TestDeleteAndBadIDs(t *testing.T) {
 	s := newTestStore(t)
 	sess := s.New("m", "")
@@ -94,12 +114,13 @@ func TestDeleteAndBadIDs(t *testing.T) {
 	}
 }
 
-func TestSaveRedactsSecrets(t *testing.T) {
+func TestSaveKeepsSecrets(t *testing.T) {
 	s := newTestStore(t)
 	sess := s.New("m", "")
+	secret := "MIAO_API_KEY=sk-abcdefghijklmnopqrstuvwxyz extra"
 	sess.Messages = []llm.Message{{
 		Role:    llm.RoleTool,
-		Content: "MIAO_API_KEY=sk-abcdefghijklmnopqrstuvwxyz extra",
+		Content: secret,
 	}}
 	if err := s.Save(sess); err != nil {
 		t.Fatal(err)
@@ -108,8 +129,8 @@ func TestSaveRedactsSecrets(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if strings.Contains(got.Messages[0].Content, "sk-abcdefghijklmnopqrstuvwxyz") {
-		t.Fatalf("should redact secret: %q", got.Messages[0].Content)
+	if got.Messages[0].Content != secret {
+		t.Fatalf("落盘应保存原文以便恢复后命中缓存：%q", got.Messages[0].Content)
 	}
 }
 
@@ -120,5 +141,11 @@ func TestTitleFrom(t *testing.T) {
 	long := "一二三四五六七八九十一二三四五六七八九十一二三四五六"
 	if got := TitleFrom([]llm.Message{{Role: llm.RoleUser, Content: long}}); got != string([]rune(long)[:24])+"…" {
 		t.Fatal(got)
+	}
+	if got := TitleFrom([]llm.Message{
+		{Role: llm.RoleUser, Content: "<system-reminder>\n工作区根目录是 \"/tmp\"。\n</system-reminder>"},
+		{Role: llm.RoleUser, Content: "真正的问题"},
+	}); got != "真正的问题" {
+		t.Fatalf("应跳过 reminder：%q", got)
 	}
 }
