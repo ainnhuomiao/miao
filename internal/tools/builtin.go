@@ -45,7 +45,7 @@ func RegisterBuiltins(r *Registry) {
 			if err != nil {
 				return Result{Content: err.Error() + "——检查 path 是否相对工作区，或改用 list_dir。", IsError: true}
 			}
-			defer f.Close()
+			defer func() { _ = f.Close() }()
 			text, err := readFileWindow(f, in.Offset, in.Limit)
 			if err != nil {
 				return Result{Content: err.Error(), IsError: true}

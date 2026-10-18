@@ -38,7 +38,7 @@ func (r *Registry) MentionedImages(text string) (imgs []llm.Image, warnings []st
 			continue
 		}
 		n, _ := f.Read(head)
-		f.Close()
+		_ = f.Close()
 		if !isImageMention(head[:n]) {
 			continue
 		}

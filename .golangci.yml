@@ -1,6 +1,14 @@
 run:
   timeout: 5m
 
+linters-settings:
+  errcheck:
+    # 往终端或 bytes.Buffer 打印的结果不检查；写文件的地方各自显式处理返回值。
+    exclude-functions:
+      - fmt.Fprint
+      - fmt.Fprintf
+      - fmt.Fprintln
+
 linters:
   disable-all: true
   enable:
@@ -11,7 +19,7 @@ linters:
     - unused
 
 issues:
-  exclude-use-default: true
+  exclude-use-default: false
   exclude-rules:
     - path: _test\.go
       linters:

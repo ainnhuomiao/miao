@@ -44,7 +44,7 @@ func auditEvent(workspace, tool, display, decision string) {
 	if err != nil {
 		return
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	_, _ = fmt.Fprintf(f, "%s\t%s\t%s\t%s\t%s\n",
 		time.Now().Format(time.RFC3339), decision, tool, workspace, clipAudit(display))
 }

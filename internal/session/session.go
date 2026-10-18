@@ -94,16 +94,16 @@ func (s *Store) Save(sess *Session) error {
 		return err
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	if err := os.Rename(tmp.Name(), s.path(sess.ID)); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	s.upsertIndex(Meta{ID: sess.ID, Title: sess.Title, Updated: sess.Updated, MsgCount: len(sess.Messages)})
@@ -225,7 +225,7 @@ func (s *Store) readMeta(path string) (Meta, error) {
 	if err != nil {
 		return Meta{}, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	dec := json.NewDecoder(f)
 	t, err := dec.Token()
 	if err != nil {
@@ -353,16 +353,16 @@ func (s *Store) writeIndex(list []Meta) {
 		return
 	}
 	if _, err := tmp.Write(data); err != nil {
-		tmp.Close()
-		os.Remove(tmp.Name())
+		_ = tmp.Close()
+		_ = os.Remove(tmp.Name())
 		return
 	}
 	if err := tmp.Close(); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return
 	}
 	if err := os.Rename(tmp.Name(), s.indexPath()); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 	}
 }
 

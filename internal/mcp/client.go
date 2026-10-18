@@ -119,11 +119,11 @@ func Spawn(sc ServerConfig) (*Client, error) {
 	}
 	cmd.Stdout = pw
 	err = cmd.Start()
-	pw.Close()
+	_ = pw.Close()
 	if err != nil {
-		stdout.Close()
+		_ = stdout.Close()
 		if c.logf != nil {
-			c.logf.Close()
+			_ = c.logf.Close()
 		}
 		return nil, err
 	}
@@ -134,7 +134,7 @@ func Spawn(sc ServerConfig) (*Client, error) {
 	}()
 	go func() {
 		c.readLoop(stdout)
-		stdout.Close()
+		_ = stdout.Close()
 	}()
 	return c, nil
 }
@@ -338,7 +338,7 @@ func (c *Client) Close() {
 		// 进程组里可能还有孙进程，统一清理。
 		_ = syscall.Kill(-pgid, syscall.SIGKILL)
 		if c.logf != nil {
-			c.logf.Close()
+			_ = c.logf.Close()
 		}
 	})
 }

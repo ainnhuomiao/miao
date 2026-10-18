@@ -33,7 +33,7 @@ func LoadAgentsMD(workspace string) (content string, truncated bool, err error) 
 		}
 		return "", false, err
 	}
-	defer f.Close()
+	defer func() { _ = f.Close() }()
 	if info, err := f.Stat(); err == nil && info.IsDir() {
 		return "", false, nil
 	}

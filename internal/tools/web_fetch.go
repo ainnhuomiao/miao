@@ -169,7 +169,7 @@ func webFetch(ctx context.Context, raw string) (string, error) {
 		}
 		return "", fmt.Errorf("抓取失败: %v", err)
 	}
-	defer resp.Body.Close()
+	defer func() { _ = resp.Body.Close() }()
 	if resp.StatusCode >= 400 {
 		return "", fmt.Errorf("HTTP %d: %s", resp.StatusCode, u)
 	}

@@ -284,7 +284,7 @@ func registerSearchTools(r *Registry) {
 				if err != nil {
 					return nil
 				}
-				defer f.Close()
+				defer func() { _ = f.Close() }()
 				head := make([]byte, 8000)
 				n, _ := f.Read(head)
 				if bytes.IndexByte(head[:n], 0) >= 0 {

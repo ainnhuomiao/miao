@@ -120,15 +120,15 @@ func atomicWrite(full, content string, perm os.FileMode) error {
 	_, werr := tmp.WriteString(content)
 	cerr := tmp.Close()
 	if werr != nil || cerr != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return fmt.Errorf("%v %v", werr, cerr)
 	}
 	if err := os.Chmod(tmp.Name(), perm); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	if err := os.Rename(tmp.Name(), full); err != nil {
-		os.Remove(tmp.Name())
+		_ = os.Remove(tmp.Name())
 		return err
 	}
 	return nil

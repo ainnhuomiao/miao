@@ -110,7 +110,7 @@ func (r *Registry) Undo() (string, error) {
 			return "", err
 		}
 		if s.dir != "" {
-			os.Remove(sn.file)
+			_ = os.Remove(sn.file)
 		} else {
 			delete(s.mem, sn.file)
 		}

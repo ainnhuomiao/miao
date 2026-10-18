@@ -108,11 +108,11 @@ func registerWriteFile(r *Registry) {
 			_, werr := tmp.WriteString(in.Content)
 			cerr := tmp.Close()
 			if werr != nil || cerr != nil {
-				os.Remove(tmp.Name())
+				_ = os.Remove(tmp.Name())
 				return Result{Content: fmt.Sprintf("写入失败: %v %v", werr, cerr), IsError: true}
 			}
 			if err := os.Rename(tmp.Name(), full); err != nil {
-				os.Remove(tmp.Name())
+				_ = os.Remove(tmp.Name())
 				return Result{Content: "写入失败: " + err.Error(), IsError: true}
 			}
 			msg := fmt.Sprintf("已%s %s（%d 字节）", action, rel, len(in.Content))
