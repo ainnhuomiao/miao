@@ -138,7 +138,7 @@ func TestDotEnvBaseURLIgnoredWithCredentials(t *testing.T) {
 	if cfg.BaseURL != "https://mine.example/v1" {
 		t.Fatalf("工作区 .env 的地址必须忽略：%s", cfg.BaseURL)
 	}
-	if !strings.Contains(strings.Join(notes, "\n"), "已忽略工作区 .env 中的 AGENT_BASE_URL") {
+	if !strings.Contains(strings.Join(notes, "\n"), "AGENT_BASE_URL") {
 		t.Fatalf("notes=%q", notes)
 	}
 }

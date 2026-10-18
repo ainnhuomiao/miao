@@ -1,8 +1,9 @@
 // Package config 负责读取运行配置。
 //
 // API Key 的查找顺序：真实环境变量 MIAO_API_KEY > ~/.miao/credentials > 当前目录 .env（旧用法）。
-// 其它变量：真实环境变量 > 当前目录下的 .env 文件（不含连接地址）> 内置默认值。
-// 连接地址（Base URL、协议）只来自真实环境变量、credentials 或命令行，绝不来自工作区 .env。
+// 其它变量只来自真实环境变量 > 内置默认值。
+// 工作区 .env 是白名单：只接受 MIAO_API_KEY，且只解析进 Config，绝不写入进程环境；
+// 其它键（MIAO_HOME、MIAO_WORKSPACE、LD_PRELOAD 等）一律忽略并提示键名。
 package config
 
 import (
@@ -66,7 +67,7 @@ func LoadWithNotes() (Config, []string, error) {
 	modelNames := append(AgentEnvNames("MODEL"), "DEEPSEEK_MODEL")
 	envKey := firstEnv(apiKeyNames...)
 	envModel := firstEnv(modelNames...)
-	notes := loadWorkspaceDotEnv()
+	dotKey, notes := loadWorkspaceDotEnv()
 	creds, credErr := LoadCredentials()
 	if credErr != nil {
 		notes = append(notes, "读取 credentials 失败，已忽略："+credErr.Error())
@@ -108,8 +109,8 @@ func LoadWithNotes() (Config, []string, error) {
 		cfg.Model = firstNonEmpty(envModel, creds.Model, defaultModel)
 		cfg.Protocol = firstNonEmpty(cfg.Protocol, creds.Protocol)
 	default:
-		if k := firstEnv(apiKeyNames...); k != "" {
-			cfg.APIKey, cfg.KeySource = k, KeyFromDotEnv
+		if dotKey != "" {
+			cfg.APIKey, cfg.KeySource = dotKey, KeyFromDotEnv
 		}
 	}
 
@@ -192,59 +193,73 @@ func firstNonEmpty(values ...string) string {
 	return ""
 }
 
-// workspaceEnvBlocked 是工作区 .env 里不允许设置的连接项，防止不可信仓库把 API Key 发到别处。
-var workspaceEnvBlocked = map[string]bool{
-	"MIAO_BASE_URL": true, "AGENT_BASE_URL": true, "DEEPSEEK_BASE_URL": true,
-	"MIAO_PROTOCOL": true, "AGNET_PROTOCOL": true,
-	"AGENT_PROTOCOL": true,
-}
+// dotEnvAllowed 是工作区 .env 唯一接受的键。
+const dotEnvAllowed = "MIAO_API_KEY"
 
-// loadWorkspaceDotEnv 读取当前目录的 .env；当前目录是 $HOME 或 $MIAO_HOME 时不读，
+// loadWorkspaceDotEnv 读取当前目录的 .env，返回其中的 MIAO_API_KEY；当前目录是 $HOME 或 $MIAO_HOME 时不读，
 // 那里不是项目，不能和全局配置混在一起。
-func loadWorkspaceDotEnv() []string {
+func loadWorkspaceDotEnv() (string, []string) {
 	if cwd, err := os.Getwd(); err == nil && appdir.IsGlobalWorkspace(cwd) {
 		if _, err := os.Stat(".env"); err == nil {
-			return []string{"当前目录是用户家目录，不当作项目，已忽略其中的 .env。"}
+			return "", []string{"当前目录是用户家目录，不当作项目，已忽略其中的 .env。"}
 		}
-		return nil
+		return "", nil
 	}
 	return loadDotEnv(".env")
 }
 
-func loadDotEnv(path string) []string {
-	var notes []string
+// loadDotEnv 只解析 MIAO_API_KEY，不修改进程环境；其它键只在提示里列出键名，绝不回显值。
+func loadDotEnv(path string) (string, []string) {
 	f, err := os.Open(path)
 	if err != nil {
-		return nil
+		return "", nil
 	}
 	defer func() { _ = f.Close() }()
 
+	var apiKey string
+	var ignored []string
+	seen := map[string]bool{}
 	scanner := bufio.NewScanner(f)
 	for scanner.Scan() {
 		line := strings.TrimSpace(scanner.Text())
 		if line == "" || strings.HasPrefix(line, "#") {
 			continue
 		}
-
 		key, value, ok := strings.Cut(line, "=")
 		if !ok {
 			continue
 		}
 		key = strings.TrimSpace(strings.TrimPrefix(key, "export "))
-		value = strings.Trim(strings.TrimSpace(value), `"'`)
 		if key == "" {
 			continue
 		}
-		if workspaceEnvBlocked[key] {
-			if _, exists := os.LookupEnv(key); !exists {
-				notes = append(notes, "已忽略工作区 .env 中的 "+key+"（连接地址只能来自真实环境变量或 -base-url / -protocol）。")
-			}
+		if key == dotEnvAllowed {
+			apiKey = strings.TrimSpace(strings.Trim(strings.TrimSpace(value), `"'`))
 			continue
 		}
-
-		if _, exists := os.LookupEnv(key); !exists {
-			_ = os.Setenv(key, value)
+		if !seen[key] && validEnvName(key) {
+			seen[key] = true
+			ignored = append(ignored, key)
 		}
 	}
-	return notes
+	if len(ignored) == 0 {
+		return apiKey, nil
+	}
+	return apiKey, []string{"已忽略工作区 .env 中的 " + strings.Join(ignored, "、") + "（只接受 " + dotEnvAllowed + "）"}
+}
+
+// validEnvName 只让形如环境变量名的键出现在提示里，避免把怪异内容（甚至值）打到界面上。
+func validEnvName(s string) bool {
+	if len(s) > 64 {
+		return false
+	}
+	for i, r := range s {
+		switch {
+		case r == '_', r >= 'A' && r <= 'Z', r >= 'a' && r <= 'z':
+		case r >= '0' && r <= '9' && i > 0:
+		default:
+			return false
+		}
+	}
+	return true
 }

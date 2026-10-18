@@ -66,7 +66,7 @@ miao init     # 同样的流程，逐行提示
 
 非交互场景（`-p`、管道、没有 TTY）不会打开向导，没有 key 时直接报错；请先运行 `miao init`，或设置环境变量 `MIAO_API_KEY`。
 
-API Key 的查找顺序：环境变量 `MIAO_API_KEY` → `~/.miao/credentials` → 当前目录 `.env`（旧用法，仍兼容）。连接地址只来自真实环境变量、`~/.miao/credentials` 或命令行：工作区 `.env` **不能**设置 `MIAO_BASE_URL` / `MIAO_PROTOCOL`，避免不可信仓库把 API Key 转到别处。
+API Key 的查找顺序：环境变量 `MIAO_API_KEY` → `~/.miao/credentials` → 当前目录 `.env`（旧用法，仍兼容）。工作区 `.env` 是白名单：**只接受 `MIAO_API_KEY`**，而且只读进 miao 自己的配置，不会写入进程环境（子进程、工具命令都看不到）。其它键——`MIAO_HOME`、`MIAO_WORKSPACE`、`MIAO_ALLOW_COMMANDS`、`MIAO_BASE_URL`、`LD_PRELOAD`、`HTTPS_PROXY`、`GIT_CONFIG_*` 等——一律忽略，启动时用一行灰字列出被忽略的键名（不显示值）。其它配置（含连接地址、`MIAO_HOME`、`MIAO_WORKSPACE`）只来自真实环境变量、`~/.miao/credentials` 或命令行，避免不可信仓库借 `.env` 改家目录、绕过 `/trust-project` 或把 API Key 转到别处。
 
 | 变量 | 作用 | 默认值 |
 | --- | --- | --- |
