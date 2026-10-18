@@ -32,7 +32,10 @@ var errRgOverCap = errors.New("ripgrep 输出超过上限")
 // rgArgv 构造 ripgrep 参数。安全约束：
 //   - 显式 argv，不经 shell；--no-config 忽略 RIPGREP_CONFIG_PATH（防止注入 --pre）；
 //   - pattern 用 -e 传，路径放在 -- 之后，以 '-' 开头的 pattern / 路径都不会被当成选项；
-//   - 不传 -L/--follow、--hidden、--pre、-z、--no-ignore/-u。
+//   - 不传 -L/--follow、--pre、-z、--no-ignore/-u。
+//
+// 与 Go 实现一样搜索隐藏文件（--hidden），但用 -g 排除 .git 和 .env*（无斜杠的 glob 按 gitignore 语义匹配任意层级）；
+// 结果仍逐文件按 Go 规则复查，敏感文件即使漏过 glob 也会被丢弃。
 //
 // 忽略规则尽量贴近 Go 实现：只认 .gitignore（不读全局 excludes、.ignore/.rgignore、上级目录），
 // 不要求处于 git 仓库内；按路径排序，保证与 Go 实现（WalkDir 字典序）同序。
@@ -47,6 +50,9 @@ func rgArgv(pattern string, ignoreCase bool, base string) []string {
 		"--no-ignore-exclude",
 		"--no-require-git",
 		"--no-messages",
+		"--hidden",
+		"-g", "!.git",
+		"-g", "!.env*",
 	}
 	if ignoreCase {
 		argv = append(argv, "-i")

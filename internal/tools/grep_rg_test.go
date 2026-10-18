@@ -41,8 +41,14 @@ func TestRgArgvSafe(t *testing.T) {
 	if argv[n-4] != "-e" || argv[n-3] != "--pre=sh" || argv[n-2] != "--" || argv[n-1] != "/ws" {
 		t.Fatalf("pattern 应走 -e，路径在 -- 之后：%v", argv)
 	}
+	joined := " " + strings.Join(argv, " ") + " "
+	for _, want := range []string{" --hidden ", " -g !.git ", " -g !.env* "} {
+		if !strings.Contains(joined, want) {
+			t.Fatalf("缺少 %q：%v", want, argv)
+		}
+	}
 	for _, a := range argv[:n-4] {
-		for _, bad := range []string{"-L", "--follow", "--hidden", "--pre", "-z", "--search-zip", "-u", "-uu", "-uuu", "--no-ignore"} {
+		for _, bad := range []string{"-L", "--follow", "--pre", "-z", "--search-zip", "-u", "-uu", "-uuu", "--no-ignore"} {
 			if a == bad || strings.HasPrefix(a, bad+"=") {
 				t.Fatalf("禁止的参数 %q：%v", a, argv)
 			}
@@ -142,17 +148,24 @@ func TestRgParityWithGo(t *testing.T) {
 	needRg(t)
 	long := strings.Repeat("é", 400) + " needle"
 	files := map[string]string{
-		".gitignore":      "/build/\n*.log\n",
-		"main.go":         "package main\n// Needle here\nfunc needle() {}\n",
-		"a/b/c.go":        "needle in c\r\nno\r\nneedle again\r\n",
-		"a/readme.md":     "needle md\n",
-		"a/long.txt":      "needle " + long + "\n",
-		"build/out.go":    "needle ignored\n",
-		"x.log":           "needle log\n",
-		"bin.dat":         "needle\x00binary\n",
-		"nested/z/q.txt":  "needleneedle\nneedle\n",
-		"uni/中文.txt":      "needle 中文\n",
-		"last-no-newline": "needle",
+		".gitignore":               "/build/\n*.log\n",
+		"main.go":                  "package main\n// Needle here\nfunc needle() {}\n",
+		"a/b/c.go":                 "needle in c\r\nno\r\nneedle again\r\n",
+		"a/readme.md":              "needle md\n",
+		"a/long.txt":               "needle " + long + "\n",
+		"build/out.go":             "needle ignored\n",
+		"x.log":                    "needle log\n",
+		"bin.dat":                  "needle\x00binary\n",
+		"nested/z/q.txt":           "needleneedle\nneedle\n",
+		"uni/中文.txt":               "needle 中文\n",
+		"last-no-newline":          "needle",
+		".github/workflows/ci.yml": "name: needle ci\n",
+		".hidden.txt":              "needle hidden\n",
+		".env":                     "needle=secret1\n",
+		".env.local":               "needle=secret2\n",
+		"sub/.env.local":           "needle=secret3\n",
+		".git/config":              "needle gitcfg\n",
+		"sub/.git/x":               "needle nestedgit\n",
 	}
 	r := newSearchRegistry(t, files)
 	var many strings.Builder
@@ -185,5 +198,28 @@ func TestRgParityWithGo(t *testing.T) {
 				t.Errorf("%v 结果不一致\nrg: %+v\ngo: %+v", c, rgRes, goRes)
 			}
 		}()
+	}
+}
+
+func TestRgHiddenFilesSearched(t *testing.T) {
+	needRg(t)
+	r := newSearchRegistry(t, map[string]string{
+		".github/workflows/ci.yml": "run: needle-ci\n",
+		".env":                     "needle=secret1\n",
+		".env.local":               "needle=secret2\n",
+		"sub/.env.local":           "needle=secret3\n",
+		".git/config":              "needle=secret4\n",
+		"sub/.git/HEAD":            "needle=secret5\n",
+	})
+	out, ok := r.grepRipgrep(context.Background(), "needle", false, "", r.workspace, true)
+	if !ok {
+		t.Fatal("rg 路径应直接成功")
+	}
+	if out != ".github/workflows/ci.yml:1: run: needle-ci" {
+		t.Fatalf("应找到 .github 内容且不含敏感文件：%q", out)
+	}
+	withoutRg(t)
+	if goRes := grepCall(t, r, map[string]any{"pattern": "needle"}); goRes.Content != out {
+		t.Fatalf("rg 与 Go 不一致：rg=%q go=%q", out, goRes.Content)
 	}
 }
