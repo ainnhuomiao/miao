@@ -49,6 +49,7 @@ func (m *Model) builtinPalette() []paletteCmd {
 		{name: "/cost", desc: "查看本会话估算花费"},
 		{name: "/init", desc: "扫描项目生成 AGENTS.md"},
 		{name: "/trust-project", desc: "信任当前仓库的 .miao/config.json"},
+		{name: "/login", desc: "更换 API Key 或服务商"},
 		{name: "/export", desc: "把当前会话导出为 Markdown"},
 		{name: "/diff", desc: "查看本次会话改过的文件和 diff"},
 		{name: "/commit", desc: "让模型写提交信息，确认后提交本会话改过的文件"},

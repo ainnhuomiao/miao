@@ -98,6 +98,7 @@ func (c *OpenAIClient) streamChatOnce(ctx context.Context, req ChatRequest, onDe
 		Tools:         req.Tools,
 		Stream:        true,
 		StreamOptions: &streamOptions{IncludeUsage: true},
+		MaxTokens:     req.MaxTokens,
 	})
 	if err != nil {
 		return ChatResult{}, fmt.Errorf("编码请求失败: %w", err)
@@ -313,6 +314,7 @@ type chatRequest struct {
 	Tools         []ToolDef      `json:"tools,omitempty"`
 	Stream        bool           `json:"stream"`
 	StreamOptions *streamOptions `json:"stream_options,omitempty"`
+	MaxTokens     int            `json:"max_tokens,omitempty"`
 }
 
 type streamOptions struct {

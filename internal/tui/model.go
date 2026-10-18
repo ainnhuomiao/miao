@@ -125,6 +125,7 @@ type Model struct {
 	sidebarReserved bool
 
 	approval  *approvalState
+	login     *wizard      // /login 打开的向导；非 nil 时占满界面并吃键
 	mention   mentionState // @ 引用文件补全缓存
 	userCmds  userCmdState // 自定义斜杠命令缓存
 	themeOrig string       // /theme 预览前的主题，空表示没在预览
@@ -276,6 +277,11 @@ func (m *Model) Init() tea.Cmd {
 }
 
 func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	if m.login != nil {
+		if handled, cmd := m.loginUpdate(msg); handled {
+			return m, cmd
+		}
+	}
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		m.width, m.height = msg.Width, msg.Height
@@ -382,6 +388,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 }
 
 func (m *Model) View() tea.View {
+	if m.login != nil {
+		v := tea.NewView(m.login.View(max(m.width, 20), max(m.height, 10)))
+		v.AltScreen = true
+		return v
+	}
 	v := tea.NewView(m.view())
 	v.AltScreen = true
 	v.MouseMode = tea.MouseModeCellMotion
@@ -867,6 +878,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 
 	case "/trust-project":
 		m.trustProject()
+
+	case "/login":
+		return m.openLogin()
 
 	default:
 		if cmd, ok := m.runUserCommand(text); ok {

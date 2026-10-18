@@ -3,6 +3,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"flag"
 	"fmt"
 	"io"
@@ -67,10 +68,25 @@ func run() error {
 
 	notes := appdir.Migrate()
 
+	if flag.NArg() > 0 && flag.Arg(0) == "init" {
+		for _, n := range notes {
+			fmt.Fprintf(os.Stderr, "\x1b[90m%s\x1b[0m\n", n)
+		}
+		return runInit()
+	}
+
 	cfg, cfgNotes, err := config.LoadWithNotes()
 	notes = append(notes, cfgNotes...)
 	if flag.NArg() > 0 && flag.Arg(0) == "doctor" {
 		return runDoctor(cfg, notes, err)
+	}
+	if errors.Is(err, config.ErrMissingAPIKey) &&
+		wantWizard(headlessMode, *plain || *listModels, isTerminal(os.Stdin), isTerminal(os.Stdout)) {
+		if _, werr := tui.RunSetup(); werr != nil {
+			return werr
+		}
+		cfg, cfgNotes, err = config.LoadWithNotes()
+		notes = append(notes, cfgNotes...)
 	}
 	if err != nil {
 		return err
@@ -96,7 +112,8 @@ func run() error {
 	mcpMgr := mcp.Start(reg)
 	defer mcpMgr.Close()
 
-	client := llm.NewClient(cfg.Protocol, cfg.APIKey, cfg.BaseURL, cfg.Model)
+	// 包一层可替换的客户端：/login 换 key 时主代理和子代理直接用上新的
+	client := llm.NewSwappable(llm.NewClient(cfg.Protocol, cfg.APIKey, cfg.BaseURL, cfg.Model))
 	llm.ApplySettings(client, cfg.Timeout, 3, *debug)
 
 	if *listModels {
@@ -165,10 +182,26 @@ func run() error {
 		return repl.New(ag, cfg.Model).Run(context.Background())
 	}
 	tui.SetStartupNotices(notes)
+	tui.SetLoginHandler(func(c config.Credentials) (string, error) {
+		model := cfg.Model
+		if c.Model != "" {
+			model = c.Model
+		}
+		next := llm.NewClient(c.Protocol, c.APIKey, c.BaseURL, model)
+		llm.ApplySettings(next, cfg.Timeout, 3, *debug)
+		client.Swap(next)
+		return model, nil
+	})
 	if *resume {
 		tui.SetResumeOnStart(true)
 	}
 	return tui.Run(ag, cfg.Model)
+}
+
+// wantWizard 判断缺 key 时是否打开首次启动向导：只在交互 TUI 里开；
+// -p 非交互、-plain、-list-models、没有 TTY 时直接报错（错误里提示 miao init 和 MIAO_API_KEY）。
+func wantWizard(headless, plainOrList, ttyIn, ttyOut bool) bool {
+	return !headless && !plainOrList && ttyIn && ttyOut
 }
 
 func printModels(client llm.Client) error {

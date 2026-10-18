@@ -24,6 +24,7 @@
 - `/model` 运行时切换模型
 - `/compact` 压缩上下文（用量到 80% 时自动触发，先折叠早期工具输出；摘要请求复用当前对话前缀）；`/export` 导出 Markdown 到数据目录（会脱敏）
 - `/apply` 确认只读规划方案并切到编辑模式执行；`/cost` 查看估算花费；`/init` 生成 `AGENTS.md`
+- 首次启动配置向导、`miao init`、`/login` 换 key；Key 存在 `~/.miao/credentials`
 - `!<命令>` 在工作区直通执行 shell；`miao doctor` 检查 API、bwrap、剪贴板和终端
 - `-c` / `--resume` 启动时恢复最近一次会话
 - 自动加载工作区里的 `AGENTS.md` 作为项目记忆
@@ -55,18 +56,28 @@ go build ./cmd/miao     # 或 make build，产物在 bin/miao
 
 ## 首次配置
 
-连接配置从环境变量读取，也会读取**当前目录**下的 `.env`（真实环境变量优先）。工作区 `.env` **不能**设置 `MIAO_BASE_URL` / `MIAO_PROTOCOL`，避免不可信仓库把 API Key 转到别处；这两个请用真实环境变量或 `-base-url` / `-protocol`。
+第一次在终端里运行 `miao`，没找到 API Key 时会打开配置向导：选服务商（DeepSeek / Anthropic / OpenAI 兼容）→ 粘贴 key（只显示 `•`）→ 自动测试连接，连上就进入正常界面。也可以随时运行：
+
+```bash
+miao init     # 同样的流程，逐行提示
+```
+
+在 TUI 里输入 `/login` 可以随时换 key 或服务商。Key 保存在 `~/.miao/credentials`（权限 0600，原子写入，拒绝符号链接），不会写进工作区 `.env`，也不会出现在界面、会话记录、日志或 `/export` 里。
+
+非交互场景（`-p`、管道、没有 TTY）不会打开向导，没有 key 时直接报错；请先运行 `miao init`，或设置环境变量 `MIAO_API_KEY`。
+
+API Key 的查找顺序：环境变量 `MIAO_API_KEY` → `~/.miao/credentials` → 当前目录 `.env`（旧用法，仍兼容）。连接地址只来自真实环境变量、`~/.miao/credentials` 或命令行：工作区 `.env` **不能**设置 `MIAO_BASE_URL` / `MIAO_PROTOCOL`，避免不可信仓库把 API Key 转到别处。
 
 | 变量 | 作用 | 默认值 |
 | --- | --- | --- |
-| `MIAO_API_KEY` | API Key（必填） | 无 |
+| `MIAO_API_KEY` | API Key（优先于 `~/.miao/credentials`） | 无 |
 | `MIAO_BASE_URL` | OpenAI 兼容接口地址 | `https://api.deepseek.com` |
 | `MIAO_MODEL` | 模型名 | `deepseek-chat` |
 | `MIAO_WORKSPACE` | 工具可访问的工作区根目录 | 当前目录 |
+| `MIAO_HOME` | 用户级目录 | `~/.miao` |
 
 ```bash
-cp .env.example .env    # 然后编辑 .env
-# 或者直接：
+# 不想用向导时，直接用环境变量：
 export MIAO_API_KEY=sk-xxxx
 export MIAO_BASE_URL=https://api.example.com/v1
 export MIAO_MODEL=<模型名>
@@ -113,7 +124,7 @@ miao
 }
 ```
 
-命令行参数（覆盖环境变量）：`-model`、`-base-url`、`-system`、`-debug`、`-list-models`、`-protocol`、`-timeout`、`-c`/`-resume`、`-plain`、`-p`、`-mode`、`-version`、`-output-format`、`-max-turns`、`-allowed-tools`。子命令：`miao doctor`。
+命令行参数（覆盖环境变量）：`-model`、`-base-url`、`-system`、`-debug`、`-list-models`、`-protocol`、`-timeout`、`-c`/`-resume`、`-plain`、`-p`、`-mode`、`-version`、`-output-format`、`-max-turns`、`-allowed-tools`。子命令：`miao init`（配置 key）、`miao doctor`。
 
 项目级配置写在 `<工作区>/.miao/config.json`（不要放 API Key）。**未信任的仓库只能收紧权限**（降低工具轮次、打开沙箱）；`allow_commands` / `model` / `protocol` 要等你在 TUI 里输入 `/trust-project` 按文件哈希记住之后才生效。JSON 写错会在启动时提示，而不会静默忽略。
 
@@ -159,6 +170,7 @@ miao
 | `/clear` | 清空对话并换新会话 |
 | `/undo` | 撤销最近一次文件修改 |
 | `/compact` | 压缩上下文：把早期对话总结成摘要（用量到 80% 时自动触发） |
+| `/login` | 更换 API Key 或服务商（保存到 `~/.miao/credentials`） |
 | `/export` | 把当前会话导出为 Markdown（默认 `~/.miao/data/exports`，会脱敏） |
 | `/diff` | 查看本次会话改过的文件和 diff |
 | `/commit` | 让模型写提交信息，确认后提交本会话改过的文件 |

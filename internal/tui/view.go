@@ -40,6 +40,7 @@ const helpText = `命令:
   /cost       本会话估算花费
   /init       扫描项目生成 AGENTS.md
   /trust-project  信任当前仓库的项目配置
+  /login      更换 API Key 或服务商（保存到 ~/.miao/credentials）
   /export     把当前会话导出为 Markdown（默认到数据目录，会脱敏）
   !<命令>     在工作区直通执行 shell（只读规划模式下不可用）
   /diff       查看本次会话改过的文件和 diff

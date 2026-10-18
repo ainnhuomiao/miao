@@ -255,6 +255,9 @@ func (c *AnthropicClient) buildRequest(req ChatRequest) anthRequest {
 		Stream:    true,
 		Messages:  toAnthMessages(msgs),
 	}
+	if req.MaxTokens > 0 {
+		out.MaxTokens = req.MaxTokens
+	}
 	if sys != "" {
 		out.System = []anthSystemBlock{{
 			Type:         "text",

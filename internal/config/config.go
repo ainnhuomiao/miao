@@ -1,6 +1,8 @@
 // Package config 负责读取运行配置。
 //
-// 优先级：真实环境变量 > 当前目录下的 .env 文件（不含连接地址）> 内置默认值。
+// API Key 的查找顺序：真实环境变量 MIAO_API_KEY > ~/.miao/credentials > 当前目录 .env（旧用法）。
+// 其它变量：真实环境变量 > 当前目录下的 .env 文件（不含连接地址）> 内置默认值。
+// 连接地址（Base URL、协议）只来自真实环境变量、credentials 或命令行，绝不来自工作区 .env。
 package config
 
 import (
@@ -21,11 +23,19 @@ const (
 )
 
 // ErrMissingAPIKey 表示没有配置 API Key（doctor 仍可继续检查其它项）。
-var ErrMissingAPIKey = errors.New("缺少 API Key：请执行 `cp .env.example .env`，然后填入 MIAO_API_KEY")
+var ErrMissingAPIKey = errors.New("缺少 API Key：请在终端运行 `miao init` 配置，或设置环境变量 MIAO_API_KEY")
+
+// Key 来源，见 Config.KeySource。
+const (
+	KeyFromEnv         = "env"
+	KeyFromCredentials = "credentials"
+	KeyFromDotEnv      = ".env"
+)
 
 // Config 是程序启动所需的全部配置。
 type Config struct {
 	APIKey         string
+	KeySource      string // env / credentials / .env，没有 Key 时为空
 	BaseURL        string
 	Model          string
 	FallbackModel  string
@@ -50,7 +60,18 @@ func Load() (Config, error) {
 
 // LoadWithNotes 与 Load 相同，额外返回启动时值得告诉用户的提示（项目 JSON 错误、未信任的放宽项等）。
 func LoadWithNotes() (Config, []string, error) {
+	// 先记下真实环境变量，再读工作区 .env，才能分清 Key 的来源
+	apiKeyNames := append(AgentEnvNames("API_KEY"), "DEEPSEEK_API_KEY")
+	baseNames := append(AgentEnvNames("BASE_URL"), "DEEPSEEK_BASE_URL")
+	modelNames := append(AgentEnvNames("MODEL"), "DEEPSEEK_MODEL")
+	envKey := firstEnv(apiKeyNames...)
+	envModel := firstEnv(modelNames...)
 	notes := loadWorkspaceDotEnv()
+	creds, credErr := LoadCredentials()
+	if credErr != nil {
+		notes = append(notes, "读取 credentials 失败，已忽略："+credErr.Error())
+		creds = Credentials{}
+	}
 
 	ws := firstEnv(AgentEnvNames("WORKSPACE")...)
 	if ws == "" {
@@ -66,15 +87,8 @@ func LoadWithNotes() (Config, []string, error) {
 	}
 
 	cfg := Config{
-		APIKey: firstEnv(append(AgentEnvNames("API_KEY"), "DEEPSEEK_API_KEY")...),
-		BaseURL: firstNonEmpty(
-			firstEnv(append(AgentEnvNames("BASE_URL"), "DEEPSEEK_BASE_URL")...),
-			defaultBaseURL,
-		),
-		Model: firstNonEmpty(
-			firstEnv(append(AgentEnvNames("MODEL"), "DEEPSEEK_MODEL")...),
-			defaultModel,
-		),
+		BaseURL:       firstNonEmpty(firstEnv(baseNames...), defaultBaseURL),
+		Model:         firstNonEmpty(firstEnv(modelNames...), defaultModel),
 		FallbackModel: strings.TrimSpace(Getenv("FALLBACK_MODEL")),
 		Workspace:     abs,
 		Protocol:      strings.TrimSpace(Getenv("PROTOCOL")),
@@ -83,6 +97,20 @@ func LoadWithNotes() (Config, []string, error) {
 		PriceIn:       envFloat("PRICE_IN"),
 		PriceOut:      envFloat("PRICE_OUT"),
 		PriceCache:    envFloat("PRICE_CACHE"),
+	}
+	switch {
+	case envKey != "":
+		cfg.APIKey, cfg.KeySource = envKey, KeyFromEnv
+	case creds.APIKey != "":
+		// Key 来自 credentials 时连接信息也用它保存的，真实环境变量仍可覆盖
+		cfg.APIKey, cfg.KeySource = creds.APIKey, KeyFromCredentials
+		cfg.BaseURL = firstNonEmpty(firstEnv(baseNames...), creds.BaseURL, defaultBaseURL)
+		cfg.Model = firstNonEmpty(envModel, creds.Model, defaultModel)
+		cfg.Protocol = firstNonEmpty(cfg.Protocol, creds.Protocol)
+	default:
+		if k := firstEnv(apiKeyNames...); k != "" {
+			cfg.APIKey, cfg.KeySource = k, KeyFromDotEnv
+		}
 	}
 
 	pf, path, hash, err := loadProjectFile(abs)

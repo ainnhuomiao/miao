@@ -31,7 +31,18 @@ func runDoctor(cfg config.Config, notes []string, loadErr error) error {
 	} else {
 		check("配置", "工作区 "+cfg.Workspace, true)
 	}
-	check("API Key", maskKey(cfg.APIKey), cfg.APIKey != "")
+	keyDetail := maskKey(cfg.APIKey)
+	switch cfg.KeySource {
+	case config.KeyFromEnv:
+		keyDetail += "（来自环境变量）"
+	case config.KeyFromCredentials:
+		keyDetail += "（来自 ~/.miao/credentials）"
+	case config.KeyFromDotEnv:
+		keyDetail += "（来自当前目录 .env，建议改用 miao init）"
+	default:
+		keyDetail += "，运行 `miao init` 或设置 MIAO_API_KEY"
+	}
+	check("API Key", keyDetail, cfg.APIKey != "")
 	check("Base URL", cfg.BaseURL, cfg.BaseURL != "")
 	check("模型", cfg.Model, cfg.Model != "")
 	if cfg.FallbackModel != "" {

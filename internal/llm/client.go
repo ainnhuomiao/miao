@@ -77,6 +77,8 @@ type ChatRequest struct {
 	Messages []Message
 	Tools    []ToolDef
 	Model    string // 非空时覆盖客户端当前模型（子代理用，不改变主模型）
+	// MaxTokens 大于 0 时限制输出 token 数（连接测试只要 1 个）；0 用默认值。
+	MaxTokens int
 }
 
 // ChatResult 是一次流式请求聚合后的助手回合。
