@@ -3,10 +3,14 @@ package llm
 import (
 	"context"
 	"encoding/json"
+	"errors"
+	"net"
 	"net/http"
 	"net/http/httptest"
 	"strings"
+	"sync/atomic"
 	"testing"
+	"time"
 )
 
 func TestStreamChat_ContentAndReasoning(t *testing.T) {
@@ -176,5 +180,153 @@ func TestStreamChatNoUsage(t *testing.T) {
 	}
 	if res.Usage != nil {
 		t.Fatalf("usage = %+v, want nil", res.Usage)
+	}
+}
+
+func TestStreamChat_RetryThenOK(t *testing.T) {
+	old := backoffUnit
+	backoffUnit = time.Millisecond
+	t.Cleanup(func() { backoffUnit = old })
+
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if n.Add(1) < 3 {
+			w.Header().Set("Retry-After", "0")
+			w.WriteHeader(http.StatusInternalServerError)
+			_, _ = w.Write([]byte(`{"error":{"message":"busy"}}`))
+			return
+		}
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"ok"},"finish_reason":"stop"}]}`)
+		writeSSE(w, flusher, "[DONE]")
+	}))
+	defer srv.Close()
+
+	c := NewOpenAI("k", srv.URL, "m")
+	c.SetRetries(3)
+	res, err := c.StreamChat(context.Background(), ChatRequest{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Content != "ok" {
+		t.Fatalf("content = %q", res.Content)
+	}
+	if n.Load() != 3 {
+		t.Fatalf("calls = %d", n.Load())
+	}
+}
+
+func TestStreamChat_NoRetryAfterPartialOutput(t *testing.T) {
+	old := backoffUnit
+	backoffUnit = time.Millisecond
+	t.Cleanup(func() { backoffUnit = old })
+
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n.Add(1)
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"hello"}}]}`)
+		flusher.Flush()
+		if hj, ok := w.(http.Hijacker); ok {
+			conn, _, err := hj.Hijack()
+			if err == nil {
+				if tc, ok := conn.(*net.TCPConn); ok {
+					_ = tc.SetLinger(0)
+				}
+				_ = conn.Close()
+			}
+			return
+		}
+	}))
+	defer srv.Close()
+
+	c := NewOpenAI("k", srv.URL, "m")
+	c.SetRetries(3)
+	var got strings.Builder
+	_, err := c.StreamChat(context.Background(), ChatRequest{
+		Messages: []Message{{Role: RoleUser, Content: "hi"}},
+	}, func(d Delta) error {
+		got.WriteString(d.Content)
+		return nil
+	})
+	if n.Load() != 1 {
+		t.Fatalf("已有输出后不应重试，calls=%d err=%v", n.Load(), err)
+	}
+	if strings.Count(got.String(), "hello") != 1 {
+		t.Fatalf("界面增量被重复推送：%q err=%v", got.String(), err)
+	}
+}
+
+func TestStreamChat_NoRetryOn4xx(t *testing.T) {
+	var n atomic.Int32
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		n.Add(1)
+		w.WriteHeader(http.StatusBadRequest)
+		_, _ = w.Write([]byte(`{"error":{"message":"bad"}}`))
+	}))
+	defer srv.Close()
+	c := NewOpenAI("k", srv.URL, "m")
+	c.SetRetries(3)
+	_, err := c.StreamChat(context.Background(), ChatRequest{}, nil)
+	if err == nil {
+		t.Fatal("expected error")
+	}
+	if n.Load() != 1 {
+		t.Fatalf("should not retry 400, calls = %d", n.Load())
+	}
+}
+
+func TestAPIErrorUnwrapAndRetryAfter(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Retry-After", "7")
+		w.WriteHeader(http.StatusTooManyRequests)
+		_, _ = w.Write([]byte(`{"error":{"message":"slow"}}`))
+	}))
+	defer srv.Close()
+	c := NewOpenAI("k", srv.URL, "m")
+	c.SetRetries(0)
+	_, err := c.StreamChat(context.Background(), ChatRequest{}, nil)
+	var api *APIError
+	if !errors.As(err, &api) {
+		t.Fatalf("want APIError, got %T %v", err, err)
+	}
+	if api.RetryAfter != 7*time.Second {
+		t.Fatalf("RetryAfter = %s", api.RetryAfter)
+	}
+	if errors.Unwrap(api) != nil && api.Unwrap() != api.err {
+		t.Fatal("Unwrap should be implemented")
+	}
+}
+
+func TestStreamChat_TimeoutVsCancel(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		select {
+		case <-r.Context().Done():
+		case <-time.After(2 * time.Second):
+		}
+	}))
+	defer srv.Close()
+
+	c := NewOpenAI("k", srv.URL, "m")
+	c.SetRetries(0)
+	c.SetTimeout(50 * time.Millisecond)
+	t0 := time.Now()
+	_, err := c.StreamChat(context.Background(), ChatRequest{}, nil)
+	if time.Since(t0) > time.Second {
+		t.Fatalf("timeout path too slow: %s err=%v", time.Since(t0), err)
+	}
+	var to *TimeoutError
+	if !errors.As(err, &to) {
+		t.Fatalf("want TimeoutError, got %T %v", err, err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	cancel()
+	c.SetTimeout(time.Minute)
+	_, err = c.StreamChat(ctx, ChatRequest{}, nil)
+	if !errors.Is(err, context.Canceled) {
+		t.Fatalf("want canceled, got %v", err)
 	}
 }

@@ -5,8 +5,10 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"sync"
@@ -18,6 +20,9 @@ type OpenAIClient struct {
 	apiKey  string
 	baseURL string
 	http    *http.Client
+	timeout time.Duration
+	retries int
+	debug   bool
 
 	mu    sync.RWMutex
 	model string
@@ -29,8 +34,26 @@ func NewOpenAI(apiKey, baseURL, model string) *OpenAIClient {
 		apiKey:  apiKey,
 		baseURL: strings.TrimRight(baseURL, "/"),
 		model:   model,
-		http:    &http.Client{Timeout: 10 * time.Minute},
+		http:    &http.Client{}, // 超时用每次请求的 context，以便区分用户取消和超时
+		timeout: defaultHTTPTimeout,
+		retries: defaultMaxRetries,
 	}
+}
+
+// SetTimeout 设置单次请求超时（含流式接收）；0 表示使用默认 10 分钟。
+func (c *OpenAIClient) SetTimeout(d time.Duration) { c.timeout = d }
+
+// SetRetries 设置 429/5xx/网络错误的额外重试次数。
+func (c *OpenAIClient) SetRetries(n int) { c.retries = n }
+
+// SetDebug 打开请求级 debug 日志（写到 slog）。
+func (c *OpenAIClient) SetDebug(v bool) { c.debug = v }
+
+func (c *OpenAIClient) requestTimeout() time.Duration {
+	if c.timeout > 0 {
+		return c.timeout
+	}
+	return defaultHTTPTimeout
 }
 
 // StreamChat 发起一次流式对话，聚合正文、思考与 tool_calls。
@@ -38,7 +61,32 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 	if onDelta == nil {
 		onDelta = func(Delta) error { return nil }
 	}
+	ctr := &countingDelta{fn: onDelta}
+	var last error
+	for attempt := 0; attempt <= c.retries; attempt++ {
+		if attempt > 0 {
+			d := backoffDelay(attempt-1, last)
+			logRetry(attempt, d, last)
+			if err := sleepCtx(ctx, d); err != nil {
+				if errors.Is(err, context.Canceled) {
+					return ChatResult{}, err
+				}
+				return ChatResult{}, last
+			}
+		}
+		res, err := c.streamChatOnce(ctx, req, ctr.handle)
+		if err == nil {
+			return res, nil
+		}
+		last = err
+		if ctr.n > 0 || !retryable(err) {
+			return ChatResult{}, err
+		}
+	}
+	return ChatResult{}, last
+}
 
+func (c *OpenAIClient) streamChatOnce(ctx context.Context, req ChatRequest, onDelta DeltaHandler) (ChatResult, error) {
 	payload, err := json.Marshal(chatRequest{
 		Model:         firstNonEmptyModel(req.Model, c.Model()),
 		Messages:      req.Messages,
@@ -50,7 +98,11 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 		return ChatResult{}, fmt.Errorf("编码请求失败: %w", err)
 	}
 
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost,
+	timeout := c.requestTimeout()
+	reqCtx, cancel := context.WithTimeout(ctx, timeout)
+	defer cancel()
+
+	httpReq, err := http.NewRequestWithContext(reqCtx, http.MethodPost,
 		c.baseURL+"/chat/completions", bytes.NewReader(payload))
 	if err != nil {
 		return ChatResult{}, fmt.Errorf("创建请求失败: %w", err)
@@ -59,11 +111,22 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 	httpReq.Header.Set("Accept", "text/event-stream")
 	httpReq.Header.Set("Authorization", "Bearer "+c.apiKey)
 
+	start := time.Now()
 	resp, err := c.http.Do(httpReq)
 	if err != nil {
+		if ctx.Err() == context.Canceled {
+			return ChatResult{}, ctx.Err()
+		}
+		if reqCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			return ChatResult{}, &TimeoutError{Timeout: timeout}
+		}
 		return ChatResult{}, fmt.Errorf("连接模型服务失败: %w", err)
 	}
 	defer resp.Body.Close()
+
+	if c.debug {
+		slog.Debug("llm response", "status", resp.StatusCode, "elapsed", time.Since(start).String(), "model", firstNonEmptyModel(req.Model, c.Model()))
+	}
 
 	if resp.StatusCode != http.StatusOK {
 		return ChatResult{}, parseAPIError(resp)
@@ -133,8 +196,11 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 	}
 
 	if err := scanner.Err(); err != nil {
-		if ctxErr := ctx.Err(); ctxErr != nil {
-			return ChatResult{}, ctxErr
+		if ctx.Err() == context.Canceled {
+			return ChatResult{}, ctx.Err()
+		}
+		if reqCtx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
+			return ChatResult{}, &TimeoutError{Timeout: timeout}
 		}
 		return ChatResult{}, fmt.Errorf("读取流式响应失败: %w", err)
 	}
@@ -195,6 +261,8 @@ func (a *toolCallAccumulator) Result() []ToolCall {
 type APIError struct {
 	StatusCode int
 	Message    string
+	RetryAfter time.Duration
+	err        error
 }
 
 func (e *APIError) Error() string {
@@ -210,6 +278,8 @@ func (e *APIError) Error() string {
 	return fmt.Sprintf("模型服务错误 (HTTP %d%s): %s", e.StatusCode, hint, e.Message)
 }
 
+func (e *APIError) Unwrap() error { return e.err }
+
 func parseAPIError(resp *http.Response) error {
 	body, _ := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	var payload struct {
@@ -224,7 +294,11 @@ func parseAPIError(resp *http.Response) error {
 	if msg == "" {
 		msg = http.StatusText(resp.StatusCode)
 	}
-	return &APIError{StatusCode: resp.StatusCode, Message: msg}
+	return &APIError{
+		StatusCode: resp.StatusCode,
+		Message:    msg,
+		RetryAfter: parseRetryAfter(resp.Header.Get("Retry-After")),
+	}
 }
 
 type chatRequest struct {
