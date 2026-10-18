@@ -40,6 +40,8 @@ func TestGitReadOnlyIgnoresRepoExecConfig(t *testing.T) {
 	run("commit", "-qm", "init")
 	run("config", "core.fsmonitor", evil)
 	run("config", "diff.external", evil)
+	run("config", "core.pager", evil)
+	run("config", "core.hooksPath", ws)
 	if err := os.WriteFile(filepath.Join(ws, "a.txt"), []byte("b\n"), 0o644); err != nil {
 		t.Fatal(err)
 	}
