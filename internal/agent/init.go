@@ -218,7 +218,7 @@ func WriteAgentsMD(workspace, content string, overwrite bool) error {
 		return err
 	}
 	if _, err := f.WriteString(content); err != nil {
-		f.Close()
+		_ = f.Close()
 		return err
 	}
 	return f.Close()
