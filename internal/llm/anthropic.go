@@ -349,7 +349,7 @@ func assistantContent(m Message) []anthContent {
 		blocks = append(blocks, anthContent{Type: "text", Text: m.Content})
 	}
 	for _, tc := range m.ToolCalls {
-		var input json.RawMessage = json.RawMessage(tc.Function.Arguments)
+		input := json.RawMessage(tc.Function.Arguments)
 		if !json.Valid(input) {
 			input = json.RawMessage(`{}`)
 		}

@@ -338,7 +338,7 @@ func (r *Runner) exec(ctx context.Context, h Hook, event, tool, args, result str
 	case err = <-done:
 	case <-ctx.Done():
 		_ = syscall.Kill(-cmd.Process.Pid, syscall.SIGKILL) // 连同子进程一起结束
-		<-done
+		<-done                                              //nolint:errcheck // 进程已被强杀，Wait 的错误无意义，以超时/取消原因为准
 		if errors.Is(ctx.Err(), context.DeadlineExceeded) {
 			err = fmt.Errorf("超时 %s", timeout)
 		} else {

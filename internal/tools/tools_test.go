@@ -82,7 +82,7 @@ func TestRunCommand_AllowlistAndExec(t *testing.T) {
 	RegisterBuiltins(r)
 
 	blocked := r.Call(context.Background(), "run_command", `{"command":"rm","args":["-rf","."]}`)
-	if !blocked.IsError || !(strings.Contains(blocked.Content, "白名单") || strings.Contains(blocked.Content, "审批")) {
+	if !blocked.IsError || !strings.Contains(blocked.Content, "白名单") && !strings.Contains(blocked.Content, "审批") {
 		t.Fatalf("expected allowlist/approval error, got %+v", blocked)
 	}
 

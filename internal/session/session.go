@@ -407,7 +407,7 @@ func validID(id string) error {
 		return fmt.Errorf("非法会话 ID: %q", id)
 	}
 	for _, r := range id {
-		if !(r == '-' || r >= '0' && r <= '9' || r >= 'a' && r <= 'z' || r >= 'A' && r <= 'Z') {
+		if r != '-' && (r < '0' || r > '9') && (r < 'a' || r > 'z') && (r < 'A' || r > 'Z') {
 			return fmt.Errorf("非法会话 ID: %q", id)
 		}
 	}

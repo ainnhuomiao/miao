@@ -13,8 +13,7 @@ import (
 func TestWebFetchRedirectRecheck(t *testing.T) {
 	other := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) { w.Write([]byte("other")) }))
 	defer other.Close()
-	var srv *httptest.Server
-	srv = httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, req *http.Request) {
 		switch req.URL.Path {
 		case "/to-other":
 			http.Redirect(w, req, other.URL+"/x", http.StatusFound)
