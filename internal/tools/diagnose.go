@@ -13,6 +13,18 @@ import (
 	"github.com/ainnhuomiao/miao/internal/config"
 )
 
+// goVetSkippedNotice 是未信任仓库跳过自动 go vet 时显示的灰色提示。
+const goVetSkippedNotice = "未信任的仓库：已跳过编辑后的自动 go vet（会编译仓库代码）。确认仓库可信后，在 .miao/config.json 存在的前提下输入 /trust-project 启用。"
+
+// TakeDiagnoseNotice 取走诊断被跳过的提示（没有则返回空串）。
+func (r *Registry) TakeDiagnoseNotice() string {
+	r.diagMu.Lock()
+	defer r.diagMu.Unlock()
+	n := r.diagNotice
+	r.diagNotice = ""
+	return n
+}
+
 func (r *Registry) noteEdited(rel string) {
 	rel = strings.TrimSpace(rel)
 	if rel == "" {
@@ -40,11 +52,26 @@ func (r *Registry) FlushDiagnose(ctx context.Context) string {
 		return ""
 	}
 	seenGo := map[string]bool{}
+	goTrusted := -1 // -1 未判断，0 否，1 是
 	var tsRel string
 	var b strings.Builder
 	for _, rel := range files {
 		switch strings.ToLower(filepath.Ext(rel)) {
 		case ".go":
+			if goTrusted < 0 {
+				goTrusted = 0
+				if config.ProjectTrustedFor(r.workspace) {
+					goTrusted = 1
+				}
+			}
+			if goTrusted == 0 {
+				r.diagMu.Lock()
+				if !r.diagHinted {
+					r.diagHinted, r.diagNotice = true, goVetSkippedNotice
+				}
+				r.diagMu.Unlock()
+				continue
+			}
 			key := strings.Join(goVetArgs(rel), " ")
 			if seenGo[key] {
 				continue

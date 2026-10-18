@@ -8,6 +8,8 @@ import (
 	"strings"
 	"testing"
 	"time"
+
+	"github.com/ainnhuomiao/miao/internal/config"
 )
 
 func TestGoVetArgs(t *testing.T) {
@@ -88,5 +90,69 @@ func TestDiagnoseDisabled(t *testing.T) {
 	}
 	if got := diagnoseFile(context.Background(), dir, "a.go"); got != "" {
 		t.Fatalf("disabled: %q", got)
+	}
+}
+
+func vetWorkspace(t *testing.T) string {
+	t.Helper()
+	if _, err := exec.LookPath("go"); err != nil {
+		t.Skip("no go")
+	}
+	t.Setenv("MIAO_HOME", t.TempDir())
+	t.Setenv("MIAO_DIAGNOSE", "")
+	ws := t.TempDir()
+	files := map[string]string{
+		"go.mod":            "module example.com/x\n\ngo 1.21\n",
+		"a.go":              "package x\n\nimport \"fmt\"\n\nfunc A() { fmt.Printf(\"%d\", \"s\") }\n",
+		".miao/config.json": "{}\n",
+	}
+	for name, body := range files {
+		p := filepath.Join(ws, name)
+		if err := os.MkdirAll(filepath.Dir(p), 0o755); err != nil {
+			t.Fatal(err)
+		}
+		if err := os.WriteFile(p, []byte(body), 0o644); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return ws
+}
+
+// 未信任仓库：编辑 .go 后不自动跑 go vet（会编译仓库代码），只给一次灰色提示。
+func TestAutoVetSkippedInUntrustedProject(t *testing.T) {
+	ws := vetWorkspace(t)
+	r, err := NewRegistry(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.noteEdited("a.go")
+	if got := r.FlushDiagnose(context.Background()); got != "" {
+		t.Fatalf("未信任仓库不应运行 go vet: %q", got)
+	}
+	if n := r.TakeDiagnoseNotice(); !strings.Contains(n, "/trust-project") {
+		t.Fatalf("应提示如何信任仓库: %q", n)
+	}
+	r.noteEdited("a.go")
+	r.FlushDiagnose(context.Background())
+	if n := r.TakeDiagnoseNotice(); n != "" {
+		t.Fatalf("提示每个会话只显示一次: %q", n)
+	}
+}
+
+func TestAutoVetRunsInTrustedProject(t *testing.T) {
+	ws := vetWorkspace(t)
+	if _, err := config.TrustProject(ws); err != nil {
+		t.Fatal(err)
+	}
+	r, err := NewRegistry(ws)
+	if err != nil {
+		t.Fatal(err)
+	}
+	r.noteEdited("a.go")
+	if got := r.FlushDiagnose(context.Background()); !strings.Contains(got, "go vet") {
+		t.Fatalf("已信任仓库应运行 go vet: %q", got)
+	}
+	if n := r.TakeDiagnoseNotice(); n != "" {
+		t.Fatalf("已信任时不应有跳过提示: %q", n)
 	}
 }

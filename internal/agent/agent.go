@@ -255,6 +255,9 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 			if diag := a.tools.FlushDiagnose(ctx); diag != "" && len(toolMsgs) > 0 {
 				toolMsgs[len(toolMsgs)-1].Content += diag
 			}
+			if n := a.tools.TakeDiagnoseNotice(); n != "" && onEvent != nil {
+				_ = onEvent(Event{Kind: EventNotice, ToolResult: n})
+			}
 		}
 		a.mu.Lock()
 		a.history = append(a.history, toolMsgs...)

@@ -88,6 +88,13 @@ func projectTrusted(path, hash string) bool {
 	return readProjectTrust()[path] == hash
 }
 
+// ProjectTrustedFor 按当前文件内容判断工作区的 .miao/config.json 是否已被 /trust-project 信任
+// （与 applyProject 放行 allow_commands 用的是同一判定）。没有项目配置时视为未信任。
+func ProjectTrustedFor(workspace string) bool {
+	_, path, hash, err := loadProjectFile(workspace)
+	return err == nil && projectTrusted(path, hash)
+}
+
 // TrustProject 记住当前工作区 .miao/config.json 的哈希，之后允许它放宽权限。
 func TrustProject(workspace string) (ProjectFile, error) {
 	pf, path, hash, err := loadProjectFile(workspace)

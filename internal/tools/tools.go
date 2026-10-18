@@ -41,6 +41,9 @@ type Registry struct {
 
 	diagMu sync.Mutex
 	dirty  map[string]struct{} // 本轮写过的相对路径，FlushDiagnose 时按包诊断
+	// diagNotice 是诊断被跳过时给界面的一次性提示；diagHinted 保证每个会话只提示一次。
+	diagNotice string
+	diagHinted bool
 }
 
 // NewRegistry 创建工具注册表。workspace 必须是绝对路径。
