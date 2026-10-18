@@ -4,9 +4,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 )
+
+// maxModelsBody 是模型列表响应体的读取上限，防止异常服务端返回超大响应耗尽内存。
+const maxModelsBody = 4 << 20
 
 // ModelSwitcher 是支持运行时切换模型的客户端。
 type ModelSwitcher interface {
@@ -53,7 +57,7 @@ func (c *OpenAIClient) ListModels(ctx context.Context) ([]string, error) {
 			ID string `json:"id"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxModelsBody)).Decode(&body); err != nil {
 		return nil, fmt.Errorf("解析模型列表失败: %w", err)
 	}
 	var out []string

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
 	"sort"
 	"strings"
@@ -40,7 +41,7 @@ func (c *AnthropicClient) ListModels(ctx context.Context) ([]string, error) {
 			CreatedAt string `json:"created_at"`
 		} `json:"data"`
 	}
-	if err := json.NewDecoder(resp.Body).Decode(&body); err != nil {
+	if err := json.NewDecoder(io.LimitReader(resp.Body, maxModelsBody)).Decode(&body); err != nil {
 		return nil, fmt.Errorf("解析模型列表失败: %w", err)
 	}
 	items := body.Data[:0]
