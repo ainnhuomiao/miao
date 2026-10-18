@@ -14,6 +14,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/ainnhuomiao/miao/internal/childenv"
 	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
@@ -444,8 +445,9 @@ func gitIgnored(dir string, paths []string) map[string]bool {
 	if len(paths) == 0 {
 		return res
 	}
-	cmd := exec.Command("git", "check-ignore", "-z", "--stdin")
+	cmd := exec.Command("git", childenv.GitArgs([]string{"check-ignore", "-z", "--stdin"})...)
 	cmd.Dir = dir
+	cmd.Env = childenv.GitEnv()
 	cmd.Stdin = strings.NewReader(strings.Join(paths, "\x00") + "\x00")
 	out, _ := cmd.Output() // 没有被忽略的文件时退出码为 1
 	for _, p := range strings.Split(string(out), "\x00") {

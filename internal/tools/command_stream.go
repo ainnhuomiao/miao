@@ -67,10 +67,14 @@ func lastLine(s string) string {
 func execCommandStream(ctx context.Context, dir, name string, args []string, timeout time.Duration) Result {
 	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
+	env := childenv.Environ()
+	if name == "git" {
+		args, env = childenv.GitArgs(args), childenv.GitEnv()
+	}
 	name, args = wrapSandbox(dir, name, args)
 	cmd := exec.CommandContext(runCtx, name, args...)
 	cmd.Dir = dir
-	cmd.Env = childenv.Environ()
+	cmd.Env = env
 	out := &liveBuffer{progress: progressFrom(ctx)}
 	cmd.Stdout, cmd.Stderr = out, out
 	setProcessGroup(cmd)

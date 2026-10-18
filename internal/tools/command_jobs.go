@@ -57,10 +57,14 @@ func (r *Registry) startBackground(name string, args []string, display string) R
 	id := fmt.Sprintf("bg%d", t.next)
 	t.mu.Unlock()
 
+	env := childenv.Environ()
+	if name == "git" {
+		args, env = childenv.GitArgs(args), childenv.GitEnv()
+	}
 	name, args = wrapSandbox(r.Workspace(), name, args)
 	cmd := exec.Command(name, args...)
 	cmd.Dir = r.Workspace()
-	cmd.Env = childenv.Environ()
+	cmd.Env = env
 	out := &liveBuffer{progress: func(string) {}}
 	cmd.Stdout, cmd.Stderr = out, out
 	setProcessGroup(cmd)

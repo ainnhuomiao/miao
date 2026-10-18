@@ -15,6 +15,7 @@ import (
 	tea "charm.land/bubbletea/v2"
 	"charm.land/lipgloss/v2"
 
+	"github.com/ainnhuomiao/miao/internal/childenv"
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
@@ -53,8 +54,9 @@ func (commitDecision) isGitMsg() {}
 func runGit(dir string, args ...string) (string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), gitTimeout)
 	defer cancel()
-	cmd := exec.CommandContext(ctx, "git", args...)
+	cmd := exec.CommandContext(ctx, "git", childenv.GitArgs(args)...)
 	cmd.Dir = dir
+	cmd.Env = childenv.GitEnv()
 	var out bytes.Buffer
 	cmd.Stdout, cmd.Stderr = &out, &out
 	err := cmd.Run()

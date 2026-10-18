@@ -23,3 +23,19 @@ func TestEnvironDropsAPIKey(t *testing.T) {
 		}
 	}
 }
+
+func TestGitArgsHardening(t *testing.T) {
+	got := GitArgs([]string{"diff", "--stat"})
+	want := []string{"-c", "core.fsmonitor=", "-c", "core.hooksPath=/dev/null", "-c", "diff.external=",
+		"diff", "--no-ext-diff", "--no-textconv", "--stat"}
+	if !slices.Equal(got, want) {
+		t.Fatalf("GitArgs = %v", got)
+	}
+	got = GitArgs([]string{"status", "-s"})
+	if !slices.Equal(got[len(got)-2:], []string{"status", "-s"}) || got[1] != "core.fsmonitor=" {
+		t.Fatalf("GitArgs = %v", got)
+	}
+	if !slices.Contains(GitEnv(), "GIT_CONFIG_NOSYSTEM=1") {
+		t.Fatal("GitEnv 应设置 GIT_CONFIG_NOSYSTEM=1")
+	}
+}

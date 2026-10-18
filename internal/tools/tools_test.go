@@ -154,12 +154,12 @@ func TestRunCommand_ApprovalGate(t *testing.T) {
 func TestNeedsApproval(t *testing.T) {
 	cases := map[string]bool{
 		"ls": false, "git status": false, "git push": true, "git reset --hard": true,
-		"go test ./...": false, "go run .": true, "go env -w X=1": true, "make": true,
+		"go test ./...": true, "go run .": true, "go env -w X=1": true, "make": true,
 		"env rm x": true, "sed -i s/a/b/ f": true, "find . -name x": false,
 		"find . -delete": true, "find . -exec rm {} ;": true, "sort -o f f": true,
 		"go test -exec rm ./...": true, "go build -toolexec=x .": true, "go build -o /tmp/x .": true,
 		"git diff --output=f": true, "git log --output f": true, "git -c core.pager=x log": true,
-		"go test -run TestX ./...": false, "git diff --stat": false,
+		"go test -run TestX ./...": true, "git diff --stat": false,
 		"rg --pre sh x": true, "rg --pre=sh x": true, "uniq in out": true,
 		"git diff --no-index a b": true,
 	}

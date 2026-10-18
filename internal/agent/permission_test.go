@@ -47,6 +47,12 @@ func TestPermissionDecisions(t *testing.T) {
 		{name: "带路径的 bash 也要审批", allow: []string{"/bin/bash"}, tool: "run_command", args: cmd("/bin/bash", "-c", "id"), wantAsked: true, wantAllowed: true},
 		{name: "env 包装也要审批", allow: []string{"env"}, tool: "run_command", args: cmd("env", "go", "test"), wantAsked: true, wantAllowed: true},
 		{name: "go run 即使白名单写 go 也要审批", allow: []string{"go"}, tool: "run_command", args: cmd("go", "run", "./x"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 grep 不放行 grep -r", allow: []string{"grep"}, tool: "run_command", args: cmd("grep", "-rn", "KEY"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 rg 不放行 rg -uu", allow: []string{"rg"}, tool: "run_command", args: cmd("rg", "-uu", "KEY"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 rg 不放行 rg --hidden", allow: []string{"rg"}, tool: "run_command", args: cmd("rg", "--hidden", "KEY"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 sort 不放行 --compress-program", allow: []string{"sort"}, tool: "run_command", args: cmd("sort", "--compress-program=sh", "a"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 sort 不放行 -T", allow: []string{"sort"}, tool: "run_command", args: cmd("sort", "-T", "/tmp", "a"), wantAsked: true, wantAllowed: true},
+		{name: "白名单 go vet 不放行 -vettool", allow: []string{"go vet"}, tool: "run_command", args: cmd("go", "vet", "-vettool=./evil"), wantAsked: true, wantAllowed: true},
 		{name: "会话放行编辑整类", session: []struct {
 			tool string
 			args json.RawMessage

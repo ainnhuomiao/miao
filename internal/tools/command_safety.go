@@ -11,8 +11,8 @@ import (
 var (
 	gitReadOnly = map[string]bool{"status": true, "log": true, "diff": true, "show": true,
 		"rev-parse": true, "ls-files": true, "blame": true, "shortlog": true, "describe": true}
-	goSafe = map[string]bool{"build": true, "test": true, "vet": true, "version": true,
-		"list": true, "doc": true, "env": true}
+	// build/test/vet 会编译并运行仓库里的代码（测试、cgo、vettool），不再免审批。
+	goSafe     = map[string]bool{"version": true, "list": true, "doc": true, "env": true}
 	findDanger = map[string]bool{"-exec": true, "-execdir": true, "-ok": true, "-okdir": true,
 		"-delete": true, "-fprint": true, "-fprint0": true, "-fprintf": true, "-fls": true}
 )
@@ -21,6 +21,15 @@ var (
 // 权限白名单（ALLOW_COMMANDS）放行前必须先过这一关。
 func HasDangerousFlag(name string, args []string) bool {
 	if name == "uniq" && uniqWrites(args) {
+		return true
+	}
+	if name == "sort" && sortUnsafe(args) {
+		return true
+	}
+	if name == "grep" && grepRecursive(args) {
+		return true
+	}
+	if name == "rg" && rgUnrestricted(args) {
 		return true
 	}
 	for _, a := range args {
@@ -89,12 +98,6 @@ func needsApproval(name string, args []string) bool {
 				return true
 			}
 		}
-	case "sort":
-		for _, a := range args {
-			if a == "-o" || strings.HasPrefix(a, "--output") {
-				return true
-			}
-		}
 	}
 	return false
 }
@@ -114,7 +117,7 @@ func dangerousFlag(name, a string) bool {
 	case "go":
 		switch k {
 		case "exec", "toolexec", "o", "overlay", "modfile", "coverprofile",
-			"cpuprofile", "memprofile", "blockprofile", "mutexprofile", "trace", "outputdir":
+			"cpuprofile", "memprofile", "blockprofile", "mutexprofile", "trace", "outputdir", "vettool":
 			return true
 		}
 	case "git":
