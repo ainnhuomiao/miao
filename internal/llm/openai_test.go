@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -162,6 +163,59 @@ func TestStreamChatUsageChunk(t *testing.T) {
 	want := Usage{PromptTokens: 100, CompletionTokens: 20, TotalTokens: 120, PromptCacheHitTokens: 64}
 	if res.Usage == nil || *res.Usage != want {
 		t.Fatalf("usage = %+v, want %+v", res.Usage, want)
+	}
+}
+
+func TestPassReasoningContent(t *testing.T) {
+	if PassReasoningContent("deepseek-reasoner") {
+		t.Fatal("早期 reasoner 不应回传 thinking")
+	}
+	if !PassReasoningContent("deepseek-chat") || !PassReasoningContent("deepseek-flash") {
+		t.Fatal("其它 DeepSeek 模型应回传")
+	}
+}
+
+func TestStreamChatOmitsReasoningForReasoner(t *testing.T) {
+	var body []byte
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		body, _ = io.ReadAll(r.Body)
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}`)
+		writeSSE(w, flusher, `[DONE]`)
+	}))
+	defer srv.Close()
+	req := ChatRequest{Messages: []Message{{Role: RoleAssistant, Content: "hi", ReasoningContent: "think"}}}
+	if _, err := NewOpenAI("k", srv.URL, "deepseek-reasoner").StreamChat(context.Background(), req, nil); err != nil {
+		t.Fatal(err)
+	}
+	if strings.Contains(string(body), "reasoning_content") {
+		t.Fatalf("reasoner 请求不应带 reasoning_content: %s", body)
+	}
+	if _, err := NewOpenAI("k", srv.URL, "deepseek-chat").StreamChat(context.Background(), req, nil); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(string(body), "reasoning_content") {
+		t.Fatalf("chat 请求应回传 reasoning_content: %s", body)
+	}
+}
+
+func TestStreamChatCachedTokensDetails(t *testing.T) {
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		w.Header().Set("Content-Type", "text/event-stream")
+		flusher := w.(http.Flusher)
+		writeSSE(w, flusher, `{"choices":[{"delta":{"content":"hi"},"finish_reason":"stop"}]}`)
+		writeSSE(w, flusher, `{"choices":[],"usage":{"prompt_tokens":100,"completion_tokens":20,"total_tokens":120,"prompt_tokens_details":{"cached_tokens":40}}}`)
+		writeSSE(w, flusher, `[DONE]`)
+	}))
+	defer srv.Close()
+
+	res, err := NewOpenAI("k", srv.URL, "m").StreamChat(context.Background(), ChatRequest{}, nil)
+	if err != nil {
+		t.Fatal(err)
+	}
+	if res.Usage == nil || res.Usage.PromptCacheHitTokens != 40 {
+		t.Fatalf("cached_tokens 未解析: %+v", res.Usage)
 	}
 }
 

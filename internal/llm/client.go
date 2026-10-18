@@ -40,6 +40,8 @@ type Message struct {
 	ToolCalls  []ToolCall `json:"tool_calls,omitempty"`
 	ToolCallID string     `json:"tool_call_id,omitempty"`
 	Name       string     `json:"name,omitempty"`
+	// ReasoningContent 是思考模型的思考过程，回传以保持 DeepSeek 等带工具轮次的前缀稳定。
+	ReasoningContent string `json:"reasoning_content,omitempty"`
 	// Images 是用户消息附带的图片；非空时 content 序列化为多模态 parts，见 image.go。
 	Images []Image `json:"-"`
 }
@@ -90,8 +92,32 @@ type Usage struct {
 	PromptTokens     int `json:"prompt_tokens"`
 	CompletionTokens int `json:"completion_tokens"`
 	TotalTokens      int `json:"total_tokens"`
-	// PromptCacheHitTokens 是 DeepSeek 扩展字段：命中上下文缓存的输入 token 数。
+	// PromptCacheHitTokens 是命中上下文缓存的输入 token 数。
+	// DeepSeek 用 prompt_cache_hit_tokens；OpenAI / OpenRouter / 通义 / Kimi 用 prompt_tokens_details.cached_tokens。
 	PromptCacheHitTokens int `json:"prompt_cache_hit_tokens"`
+}
+
+func (u *Usage) UnmarshalJSON(data []byte) error {
+	var raw struct {
+		PromptTokens         int `json:"prompt_tokens"`
+		CompletionTokens     int `json:"completion_tokens"`
+		TotalTokens          int `json:"total_tokens"`
+		PromptCacheHitTokens int `json:"prompt_cache_hit_tokens"`
+		PromptTokensDetails  struct {
+			CachedTokens int `json:"cached_tokens"`
+		} `json:"prompt_tokens_details"`
+	}
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+	u.PromptTokens = raw.PromptTokens
+	u.CompletionTokens = raw.CompletionTokens
+	u.TotalTokens = raw.TotalTokens
+	u.PromptCacheHitTokens = raw.PromptCacheHitTokens
+	if u.PromptCacheHitTokens == 0 && raw.PromptTokensDetails.CachedTokens > 0 {
+		u.PromptCacheHitTokens = raw.PromptTokensDetails.CachedTokens
+	}
+	return nil
 }
 
 // Client 是模型客户端的能力抽象。

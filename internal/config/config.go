@@ -33,6 +33,7 @@ type Config struct {
 	MaxToolRounds  int
 	PriceIn        float64
 	PriceOut       float64
+	PriceCache     float64
 	Project        ProjectFile
 	ProjectPath    string
 	ProjectHash    string
@@ -79,6 +80,7 @@ func LoadWithNotes() (Config, []string, error) {
 		MaxToolRounds: envInt("MAX_TOOL_ROUNDS", 32),
 		PriceIn:       envFloat("PRICE_IN"),
 		PriceOut:      envFloat("PRICE_OUT"),
+		PriceCache:    envFloat("PRICE_CACHE"),
 	}
 
 	pf, path, hash, err := loadProjectFile(abs)

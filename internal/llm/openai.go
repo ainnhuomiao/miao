@@ -87,9 +87,14 @@ func (c *OpenAIClient) StreamChat(ctx context.Context, req ChatRequest, onDelta 
 }
 
 func (c *OpenAIClient) streamChatOnce(ctx context.Context, req ChatRequest, onDelta DeltaHandler) (ChatResult, error) {
+	model := firstNonEmptyModel(req.Model, c.Model())
+	msgs := req.Messages
+	if !PassReasoningContent(model) {
+		msgs = stripReasoning(msgs)
+	}
 	payload, err := json.Marshal(chatRequest{
-		Model:         firstNonEmptyModel(req.Model, c.Model()),
-		Messages:      req.Messages,
+		Model:         model,
+		Messages:      msgs,
 		Tools:         req.Tools,
 		Stream:        true,
 		StreamOptions: &streamOptions{IncludeUsage: true},
@@ -343,4 +348,19 @@ func firstNonEmptyModel(a, b string) string {
 		return a
 	}
 	return b
+}
+
+// PassReasoningContent 是否把 assistant 的 reasoning_content 回传给服务端。
+// 早期 deepseek-reasoner 收到该字段会返回 400。
+func PassReasoningContent(model string) bool {
+	return !strings.Contains(strings.ToLower(model), "deepseek-reasoner")
+}
+
+func stripReasoning(msgs []Message) []Message {
+	out := make([]Message, len(msgs))
+	copy(out, msgs)
+	for i := range out {
+		out[i].ReasoningContent = ""
+	}
+	return out
 }

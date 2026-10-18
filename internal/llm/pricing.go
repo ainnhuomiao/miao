@@ -39,8 +39,21 @@ func LookupPrice(model string) (ModelPrice, bool) {
 	return ModelPrice{}, false
 }
 
-// EstimateCostUSD 按用量估算美元花费。缓存命中按输入价的 25% 计。
-func EstimateCostUSD(model string, u Usage, overrideIn, overrideOut float64) (float64, bool) {
+// CacheMultiplier 是缓存命中相对输入价的倍率。override>0 时用它；
+// 否则 DeepSeek / Claude 按 0.1，其余按 0.25。
+func CacheMultiplier(model string, override float64) float64 {
+	if override > 0 {
+		return override
+	}
+	n := strings.ToLower(model)
+	if strings.Contains(n, "deepseek") || strings.Contains(n, "claude") || strings.Contains(n, "anthropic") {
+		return 0.1
+	}
+	return 0.25
+}
+
+// EstimateCostUSD 按用量估算美元花费。cacheMul<=0 时按模型选默认缓存倍率。
+func EstimateCostUSD(model string, u Usage, overrideIn, overrideOut, cacheMul float64) (float64, bool) {
 	in, out := overrideIn, overrideOut
 	if in <= 0 || out <= 0 {
 		p, ok := LookupPrice(model)
@@ -58,7 +71,8 @@ func EstimateCostUSD(model string, u Usage, overrideIn, overrideOut float64) (fl
 	if uncached < 0 {
 		uncached = 0
 	}
-	cost := (float64(uncached)*in + float64(u.PromptCacheHitTokens)*in*0.25 + float64(u.CompletionTokens)*out) / 1_000_000
+	mul := CacheMultiplier(model, cacheMul)
+	cost := (float64(uncached)*in + float64(u.PromptCacheHitTokens)*in*mul + float64(u.CompletionTokens)*out) / 1_000_000
 	return cost, true
 }
 
