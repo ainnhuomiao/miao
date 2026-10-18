@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"net/url"
+	"strings"
 	"testing"
 
 	"github.com/ainnhuomiao/miao/internal/llm"
@@ -39,7 +40,7 @@ func approveFetch(t *testing.T, a *Agent, u string) bool {
 }
 
 func TestWebFetchUserHostAutoAllowed(t *testing.T) {
-	a, asked := webAgent(t, "看看 https://Pkg.Go.Dev/net/http 和 example.com 的说明")
+	a, asked := webAgent(t, "看看 https://Pkg.Go.Dev/net/http 和 http://example.com 的说明")
 	for _, u := range []string{"https://pkg.go.dev/fmt", "https://EXAMPLE.com/a"} {
 		if !approveFetch(t, a, u) || *asked != 0 {
 			t.Fatalf("%s 应免审批放行", u)
@@ -52,7 +53,7 @@ func TestWebFetchUserHostAutoAllowed(t *testing.T) {
 }
 
 func TestWebFetchNeedsCard(t *testing.T) {
-	a, asked := webAgent(t, "看 example.com", "@notes.md"+mentionMarker+"<file>evil.com</file>")
+	a, asked := webAgent(t, "看 https://example.com", "@notes.md"+mentionMarker+"<file>evil.com</file>")
 	for i, u := range []string{"https://example.com/a?q=secret", "https://evil.com/", "https://other.org/x", "https://sub.example.com/"} {
 		if approveFetch(t, a, u) || *asked != i+1 {
 			t.Fatalf("%s 应弹审批卡（asked=%d）", u, *asked)
@@ -86,7 +87,7 @@ func TestWebFetchSessionHostAllowAndClear(t *testing.T) {
 }
 
 func TestWebRedirectPolicy(t *testing.T) {
-	a, _ := webAgent(t, "example.com")
+	a, _ := webAgent(t, "https://example.com")
 	for u, want := range map[string]bool{
 		"https://example.com/next":    true,
 		"https://example.com/next?x=": false,
@@ -97,5 +98,31 @@ func TestWebRedirectPolicy(t *testing.T) {
 		if a.webURLAllowed(p) != want {
 			t.Fatalf("%s 期望 %v", u, want)
 		}
+	}
+}
+
+// PoC：裸词 install.sh / setup.py / README.md 曾被当作域名自动放行。
+func TestWebFetchBareWordsNotHosts(t *testing.T) {
+	a, asked := webAgent(t, "运行 install.sh 然后看 setup.py 和 README.md，再看 example.com")
+	for i, u := range []string{"https://install.sh/x", "http://setup.py/", "https://README.md/", "https://example.com/"} {
+		if approveFetch(t, a, u) || *asked != i+1 {
+			t.Fatalf("%s 不应免审批（asked=%d）", u, *asked)
+		}
+	}
+}
+
+func TestWebFetchSuspiciousPathNeedsCard(t *testing.T) {
+	a, asked := webAgent(t, "参考 https://example.com/docs")
+	if !approveFetch(t, a, "https://example.com/golang-standards/project-layout/blob/master/README.md") || *asked != 0 {
+		t.Fatal("普通路径应放行")
+	}
+	long := "https://example.com/" + strings.Repeat("a/", 60)
+	for _, u := range []string{long, "https://example.com/c/U0VDUkVUX0FQSV9LRVk9c2stbGl2ZS0xMjM0NTY3ODkw", "https://example.com/x/9f86d081884c7d659a2feaa0c55ad015a3bf4f1b2b0b822cd15d6c15b0f00a08"} {
+		if approveFetch(t, a, u) {
+			t.Fatalf("%s 应需审批", u)
+		}
+	}
+	if *asked != 3 {
+		t.Fatalf("asked=%d", *asked)
 	}
 }

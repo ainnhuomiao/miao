@@ -3,6 +3,7 @@ package agent
 import (
 	"context"
 	"encoding/json"
+	"math"
 	"net/url"
 	"regexp"
 	"strings"
@@ -14,8 +15,8 @@ import (
 // mentionMarker 之后是 @ 引用附上的文件内容，不算用户亲手输入，不从中提取域名。
 const mentionMarker = "\n\n以下是用户用 @ 引用的文件内容："
 
-// reUserHost 匹配用户消息里的网址或裸域名（example.com、docs.go.dev:8080）。
-var reUserHost = regexp.MustCompile(`(?i)(?:https?://)?((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63})(?::\d+)?`)
+// reUserHost 只匹配用户消息里显式写出的 http(s):// 网址；裸词（install.sh、README.md）不算域名。
+var reUserHost = regexp.MustCompile(`(?i)\bhttps?://((?:[a-z0-9](?:[a-z0-9-]*[a-z0-9])?\.)+[a-z]{2,63})(?::\d+)?`)
 
 func webHostKey(host string) string { return "web_host:" + strings.ToLower(host) }
 
@@ -49,10 +50,47 @@ func userHosts(history []llm.Message) map[string]bool {
 	return out
 }
 
+// maxAutoPathLen 是免审批网址路径的长度上限；更长的路径可能夹带外传数据，需审批。
+const maxAutoPathLen = 100
+
+// suspiciousPath 判断路径是否过长，或含疑似编码数据的高熵段（如 base64/hex 串）。
+func suspiciousPath(u *url.URL) bool {
+	p := u.EscapedPath()
+	if len(p) > maxAutoPathLen {
+		return true
+	}
+	for _, seg := range strings.Split(p, "/") {
+		if (len(seg) >= 24 && shannonEntropy(seg) >= 4.2) || (len(seg) >= 32 && isHex(seg)) {
+			return true
+		}
+	}
+	return false
+}
+
+func isHex(s string) bool {
+	return strings.Trim(s, "0123456789abcdefABCDEF") == ""
+}
+
+func shannonEntropy(s string) float64 {
+	var freq [256]int
+	for i := 0; i < len(s); i++ {
+		freq[s[i]]++
+	}
+	var h float64
+	n := float64(len(s))
+	for _, c := range freq {
+		if c > 0 {
+			q := float64(c) / n
+			h -= q * math.Log2(q)
+		}
+	}
+	return h
+}
+
 // webURLAllowed 是 web_fetch 的免审批规则（也用于每一跳重定向）：
-// 网址不带查询串，且主机名出现在用户本会话消息里，或已在审批卡上按 A 放行。
+// 网址不带查询串、路径不过长且无高熵段，且主机名出现在用户本会话消息的 http(s):// 网址里，或已在审批卡上按 A 放行。
 func (a *Agent) webURLAllowed(u *url.URL) bool {
-	if u == nil || u.RawQuery != "" || u.ForceQuery || (u.Scheme != "http" && u.Scheme != "https") {
+	if u == nil || u.RawQuery != "" || u.ForceQuery || (u.Scheme != "http" && u.Scheme != "https") || suspiciousPath(u) {
 		return false
 	}
 	host := strings.ToLower(u.Hostname())

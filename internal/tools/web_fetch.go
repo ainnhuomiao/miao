@@ -94,13 +94,17 @@ func isProxyAddr(address string) bool {
 }
 
 // checkHostPublic 解析域名并确认所有 IP 都不是内网地址（经代理时拨号检查看不到真实目标）。
+// 经代理访问时解析失败一律拒绝：否则内网域名（如只在代理侧可解析的名字）会被代理放过去。
 func checkHostPublic(ctx context.Context, host string) error {
 	if webFetchAllowPrivate {
 		return nil
 	}
-	ips, err := net.DefaultResolver.LookupIPAddr(ctx, host)
+	ips, err := lookupIPAddr(ctx, host)
 	if err != nil {
-		return nil // 解析失败交给代理或拨号去报错
+		if proxyForHost(host) {
+			return fmt.Errorf("无法解析 %s，经代理访问时拒绝: %w", host, err)
+		}
+		return nil // 直连时由拨号报错，拨号时还会再检查 IP
 	}
 	for _, ip := range ips {
 		if isPrivateIP(ip.IP) {
@@ -110,10 +114,54 @@ func checkHostPublic(ctx context.Context, host string) error {
 	return nil
 }
 
+// lookupIPAddr 与 proxyForHost 可在测试中替换。
+var lookupIPAddr = net.DefaultResolver.LookupIPAddr
+
+// proxyForHost 报告访问 host 时是否会走 HTTP(S)_PROXY。
+var proxyForHost = func(host string) bool {
+	for _, scheme := range []string{"http", "https"} {
+		req := &http.Request{URL: &url.URL{Scheme: scheme, Host: host}}
+		if p, err := http.ProxyFromEnvironment(req); err != nil || p != nil {
+			return true
+		}
+	}
+	return false
+}
+
+var privateNets = func() []*net.IPNet {
+	var out []*net.IPNet
+	for _, c := range []string{
+		"0.0.0.0/8",     // 本网络
+		"100.64.0.0/10", // 运营商级 NAT
+		"192.0.0.0/24",  // IETF 协议分配
+		"198.18.0.0/15", // 基准测试
+		"240.0.0.0/4",   // 保留（含 255.255.255.255）
+		"fc00::/7",      // ULA
+		"fe80::/10",     // 链路本地
+	} {
+		_, n, _ := net.ParseCIDR(c)
+		out = append(out, n)
+	}
+	return out
+}()
+
+var nat64Prefix = func() *net.IPNet { _, n, _ := net.ParseCIDR("64:ff9b::/96"); return n }()
+
 func isPrivateIP(ip net.IP) bool {
-	return ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
-		ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() ||
-		(ip.To4() != nil && ip.To4()[0] == 100 && ip.To4()[1]&0xC0 == 64) // 100.64.0.0/10 运营商级 NAT
+	if ip == nil {
+		return true
+	}
+	if ip.IsLoopback() || ip.IsPrivate() || ip.IsLinkLocalUnicast() || ip.IsLinkLocalMulticast() ||
+		ip.IsUnspecified() || ip.IsMulticast() || ip.IsInterfaceLocalMulticast() {
+		return true
+	}
+	for _, n := range privateNets {
+		if n.Contains(ip) {
+			return true
+		}
+	}
+	// NAT64（64:ff9b::/96）整段视为内网：嵌入的 IPv4 可能指向内网，且这类地址不应出现在公网解析结果里。
+	return nat64Prefix.Contains(ip)
 }
 
 func registerWebFetch(r *Registry) {

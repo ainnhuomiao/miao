@@ -2,6 +2,7 @@ package tools
 
 import (
 	"context"
+	"errors"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -136,5 +137,39 @@ func TestWebFetchBlocksPrivate(t *testing.T) {
 		if got := isPrivateIP(net.ParseIP(ip)); got != want {
 			t.Errorf("isPrivateIP(%s)=%v want %v", ip, got, want)
 		}
+	}
+}
+
+func TestIsPrivateIPExtraRanges(t *testing.T) {
+	for ip, want := range map[string]bool{
+		"0.1.2.3": true, "198.18.0.1": true, "198.19.255.255": true, "240.0.0.1": true, "255.255.255.255": true,
+		"100.64.0.1": true, "192.0.0.8": true, "::ffff:127.0.0.1": true, "::ffff:10.0.0.1": true,
+		"64:ff9b::7f00:1": true, "64:ff9b::a00:1": true, "64:ff9b::808:808": true, "fd00::1": true,
+		"198.20.0.1": false, "8.8.8.8": false, "1.1.1.1": false, "2606:4700::1111": false, "223.255.255.255": false,
+	} {
+		if got := isPrivateIP(net.ParseIP(ip)); got != want {
+			t.Errorf("isPrivateIP(%s)=%v want %v", ip, got, want)
+		}
+	}
+}
+
+func TestCheckHostPublicProxyResolveFailDenies(t *testing.T) {
+	oldLookup, oldProxy := lookupIPAddr, proxyForHost
+	t.Cleanup(func() { lookupIPAddr, proxyForHost = oldLookup, oldProxy })
+	lookupIPAddr = func(context.Context, string) ([]net.IPAddr, error) { return nil, errors.New("no such host") }
+
+	proxyForHost = func(string) bool { return true }
+	if err := checkHostPublic(context.Background(), "intranet.corp"); err == nil {
+		t.Fatal("经代理时解析失败应拒绝")
+	}
+	proxyForHost = func(string) bool { return false }
+	if err := checkHostPublic(context.Background(), "intranet.corp"); err != nil {
+		t.Fatalf("直连时解析失败交给拨号: %v", err)
+	}
+	lookupIPAddr = func(context.Context, string) ([]net.IPAddr, error) {
+		return []net.IPAddr{{IP: net.ParseIP("64:ff9b::a00:1")}}, nil
+	}
+	if err := checkHostPublic(context.Background(), "nat64.example"); err == nil {
+		t.Fatal("NAT64 嵌入内网地址应拒绝")
 	}
 }
