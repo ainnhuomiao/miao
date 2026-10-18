@@ -12,6 +12,7 @@ import (
 	"github.com/mattn/go-runewidth"
 	"github.com/rivo/uniseg"
 
+	"github.com/ainnhuomiao/miao/internal/config"
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
@@ -34,6 +35,12 @@ const helpText = `命令:
   /clear      清空对话并换新会话
   /undo       撤销最近一次文件修改（可连续撤销）
   /compact    压缩上下文（用量到 80% 时自动触发）
+  /apply      确认规划方案，切到自动同意编辑并执行
+  /cost       本会话估算花费
+  /init       扫描项目生成 AGENTS.md
+  /trust-project  信任当前仓库的项目配置
+  /export     把当前会话导出为 Markdown（默认到数据目录，会脱敏）
+  !<命令>     在工作区直通执行 shell（只读规划模式下不可用）
   /diff       查看本次会话改过的文件和 diff
   /commit     模型写提交信息，确认后只提交本会话改过的文件
   /fork       把当前对话复制成新会话
@@ -209,7 +216,7 @@ func (m *Model) approvalView() string {
 	cmd := strings.Join(lines, "\n")
 	hint := "Y 允许 · A 本会话总是允许 · N 拒绝 · Esc 取消"
 	if isFileEdit(m.approval.toolName) {
-		hint = "Y 写入 · A 本会话总是允许 · N 拒绝 · Esc 取消"
+		hint = "Y 写入 · B 本轮全部写入 · A 本会话总是允许 · N 拒绝 · Esc 取消"
 	}
 	body := titleStyle.Render(title) + "\n" + cmd + "\n" + mutedStyle.Render(hint)
 	return approvalBoxStyle.Width(max(24, m.width-2)).Render(body)
@@ -237,7 +244,24 @@ func (m *Model) usageText() string {
 	if pct, ok := cachePercent(u); ok {
 		t += fmt.Sprintf(" · 缓存%d%%", pct)
 	}
+	if c := m.costText(); c != "" {
+		t += " · " + c
+	}
 	return t
+}
+
+func (m *Model) costText() string {
+	if m.usage == nil {
+		return ""
+	}
+	in, out := 0.0, 0.0
+	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_IN")), "%f", &in)
+	fmt.Sscanf(strings.TrimSpace(config.Getenv("PRICE_OUT")), "%f", &out)
+	usd, ok := llm.EstimateCostUSD(m.modelName, *m.usage, in, out)
+	if !ok {
+		return ""
+	}
+	return llm.FormatCost(usd)
 }
 
 // statusDot 是底栏最左的状态：空闲 green ●，思考 mauve、跑工具 peach 的 spinner + 文字 + 计时。
@@ -751,6 +775,9 @@ func (m *Model) thinkingView() string {
 	verb := thinkingVerbs[int(el/(3*time.Second))%len(thinkingVerbs)]
 	if m.compacting {
 		verb = "压缩上下文"
+	}
+	if m.shelling {
+		verb = "执行命令"
 	}
 	dots := strings.Repeat(".", int(el/(400*time.Millisecond))%3+1)
 	return lipgloss.NewStyle().Foreground(accentColor).Render(glyph+" ") +

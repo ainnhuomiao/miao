@@ -185,6 +185,7 @@ func (m *Model) rewindTo(it rewindItem) {
 		m.messages = nil
 	}
 	m.ctxTokens = 0
+	m.costUSD = 0
 	m.input.SetValue(it.text)
 	m.input.CursorEnd()
 	m.fitInput()

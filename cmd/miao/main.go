@@ -6,9 +6,12 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"log/slog"
 	"os"
 	"os/signal"
+	"strings"
 	"syscall"
+	"time"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/appdir"
@@ -23,6 +26,8 @@ import (
 	"github.com/ainnhuomiao/miao/internal/tui"
 )
 
+var version = "dev"
+
 func main() {
 	if err := run(); err != nil {
 		fmt.Fprintf(os.Stderr, "启动失败: %v\n", err)
@@ -35,15 +40,52 @@ func run() error {
 	prompt := flag.String("p", "", "非交互模式：发送这段提示词，输出回答后退出（\"-\" 表示只用管道输入）")
 	modeFlag := flag.String("mode", "ask", "非交互模式的权限：ask（需审批的一律拒绝）/ edits（自动同意编辑）/ plan（只读）")
 	verbose := flag.Bool("v", false, "非交互模式下把工具调用过程打印到 stderr")
+	modelFlag := flag.String("model", "", "覆盖 MIAO_MODEL")
+	baseURLFlag := flag.String("base-url", "", "覆盖 MIAO_BASE_URL")
+	systemFlag := flag.String("system", "", "追加到默认系统提示词末尾")
+	debug := flag.Bool("debug", false, "把请求耗时、状态码写到 stderr")
+	listModels := flag.Bool("list-models", false, "列出服务端可用模型后退出")
+	protocolFlag := flag.String("protocol", "", "openai / anthropic / auto")
+	timeoutFlag := flag.Int("timeout", 0, "单次 LLM 请求超时秒数（默认 600）")
+	resume := flag.Bool("c", false, "启动时恢复最近一次会话")
+	flag.BoolVar(resume, "resume", false, "启动时恢复最近一次会话")
+	showVersion := flag.Bool("version", false, "打印版本并退出")
+	outputFormat := flag.String("output-format", "text", "非交互输出：text / json / stream-json")
+	maxTurns := flag.Int("max-turns", 0, "非交互模式最多工具循环轮数（覆盖 MIAO_MAX_TOOL_ROUNDS）")
+	allowedTools := flag.String("allowed-tools", "", "非交互模式只启用这些工具，逗号分隔")
 	flag.Parse()
 	headlessMode := isFlagSet("p")
 
-	// 改名迁移：~/.config/agnet 等旧目录搬到新名字下（新目录已存在则不动）
+	if *showVersion {
+		fmt.Println("miao", version)
+		return nil
+	}
+
+	if *debug {
+		slog.SetDefault(slog.New(slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug})))
+	}
+
 	notes := appdir.Migrate()
 
-	cfg, err := config.Load()
+	cfg, cfgNotes, err := config.LoadWithNotes()
+	notes = append(notes, cfgNotes...)
+	if flag.NArg() > 0 && flag.Arg(0) == "doctor" {
+		return runDoctor(cfg, notes, err)
+	}
 	if err != nil {
 		return err
+	}
+	if *modelFlag != "" {
+		cfg.Model = *modelFlag
+	}
+	if *baseURLFlag != "" {
+		cfg.BaseURL = *baseURLFlag
+	}
+	if *protocolFlag != "" {
+		cfg.Protocol = *protocolFlag
+	}
+	if *timeoutFlag > 0 {
+		cfg.Timeout = time.Duration(*timeoutFlag) * time.Second
 	}
 
 	reg, err := tools.NewRegistry(cfg.Workspace)
@@ -51,21 +93,36 @@ func run() error {
 		return err
 	}
 	tools.RegisterBuiltins(reg)
-	mcpMgr := mcp.Start(reg) // 后台连接 MCP 服务器，不阻塞启动
+	mcpMgr := mcp.Start(reg)
 	defer mcpMgr.Close()
 
-	client := llm.NewOpenAI(cfg.APIKey, cfg.BaseURL, cfg.Model)
+	client := llm.NewClient(cfg.Protocol, cfg.APIKey, cfg.BaseURL, cfg.Model)
+	llm.ApplySettings(client, cfg.Timeout, 3, *debug)
+
+	if *listModels {
+		return printModels(client)
+	}
+
 	system := fmt.Sprintf(
-		"%s\n\n当前调用的模型标识是 \"%s\"。工作区根目录是 %q（工具只能访问此目录内的相对路径）。",
+		"%s\n\n当前调用的模型标识是 \"%s\"。工作区根目录是 %q（工具只能访问此目录内的相对路径）。go test / go build 会编译并运行仓库里的代码。",
 		agent.DefaultSystemPrompt, agent.ModelPlaceholder, cfg.Workspace)
+	if extra := strings.TrimSpace(*systemFlag); extra != "" {
+		system += "\n\n" + extra
+	}
 	md, truncated, err := agent.LoadAgentsMD(cfg.Workspace)
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "读取 %s 失败：%v\n", agent.AgentsMDName, err)
 	}
 	system = agent.WithAgentsMD(system, md, truncated)
+	if names := splitCSV(*allowedTools); len(names) > 0 {
+		reg.RestrictTo(names)
+	}
+
 	ag := agent.New(client, system, reg)
 	ag.SetAgentsMDLoaded(md != "")
+	ag.SetMaxToolRounds(cfg.MaxToolRounds)
 	ag.SetAllowedCommands(agent.AllowedCommandsFromEnv())
+	ag.SetFallbackModel(cfg.FallbackModel)
 	hookRunner, err := hooks.Load(cfg.Workspace, ag.HookApprover())
 	if err != nil {
 		fmt.Fprintf(os.Stderr, "读取 hook 配置失败（出错的部分已忽略）：%v\n", err)
@@ -87,6 +144,13 @@ func run() error {
 			return err
 		}
 		ag.SetMode(mode)
+		format, err := headless.ParseFormat(*outputFormat)
+		if err != nil {
+			return err
+		}
+		if *maxTurns > 0 {
+			ag.SetMaxToolRounds(*maxTurns)
+		}
 		var stdin io.Reader
 		if !isTerminal(os.Stdin) {
 			stdin = os.Stdin
@@ -97,15 +161,46 @@ func run() error {
 		}
 		ctx, stop := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
 		defer stop()
-		defer ag.KillJobs() // 不留下后台命令
-		return headless.Run(ctx, ag, text, os.Stdout, os.Stderr, *verbose)
+		defer ag.KillJobs()
+		return headless.Run(ctx, ag, text, os.Stdout, os.Stderr, headless.Options{Verbose: *verbose, Format: format})
 	}
 
 	if *plain || !isTerminal(os.Stdin) || !isTerminal(os.Stdout) {
 		return repl.New(ag, cfg.Model).Run(context.Background())
 	}
 	tui.SetStartupNotices(notes)
+	if *resume {
+		tui.SetResumeOnStart(true)
+	}
 	return tui.Run(ag, cfg.Model)
+}
+
+func printModels(client llm.Client) error {
+	lister, ok := client.(llm.ModelLister)
+	if !ok {
+		return fmt.Errorf("当前协议不支持列出模型")
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+	names, err := lister.ListModels(ctx)
+	if err != nil {
+		return err
+	}
+	for _, n := range names {
+		fmt.Println(n)
+	}
+	return nil
+}
+
+func splitCSV(s string) []string {
+	var out []string
+	for _, p := range strings.Split(s, ",") {
+		p = strings.TrimSpace(p)
+		if p != "" {
+			out = append(out, p)
+		}
+	}
+	return out
 }
 
 func isFlagSet(name string) bool {
