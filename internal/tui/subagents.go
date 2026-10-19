@@ -1,8 +1,10 @@
 package tui
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
+	"slices"
 	"strings"
 
 	tea "charm.land/bubbletea/v2"
@@ -14,31 +16,64 @@ import (
 
 const subagentsPrefix = "/subagents "
 
-// 菜单行名。
 const (
-	subRowEnabled = "开关"
-	subRowMax     = "并发上限"
-	subRowFollow  = "跟随主模型"
-	subRowWeb     = "允许联网"
+	subRowEnabled        = "开关"
+	subRowMax            = "并发上限"
+	subRowModel          = "模型"
+	subRowThinking       = "思考强度"
+	subRowFollow         = "跟随主模型"
+	subRowFollowThinking = "跟随主代理"
+	subRowBack           = "‹ 返回设置"
+	subRowRefresh        = "重新查询档位"
+	subRowWeb            = "允许联网"
 )
 
-// subagentState 记录子代理的累计用量（不计入 ctxTokens）。
+// subagentState 保存子代理累计用量和模型思考能力查询状态。
 type subagentState struct {
-	tokens int // 本会话子代理累计 tokens
+	tokens         int
+	thinkingLevels thinkingListState
+	thinkingModel  string
 }
 
-// subagentsMode 判断是否在 /subagents 设置菜单里。
+type subagentThinkingMsg struct {
+	model      string
+	generation uint64
+	err        error
+}
+
 func (m *Model) subagentsMode() bool {
 	v := m.input.Value()
 	return strings.HasPrefix(v, subagentsPrefix) && !strings.ContainsAny(v, "\n")
 }
 
-// openSubagentsMenu 把输入框切到 /subagents 菜单。
-func (m *Model) openSubagentsMenu() {
-	m.input.SetValue(subagentsPrefix)
+func (m *Model) subagentsPage() (page, query string) {
+	rest := strings.TrimPrefix(m.input.Value(), subagentsPrefix)
+	for _, name := range []string{"model", "thinking"} {
+		if rest == name || strings.HasPrefix(rest, name+" ") {
+			return name, strings.TrimSpace(strings.TrimPrefix(rest, name))
+		}
+	}
+	return "", strings.TrimSpace(rest)
+}
+
+func (m *Model) openSubagentsMenu() { m.openSubagentsPage("", "") }
+
+func (m *Model) openSubagentsPage(page, focus string) {
+	v := subagentsPrefix
+	if page != "" {
+		v += page + " "
+	}
+	m.input.SetValue(v)
 	m.input.CursorEnd()
 	m.fitInput()
 	m.syncPalette()
+	for i, row := range m.subagentsMatches() {
+		if row.name == focus {
+			m.palette.sel = i
+			m.paletteScroll()
+			break
+		}
+	}
 }
 
 func subagentConfig() (subagent.Config, *subagent.Manager) {
@@ -49,77 +84,344 @@ func subagentConfig() (subagent.Config, *subagent.Manager) {
 	return mgr.Config(), mgr
 }
 
-// subagentsMatches 是菜单行：开关、并发上限、模型列表。
+func (m *Model) subagentModel(cfg subagent.Config) string {
+	if cfg.Model != "" {
+		return cfg.Model
+	}
+	return m.modelName
+}
+
+func (m *Model) subagentThinkingInfo(cfg subagent.Config) llm.ThinkingCapabilities {
+	return m.ag.ThinkingCapabilitiesForModel(m.subagentModel(cfg))
+}
+
+func (m *Model) invalidateSubagentThinking() {
+	m.sub.thinkingLevels = thinkingListState{generation: m.sub.thinkingLevels.generation + 1}
+	m.sub.thinkingModel = ""
+}
+
+func (m *Model) subagentsFetchCmd() tea.Cmd {
+	if !m.subagentsMode() {
+		return nil
+	}
+	page, _ := m.subagentsPage()
+	if page == "model" {
+		return m.fetchModelsCmd()
+	}
+	if page == "thinking" {
+		return m.fetchSubagentThinkingCmd()
+	}
+	return nil
+}
+
+func (m *Model) fetchSubagentThinkingCmd() tea.Cmd {
+	cfg, _ := subagentConfig()
+	model := m.subagentModel(cfg)
+	if m.sub.thinkingModel != model {
+		m.invalidateSubagentThinking()
+		m.sub.thinkingModel = model
+	}
+	if m.sub.thinkingLevels.fetching || m.sub.thinkingLevels.done {
+		return nil
+	}
+	m.sub.thinkingLevels.fetching = true
+	generation, ag := m.sub.thinkingLevels.generation, m.ag
+	return func() tea.Msg {
+		ctx, cancel := context.WithTimeout(context.Background(), modelsFetchTimeout)
+		defer cancel()
+		_, err := ag.QueryThinkingCapabilitiesForModel(ctx, model)
+		return subagentThinkingMsg{model: model, generation: generation, err: err}
+	}
+}
+
+func (m *Model) handleSubagentThinking(msg subagentThinkingMsg) {
+	cfg, mgr := subagentConfig()
+	if msg.model != m.subagentModel(cfg) || msg.generation != m.sub.thinkingLevels.generation {
+		return
+	}
+	m.sub.thinkingLevels.fetching, m.sub.thinkingLevels.done = false, true
+	if cfg.Thinking != "" && !m.subagentThinkingInfo(cfg).Supports(cfg.Thinking) && mgr != nil {
+		cfg.Thinking = "auto"
+		if m.saveSubagentConfig(cfg) {
+			m.notice("所选子代理模型不支持原思考强度，已恢复为服务端默认 auto。")
+		}
+	}
+	if msg.err != nil {
+		m.notice("子代理模型档位查询失败，可在思考强度菜单选择“重新查询档位”。")
+	}
+	m.syncPalette()
+}
+
+func subMatches(query, name string) bool {
+	return isSubsequence(strings.ToLower(query), strings.ToLower(name))
+}
+
 func (m *Model) subagentsMatches() []paletteCmd {
 	cfg, _ := subagentConfig()
-	on := "关（task 工具不暴露给模型）· Enter 切换"
-	if cfg.Enabled {
-		on = "开 · Enter 切换"
+	page, query := m.subagentsPage()
+	var rows []paletteCmd
+	if page != "" && query == "" {
+		rows = append(rows, paletteCmd{name: subRowBack, desc: "Esc / ← 返回"})
 	}
-	rows := []paletteCmd{
-		{name: subRowEnabled, desc: on},
-		{name: subRowMax, desc: fmt.Sprintf("%d（←/→ 或 +/- 调整，1~8）", cfg.Max)},
-	}
-	rows = append(rows, subWebRow(cfg))
-	follow := paletteCmd{name: subRowFollow, desc: "子代理模型：使用主代理当前模型（" + m.modelName + "）"}
-	if cfg.Model == "" {
-		follow.desc += " ✓"
-	}
-	rows = append(rows, follow)
-	for _, n := range m.availableModels() {
-		c := paletteCmd{name: n, desc: "子代理模型"}
-		if n == cfg.Model {
-			c.desc += " ✓"
+	switch page {
+	case "model":
+		follow := paletteCmd{name: subRowFollow, desc: m.modelName}
+		if cfg.Model == "" {
+			follow.desc += " ✓"
 		}
-		rows = append(rows, c)
+		if subMatches(query, follow.name) {
+			rows = append(rows, follow)
+		}
+		names := m.availableModels()
+		if cfg.Model != "" && !slices.Contains(names, cfg.Model) {
+			names = append([]string{cfg.Model}, names...)
+		}
+		for _, name := range names {
+			if !subMatches(query, name) {
+				continue
+			}
+			desc := "Enter 选择"
+			if name == cfg.Model {
+				desc = "当前 ✓"
+			}
+			rows = append(rows, paletteCmd{name: name, desc: desc})
+		}
+	case "thinking":
+		info := m.subagentThinkingInfo(cfg)
+		follow := paletteCmd{name: subRowFollowThinking, desc: "当前 " + m.ag.Thinking()}
+		if !info.Supports(m.ag.Thinking()) {
+			follow.desc += "；此模型使用 auto"
+		}
+		if cfg.Thinking == "" {
+			follow.desc += " ✓"
+		}
+		if subMatches(query, follow.name) {
+			rows = append(rows, follow)
+		}
+		names := info.Levels
+		if !info.Known && cfg.Thinking != "" && !slices.Contains(names, cfg.Thinking) {
+			names = append(names, cfg.Thinking)
+		}
+		for _, name := range names {
+			if !subMatches(query, name) {
+				continue
+			}
+			desc := info.Source
+			if name == "auto" {
+				desc = "使用所选模型的服务端默认"
+			}
+			if name == "none" {
+				desc = "关闭思考 · " + info.Source
+			}
+			if info.Budget && name != "auto" && name != "none" {
+				desc += " · 预算预设"
+			}
+			if !info.Known {
+				desc += " · 档位未知，可手动输入"
+			}
+			if m.sub.thinkingLevels.fetching {
+				desc += " · 正在查询"
+			}
+			if name == cfg.Thinking {
+				desc += " ✓"
+			}
+			rows = append(rows, paletteCmd{name: name, desc: desc})
+		}
+		if query == "" {
+			rows = append(rows, paletteCmd{name: subRowRefresh, desc: m.subagentModel(cfg)})
+		}
+	default:
+		on := "关 · Enter 开启"
+		if cfg.Enabled {
+			on = "开 · Enter 关闭"
+		}
+		model := cfg.Model
+		if model == "" {
+			model = "跟随主模型（" + m.modelName + "）"
+		}
+		thinking := cfg.Thinking
+		if thinking == "" {
+			thinking = "跟随主代理（" + m.ag.Thinking() + "）"
+			if !m.subagentThinkingInfo(cfg).Supports(m.ag.Thinking()) {
+				thinking = "跟随主代理（当前使用 auto）"
+			}
+		}
+		rows = []paletteCmd{
+			{name: subRowEnabled, desc: on},
+			{name: subRowModel, desc: model + " ›"},
+			{name: subRowThinking, desc: thinking + " ›"},
+			{name: subRowMax, desc: fmt.Sprintf("%d（←/→ 或 +/- 调整，1~8）", cfg.Max)},
+			subWebRow(cfg),
+		}
+		if query != "" {
+			filtered := rows[:0]
+			for _, row := range rows {
+				if subMatches(query, row.name) {
+					filtered = append(filtered, row)
+				}
+			}
+			rows = filtered
+		}
+	}
+	// 完整名称优先，避免输入 gpt-5 时误选排在前面的 gpt-5-mini。
+	if query != "" {
+		for i, row := range rows {
+			if strings.EqualFold(row.name, query) {
+				copy(rows[1:i+1], rows[:i])
+				rows[0] = row
+				break
+			}
+		}
 	}
 	return rows
 }
 
-// handleSubagentsKey 处理菜单里的 Enter / ←→ / +-；其余按键交给通用菜单逻辑。
-func (m *Model) handleSubagentsKey(msg tea.KeyPressMsg, matches []paletteCmd) (bool, tea.Cmd) {
-	if !m.subagentsMode() || len(matches) == 0 {
-		return false, nil
-	}
-	sel := matches[min(m.palette.sel, len(matches)-1)].name
-	cfg, mgr := subagentConfig()
-	switch msg.String() {
-	case "left", "-", "right", "+", "=":
-		if sel != subRowMax {
-			return msg.String() != "left" && msg.String() != "right", nil
-		}
-		if msg.String() == "left" || msg.String() == "-" {
-			cfg.Max--
-		} else {
-			cfg.Max++
-		}
-		cfg.Max = max(subagent.MinMax, min(subagent.MaxMax, cfg.Max))
-	case "enter":
-		switch sel {
-		case subRowEnabled:
-			cfg.Enabled = !cfg.Enabled
-		case subRowMax:
-			return true, nil
-		case subRowFollow:
-			cfg.Model = ""
-		case subRowWeb:
-			cfg.AllowWeb = !cfg.AllowWeb
-		default:
-			cfg.Model = sel
-		}
-	case "tab":
-		return true, nil
-	default:
-		return false, nil
-	}
+func (m *Model) saveSubagentConfig(cfg subagent.Config) bool {
+	_, mgr := subagentConfig()
 	if mgr == nil {
 		m.notice("子代理不可用。")
-		return true, nil
+		return false
 	}
 	if err := mgr.SetConfig(cfg); err != nil {
-		m.notice("子代理设置已生效，但保存失败：" + err.Error())
+		m.notice("子代理设置保存失败：" + err.Error())
+		return false
 	}
-	return true, m.fetchModelsCmd()
+	m.syncPalette()
+	return true
+}
+
+func (m *Model) handleSubagentsKey(msg tea.KeyPressMsg, matches []paletteCmd) (bool, tea.Cmd) {
+	if !m.subagentsMode() {
+		return false, nil
+	}
+	page, query := m.subagentsPage()
+	cfg, _ := subagentConfig()
+	key := msg.String()
+	if page != "" && (key == "esc" || key == "left" || key == "backspace" && query == "") {
+		focus := subRowModel
+		if page == "thinking" {
+			focus = subRowThinking
+		}
+		m.openSubagentsPage("", focus)
+		return true, nil
+	}
+	sel := ""
+	if len(matches) > 0 {
+		sel = matches[min(m.palette.sel, len(matches)-1)].name
+	}
+	if page == "" {
+		switch key {
+		case "enter", "tab", "right":
+			if sel == subRowModel {
+				focus := cfg.Model
+				if focus == "" {
+					focus = subRowFollow
+				}
+				m.openSubagentsPage("model", focus)
+				return true, m.fetchModelsCmd()
+			}
+			if sel == subRowThinking {
+				focus := cfg.Thinking
+				if focus == "" {
+					focus = subRowFollowThinking
+				}
+				m.openSubagentsPage("thinking", focus)
+				return true, m.fetchSubagentThinkingCmd()
+			}
+		}
+		switch key {
+		case "left", "-", "right", "+", "=":
+			if sel != subRowMax {
+				return false, nil
+			}
+			if key == "left" || key == "-" {
+				cfg.Max--
+			} else {
+				cfg.Max++
+			}
+		case "enter":
+			switch sel {
+			case subRowEnabled:
+				cfg.Enabled = !cfg.Enabled
+			case subRowWeb:
+				cfg.AllowWeb = !cfg.AllowWeb
+			default:
+				return true, nil
+			}
+		case "tab":
+			return true, nil
+		default:
+			return false, nil
+		}
+		m.saveSubagentConfig(cfg.Normalize())
+		return true, nil
+	}
+	if key == "tab" {
+		if sel != "" && sel != subRowBack && sel != subRowRefresh {
+			m.input.SetValue(subagentsPrefix + page + " " + sel)
+			m.input.CursorEnd()
+			m.fitInput()
+			m.syncPalette()
+		}
+		return true, nil
+	}
+	if key != "enter" {
+		return false, nil
+	}
+	if sel == subRowBack {
+		focus := subRowModel
+		if page == "thinking" {
+			focus = subRowThinking
+		}
+		m.openSubagentsPage("", focus)
+		return true, nil
+	}
+	if sel == subRowRefresh {
+		m.invalidateSubagentThinking()
+		return true, m.fetchSubagentThinkingCmd()
+	}
+	if sel == "" {
+		sel = query
+	}
+	if sel == "" {
+		return true, nil
+	}
+	focus := subRowModel
+	if page == "model" {
+		cfg.Model = sel
+		if sel == subRowFollow {
+			cfg.Model = ""
+		}
+		if cfg.Thinking != "" && !m.subagentThinkingInfo(cfg).Supports(cfg.Thinking) {
+			cfg.Thinking = "auto"
+		}
+	} else {
+		focus = subRowThinking
+		cfg.Thinking = ""
+		if sel != subRowFollowThinking {
+			level, err := llm.NormalizeThinking(sel)
+			if err != nil {
+				m.notice(err.Error())
+				return true, nil
+			}
+			info := m.subagentThinkingInfo(cfg)
+			if !info.Supports(level) {
+				m.notice("子代理模型不支持此档位。" + info.Summary())
+				return true, nil
+			}
+			cfg.Thinking = level
+		}
+	}
+	if m.saveSubagentConfig(cfg) {
+		if page == "model" {
+			m.invalidateSubagentThinking()
+		}
+		m.openSubagentsPage("", focus)
+		if page == "thinking" && cfg.Thinking != "" && cfg.Thinking != "auto" && !m.subagentThinkingInfo(cfg).Known {
+			m.notice("子代理思考强度已保存，但此模型档位未知，手动设置尚未验证。")
+		}
+	}
+	return true, nil
 }
 
 // subagentArgs 解析 task 调用的 description。

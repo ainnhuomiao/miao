@@ -46,6 +46,7 @@ func (a *Agent) injectBaselineLocked() {
 		return
 	}
 	a.history = append([]llm.Message{{Role: llm.RoleUser, Content: note}}, a.history...)
+	a.clearAnthropicContentLocked()
 }
 
 func (a *Agent) hasBaselineLocked() bool {

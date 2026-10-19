@@ -19,9 +19,8 @@ const ToolName = "task"
 
 // 单个子代理的默认限制。
 const (
-	DefaultMaxSteps = 30
-	DefaultTimeout  = 5 * time.Minute
-	maxAnswerBytes  = 32 << 10
+	DefaultTimeout = 5 * time.Minute
+	maxAnswerBytes = 32 << 10
 )
 
 // 进度行：排队中的子代理不计入运行数。
@@ -38,8 +37,7 @@ type Manager struct {
 	client    llm.Client
 	mainModel func() string
 
-	MaxSteps int
-	Timeout  time.Duration
+	Timeout time.Duration
 	// Save 持久化配置；默认 SaveConfig，测试可替换。
 	Save func(Config) error
 
@@ -58,13 +56,23 @@ func New(reg *tools.Registry, client llm.Client, mainModel func() string, cfg Co
 	if full != reg {
 		tools.RegisterBuiltins(full)
 	}
+	// 子代理保留独立的审批与路径约束闭包，同时继承用户对工具的开关。
+	allowed := make([]string, 0, len(AllowedTools))
+	for _, name := range AllowedTools {
+		if reg.ToolEnabled(name) {
+			allowed = append(allowed, name)
+		}
+	}
+	withWeb := append([]string{}, allowed...)
+	if reg.ToolEnabled(WebTool) {
+		withWeb = append(withWeb, WebTool)
+	}
 	m := &Manager{
 		reg:       reg,
-		sub:       full.Subset(AllowedTools...),
-		subWeb:    full.Subset(append(append([]string{}, AllowedTools...), WebTool)...),
+		sub:       full.Subset(allowed...),
+		subWeb:    full.Subset(withWeb...),
 		client:    client,
 		mainModel: mainModel,
-		MaxSteps:  DefaultMaxSteps,
 		Timeout:   DefaultTimeout,
 		Save:      SaveConfig,
 		cfg:       cfg.Normalize(),
@@ -92,6 +100,9 @@ func (m *Manager) Config() Config {
 // SetConfig 立即生效并保存；保存失败时配置仍生效并返回错误。
 func (m *Manager) SetConfig(c Config) error {
 	c = c.Normalize()
+	if err := c.validate(); err != nil {
+		return err
+	}
 	m.mu.Lock()
 	m.cfg = c
 	m.broadcastLocked()
@@ -203,16 +214,24 @@ func (m *Manager) run(ctx context.Context, args json.RawMessage) tools.Result {
 	if model == "" && m.mainModel != nil {
 		model = m.mainModel()
 	}
-	runCtx, cancel := context.WithTimeout(ctx, m.Timeout)
+	timeout := m.Timeout
+	if cfg.TimeoutSec > 0 {
+		timeout = time.Duration(cfg.TimeoutSec) * time.Second
+	}
+	runCtx, cancel := context.WithTimeout(ctx, timeout)
 	defer cancel()
 	r := &Runner{
-		Client:     m.client,
-		Model:      model,
-		Tools:      m.SubTools(),
-		System:     subSystemPrompt(cfg.AllowWeb),
-		MaxSteps:   m.MaxSteps,
-		OnActivity: progress,
-		OnUsage:    usageSink(ctx),
+		Client:        m.client,
+		Model:         model,
+		Thinking:      cfg.Thinking,
+		Tools:         m.sub,
+		MaxToolRounds: cfg.MaxToolRounds,
+		System:        subSystemPrompt(cfg.AllowWeb),
+		OnActivity:    progress,
+		OnUsage:       usageSink(ctx),
+	}
+	if cfg.AllowWeb {
+		r.Tools = m.subWeb
 	}
 	out, err := r.Run(runCtx, "任务："+in.Description+"\n\n"+in.Prompt)
 	footer := fmt.Sprintf("\n\n—— 子代理 · %d 轮工具 · 用量 ↑%d ↓%d tokens", out.Steps, out.Usage.PromptTokens, out.Usage.CompletionTokens)
@@ -222,7 +241,7 @@ func (m *Manager) run(ctx context.Context, args json.RawMessage) tools.Result {
 		case ctx.Err() != nil:
 			msg = "子代理已取消"
 		case errors.Is(err, context.DeadlineExceeded):
-			msg = fmt.Sprintf("子代理超时（%s）", m.Timeout)
+			msg = fmt.Sprintf("子代理超时（%s）", timeout)
 		}
 		return tools.Result{Content: msg + footer, IsError: true}
 	}

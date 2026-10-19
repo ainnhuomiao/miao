@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -19,7 +20,7 @@ func tempXDG(t *testing.T) string {
 	t.Helper()
 	dir := t.TempDir()
 	t.Setenv("MIAO_HOME", dir)
-	return filepath.Join(dir, "miao", "config.json")
+	return filepath.Join(dir, "config.json")
 }
 
 func TestConfigLoadSavePreservesKeysAndClamps(t *testing.T) {
@@ -29,7 +30,7 @@ func TestConfigLoadSavePreservesKeysAndClamps(t *testing.T) {
 	}
 	_ = os.MkdirAll(filepath.Dir(p), 0o755)
 	_ = os.WriteFile(p, []byte(`{"theme":"mocha","other":{"x":1}}`), 0o644)
-	if err := SaveConfig(Config{Enabled: true, Max: 99, Model: "m2"}); err != nil {
+	if err := SaveConfig(Config{Enabled: true, Max: 99, Model: "m2", Thinking: " HIGH "}); err != nil {
 		t.Fatal(err)
 	}
 	var all map[string]any
@@ -39,11 +40,40 @@ func TestConfigLoadSavePreservesKeysAndClamps(t *testing.T) {
 		t.Fatalf("其它键应保留：%s", data)
 	}
 	c, err := LoadConfig()
-	if err != nil || !c.Enabled || c.Max != 8 || c.Model != "m2" {
+	if err != nil || !c.Enabled || c.Max != 8 || c.Model != "m2" || c.Thinking != "high" {
 		t.Fatalf("应夹到 8：%+v %v", c, err)
 	}
 	if (Config{Max: -5}).Normalize().Max != 1 {
 		t.Fatal("负数应夹到 1")
+	}
+}
+
+func TestTaskUsesIndependentThinkingWithoutChangingMain(t *testing.T) {
+	var got string
+	fc := &fakeClient{step: func(n int, req llm.ChatRequest) (llm.ChatResult, error) {
+		got = req.Thinking
+		return llm.ChatResult{Content: "done"}, nil
+	}}
+	c := llm.NewSwappable(fc)
+	if err := c.SetThinking("high"); err != nil {
+		t.Fatal(err)
+	}
+	m, reg := newMgr(t, c, Config{Enabled: true})
+	for _, tt := range []struct{ configured, want string }{{"low", "low"}, {"auto", "auto"}, {"", "high"}} {
+		cfg := m.Config()
+		cfg.Thinking = tt.configured
+		if err := m.SetConfig(cfg); err != nil {
+			t.Fatal(err)
+		}
+		res := reg.Call(context.Background(), ToolName, `{"description":"x","prompt":"y"}`)
+		if res.IsError || got != tt.want || c.Thinking() != "high" {
+			t.Fatalf("configured=%q request=%q main=%q result=%+v", tt.configured, got, c.Thinking(), res)
+		}
+	}
+	cfg := m.Config()
+	cfg.Thinking = "typo"
+	if err := m.SetConfig(cfg); err == nil || m.Config().Thinking != "" {
+		t.Fatal("未知强度应拒绝且不修改配置")
 	}
 }
 
@@ -174,15 +204,27 @@ func TestTaskRunsGrepThenAnswers(t *testing.T) {
 	}
 }
 
-func TestStepLimit(t *testing.T) {
+func TestTaskRunsBeyondFormerStepLimit(t *testing.T) {
+	const rounds = 64
 	fc := &fakeClient{step: func(n int, req llm.ChatRequest) (llm.ChatResult, error) {
-		return llm.ChatResult{ToolCalls: []llm.ToolCall{grepCall("g")}}, nil
+		if n > 0 {
+			last := req.Messages[len(req.Messages)-1]
+			if last.Role != llm.RoleTool || !strings.Contains(last.Content, "a.go") {
+				t.Errorf("第 %d 轮应带有工具结果：%+v", n, last)
+			}
+		}
+		if n < rounds {
+			return llm.ChatResult{ToolCalls: []llm.ToolCall{grepCall("g" + strconv.Itoa(n))}}, nil
+		}
+		return llm.ChatResult{Content: "调研完成"}, nil
 	}}
 	m, reg := newMgr(t, fc, Config{Enabled: true})
-	m.MaxSteps = 3
 	res := reg.Call(context.Background(), ToolName, `{"description":"x","prompt":"y"}`)
-	if !res.IsError || !strings.Contains(res.Content, "3 轮") || fc.n != 4 {
-		t.Fatalf("应在 3 轮后停止：%+v n=%d", res, fc.n)
+	if res.IsError || !strings.HasPrefix(res.Content, "调研完成") || !strings.Contains(res.Content, "64 轮工具") || fc.n != rounds+1 {
+		t.Fatalf("应超过原先的 30 轮上限并正常完成：%+v n=%d", res, fc.n)
+	}
+	if m.Running() != 0 {
+		t.Fatal("完成后应释放并发名额")
 	}
 }
 
@@ -203,7 +245,6 @@ func TestCancellationAndTimeout(t *testing.T) {
 
 	m2, reg2 := newMgr(t, fc, Config{Enabled: true})
 	m2.Timeout = 50 * time.Millisecond
-	m2.MaxSteps = 1000
 	res = reg2.Call(context.Background(), ToolName, `{"description":"x","prompt":"y"}`)
 	if !res.IsError || !strings.Contains(res.Content, "超时") {
 		t.Fatalf("应超时：%+v", res)

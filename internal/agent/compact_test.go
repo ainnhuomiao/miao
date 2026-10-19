@@ -30,7 +30,7 @@ func TestCompactKeepsToolPairsAndRecentTurns(t *testing.T) {
 		{Role: llm.RoleUser, Content: "第二轮"},
 		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "2"}}},
 		{Role: llm.RoleTool, ToolCallID: "2", Content: "结果2"},
-		{Role: llm.RoleAssistant, Content: "答2"},
+		{Role: llm.RoleAssistant, Content: "答2", AnthropicContent: []byte(`[{"type":"thinking","thinking":"plan","signature":"sig"}]`)},
 	})
 	res, err := a.Compact(context.Background(), 1, 0)
 	if err != nil {
@@ -39,6 +39,11 @@ func TestCompactKeepsToolPairsAndRecentTurns(t *testing.T) {
 	h := a.History()
 	if !strings.HasPrefix(h[0].Content, SummaryPrefix) || h[2].Content != "第二轮" || len(h) != 6 {
 		t.Fatalf("压缩后历史不对：%+v", h)
+	}
+	for _, msg := range h {
+		if len(msg.AnthropicContent) > 0 {
+			t.Fatal("compaction must invalidate thinking bound to the old prefix")
+		}
 	}
 	if res.Dropped != 4 || !strings.Contains(fc.got.Messages[1].Content, "第一轮") {
 		t.Fatalf("应把第一轮交给模型总结：%+v", res)

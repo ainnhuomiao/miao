@@ -431,5 +431,6 @@ func (m *Model) applyLogin(c config.Credentials, savedMsg string) {
 	if model != "" {
 		m.modelName = model
 	}
+	m.invalidateThinking()
 	m.notice("已切换到 " + p.Name + "（模型 " + m.modelName + "）。" + savedMsg)
 }

@@ -89,6 +89,9 @@ func clipImageCmd() tea.Cmd {
 func (m *Model) handleImageKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 	switch msg.String() {
 	case "ctrl+v":
+		if !m.ag.ImagesEnabled() {
+			return false, nil // 保留文本粘贴，不启动图片剪贴板程序
+		}
 		return true, clipImageCmd()
 	case "backspace":
 		if m.input.Value() == "" && len(m.img.pending) > 0 {
@@ -101,7 +104,7 @@ func (m *Model) handleImageKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 
 // onClipImage：有图片就加入待发列表；否则把 Ctrl+V 交给输入框按文本粘贴。
 func (m *Model) onClipImage(msg clipImageMsg) tea.Cmd {
-	if len(msg.data) == 0 {
+	if len(msg.data) == 0 || !m.ag.ImagesEnabled() {
 		if msg.noTools {
 			m.notice(clipNoToolsHint)
 		}
@@ -116,6 +119,10 @@ func (m *Model) onClipImage(msg clipImageMsg) tea.Cmd {
 }
 
 func (m *Model) addPendingImage(name string, data []byte) bool {
+	if !m.ag.ImagesEnabled() {
+		m.notice("图片输入已关闭。")
+		return false
+	}
 	if len(m.img.pending) >= llm.MaxImages {
 		m.notice(fmt.Sprintf("一条消息最多 %d 张图片，已忽略", llm.MaxImages))
 		return false
@@ -147,6 +154,10 @@ func (m *Model) imageChipsView(w int) (string, bool) {
 func (m *Model) collectImages(prompt string) {
 	imgs := m.img.pending
 	m.img.pending = nil
+	if !m.ag.ImagesEnabled() {
+		m.ag.AttachImages(nil)
+		return
+	}
 	mention, warns := m.ag.MentionedImages(prompt)
 	for _, w := range warns {
 		m.notice(w)

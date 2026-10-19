@@ -25,6 +25,9 @@ func (m *Model) builtinCommands() map[string]bool {
 }
 
 func (m *Model) userCommands() []usercmd.Command {
+	if m.options.DisableCustomCommands {
+		return nil
+	}
 	if m.userCmds.cmds != nil && time.Since(m.userCmds.loaded) < 3*time.Second {
 		return m.userCmds.cmds
 	}

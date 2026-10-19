@@ -32,6 +32,30 @@ func TestNeedAutoCompact(t *testing.T) {
 	}
 }
 
+func TestConfigurableAutoCompactThreshold(t *testing.T) {
+	t.Setenv("MIAO_CONTEXT_WINDOW", "100000")
+	m := newTestModel(t, 100, 30, "ok")
+	m.options.AutoCompactPercent = 65
+	m.ctxTokens = 64999
+	if m.needAutoCompact() {
+		t.Fatal("低于配置阈值不应自动压缩")
+	}
+	m.ctxTokens = 65000
+	if !m.needAutoCompact() {
+		t.Fatal("达到配置阈值应自动压缩")
+	}
+	m.options.AutoCompactPercent = 0
+	m.ctxTokens = 100000
+	if m.needAutoCompact() {
+		t.Fatal("阈值为 0 时关闭自动压缩")
+	}
+	m.options.AutoCompactPercent = 65
+	m.handleCompactDone(compactDoneMsg{auto: true, res: agent.CompactResult{Before: 65000, After: 8000, Summarized: true}})
+	if last := m.messages[len(m.messages)-1].content; !strings.Contains(last, "上下文已用 65%，自动压缩") {
+		t.Fatalf("提示应显示真实阈值：%q", last)
+	}
+}
+
 func TestThinkingShowsCompacting(t *testing.T) {
 	m := newTestModel(t, 100, 30, "ok")
 	m.streaming, m.compacting = true, true

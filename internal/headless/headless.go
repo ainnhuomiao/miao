@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
+	"github.com/ainnhuomiao/miao/internal/config"
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
@@ -28,15 +29,19 @@ type Options struct {
 
 // ParseMode 把 -mode 参数转成权限模式。
 func ParseMode(s string) (agent.PermissionMode, error) {
-	switch strings.ToLower(strings.TrimSpace(s)) {
-	case "", "ask", "default":
+	mode, err := config.NormalizeMode(s)
+	if err != nil {
+		return agent.ModeAsk, err
+	}
+	switch mode {
+	case "ask":
 		return agent.ModeAsk, nil
-	case "edits", "accept-edits", "acceptedits":
+	case "edits":
 		return agent.ModeAcceptEdits, nil
-	case "plan", "readonly", "read-only":
+	case "plan":
 		return agent.ModePlan, nil
 	}
-	return agent.ModeAsk, fmt.Errorf("未知的 -mode %q（可选 ask / edits / plan）", s)
+	return agent.ModeAsk, nil
 }
 
 // ParseFormat 把 -output-format 转成内部格式名。

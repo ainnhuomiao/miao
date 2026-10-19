@@ -106,7 +106,11 @@ func (c *AnthropicClient) StreamChat(ctx context.Context, req ChatRequest, onDel
 }
 
 func (c *AnthropicClient) streamOnce(ctx context.Context, req ChatRequest, onDelta DeltaHandler) (ChatResult, error) {
-	payload, err := json.Marshal(c.buildRequest(req))
+	body := c.buildRequest(req)
+	if err := configureAnthropicThinkingMode(&body, req.Thinking, req.MaxTokens > 0, req.thinkingMode, req.thinkingOffType); err != nil {
+		return ChatResult{}, err
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return ChatResult{}, fmt.Errorf("编码请求失败: %w", err)
 	}
@@ -151,6 +155,7 @@ func (c *AnthropicClient) streamOnce(ctx context.Context, req ChatRequest, onDel
 		cur       *ToolCall
 		finish    string
 		usage     *Usage
+		blocks    anthropicBlocks
 	)
 	flushTool := func() {
 		if cur != nil {
@@ -171,6 +176,7 @@ func (c *AnthropicClient) streamOnce(ctx context.Context, req ChatRequest, onDel
 		if err := json.Unmarshal([]byte(data), &ev); err != nil {
 			continue
 		}
+		blocks.add(ev, []byte(data))
 		switch ev.Type {
 		case "content_block_start":
 			if ev.ContentBlock != nil && ev.ContentBlock.Type == "tool_use" {
@@ -239,11 +245,12 @@ func (c *AnthropicClient) streamOnce(ctx context.Context, req ChatRequest, onDel
 		return ChatResult{}, fmt.Errorf("读取流式响应失败: %w", err)
 	}
 	return ChatResult{
-		Content:      content.String(),
-		Reasoning:    reasoning.String(),
-		ToolCalls:    tools,
-		FinishReason: finish,
-		Usage:        usage,
+		Content:          content.String(),
+		Reasoning:        reasoning.String(),
+		ToolCalls:        tools,
+		FinishReason:     finish,
+		Usage:            usage,
+		AnthropicContent: blocks.content(),
 	}, nil
 }
 
@@ -347,6 +354,16 @@ func userContent(m Message) []anthContent {
 }
 
 func assistantContent(m Message) []anthContent {
+	if len(m.AnthropicContent) > 0 {
+		var raw []json.RawMessage
+		if json.Unmarshal(m.AnthropicContent, &raw) == nil && len(raw) > 0 {
+			blocks := make([]anthContent, len(raw))
+			for i, b := range raw {
+				blocks[i].Raw = b
+			}
+			return blocks
+		}
+	}
 	var blocks []anthContent
 	if m.Content != "" {
 		blocks = append(blocks, anthContent{Type: "text", Text: m.Content})
@@ -370,12 +387,14 @@ func assistantContent(m Message) []anthContent {
 }
 
 type anthRequest struct {
-	Model     string            `json:"model"`
-	MaxTokens int               `json:"max_tokens"`
-	Stream    bool              `json:"stream"`
-	System    []anthSystemBlock `json:"system,omitempty"`
-	Messages  []anthMessage     `json:"messages"`
-	Tools     []anthTool        `json:"tools,omitempty"`
+	Thinking     *thinkingConfig   `json:"thinking,omitempty"`
+	OutputConfig *outputConfig     `json:"output_config,omitempty"`
+	Model        string            `json:"model"`
+	MaxTokens    int               `json:"max_tokens"`
+	Stream       bool              `json:"stream"`
+	System       []anthSystemBlock `json:"system,omitempty"`
+	Messages     []anthMessage     `json:"messages"`
+	Tools        []anthTool        `json:"tools,omitempty"`
 }
 
 type anthSystemBlock struct {
@@ -394,6 +413,7 @@ type anthMessage struct {
 }
 
 type anthContent struct {
+	Raw          json.RawMessage   `json:"-"`
 	Type         string            `json:"type"`
 	Text         string            `json:"text,omitempty"`
 	ID           string            `json:"id,omitempty"`

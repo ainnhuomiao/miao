@@ -170,7 +170,7 @@ func TestWorkspaceIsHomeNotProject(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ProjectPath != "" || cfg.MaxToolRounds == 3 {
+	if cfg.ProjectPath != "" || cfg.ProjectTrusted || cfg.MaxToolRounds != 3 || cfg.Model != "global-file" {
 		t.Fatalf("不应把 ~/.miao 当项目目录：%+v", cfg)
 	}
 	if cfg.Model == "from-home-env" {
@@ -199,7 +199,7 @@ func TestMiaoHomeInsideWorkspace(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	if cfg.ProjectPath != "" || cfg.MaxToolRounds == 3 {
+	if cfg.ProjectPath != "" || cfg.ProjectTrusted || cfg.MaxToolRounds != 3 {
 		t.Fatalf("MIAO_HOME 不能同时当项目目录：%+v", cfg)
 	}
 }

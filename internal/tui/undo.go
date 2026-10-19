@@ -17,6 +17,10 @@ func (m *Model) syncSnapshotDir() {
 
 // undo 撤销最近一次文件修改，并插一条灰字提示。
 func (m *Model) undo() {
+	if m.options.DisableSnapshots {
+		m.notice("文件撤销快照已关闭。可在配置中设置 snapshots_enabled 为 true 后重启启用。")
+		return
+	}
 	if m.streaming {
 		m.notice("正在生成，稍后再撤销。")
 		return

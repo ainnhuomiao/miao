@@ -30,12 +30,13 @@ const (
 
 const helpText = `命令:
   /help       显示帮助
+  /settings   调整功能开关（保存后重启生效）
   /new        新建会话
   /sessions   切换会话（↑↓ 选择 · Enter 切换 · 打字筛选 · Ctrl+D 删除）
   /load <id>  按 id 加载会话
   /clear      清空对话并换新会话
   /undo       撤销最近一次文件修改（可连续撤销）
-  /compact    压缩上下文（用量到 80% 时自动触发）
+  /compact    压缩上下文（自动压缩阈值可配置）
   /apply      确认规划方案，切到自动同意编辑并执行
   /cost       本会话估算花费
   /init       扫描项目生成 AGENTS.md
@@ -49,10 +50,11 @@ const helpText = `命令:
   Esc Esc     回到之前的某条消息重新编辑（文件改动一起还原）
   /model      切换模型（/model <名字>）
   /theme      切换主题（/theme <名字>，↑↓ 实时预览）
-  /subagents  子代理设置（开关、并发上限、模型）
+  /subagents  子代理设置（模型、思考强度、并发与联网）
   /mcp        查看 MCP 服务器状态与工具数
   /hooks      查看已配置的 hook（工具调用前后、回合结束自动执行的命令）
   自定义命令  .miao/commands/*.md 或 ~/.miao/commands/*.md，模板里用 $ARGS 接参数
+  /thinking   查询/切换思考强度（/thinking refresh 重新查询）
   /reasoning  展开或收起思考过程
   /exit       退出`
 
@@ -64,6 +66,9 @@ func (m *Model) view() string {
 	if m.width < 36 || m.height < 12 {
 		return lipgloss.Place(m.width, m.height, lipgloss.Center, lipgloss.Center,
 			mutedStyle.Render("终端窗口太小\n请调整到至少 36×12"))
+	}
+	if m.help.open {
+		return m.helpView()
 	}
 
 	main := m.viewportView()
@@ -278,7 +283,7 @@ func (m *Model) statusDot() string {
 
 // barView 拼出极简底栏：不铺底色、没有色块，只有状态点带颜色，其余灰字，宽度对齐对话列。
 //
-//	~/miao             ● 就绪 · deepseek-flash · ↑703 ↓78 · 缓存72% · ? 帮助
+//	~/miao             ● 就绪 · deepseek-flash · 思考 max · ↑703 ↓78 · 缓存72% · ? 帮助
 func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	w := m.columnWidth()
 	sep := mutedStyle.Render(" · ")
@@ -288,6 +293,7 @@ func (m *Model) barView(showPath, showUsage bool) (string, bool) {
 	}
 	parts := []string{m.statusDot() + " " + mutedStyle.Render(m.ag.Mode().String())}
 	parts = append(parts, lipgloss.NewStyle().Foreground(accentColor).Render(m.modelName))
+	parts = append(parts, mutedStyle.Render("思考 "+m.ag.Thinking()))
 	if n := m.ag.RunningJobs(); n > 0 {
 		parts = append(parts, mutedStyle.Render(fmt.Sprintf("后台 %d", n)))
 	}
@@ -313,7 +319,7 @@ func (m *Model) hintView() string {
 			return out
 		}
 	}
-	return truncateWidth(m.statusDot()+" "+m.modelName, m.width)
+	return truncateWidth(m.statusDot()+" "+m.modelName+" · "+m.ag.Thinking(), m.width)
 }
 
 // usageLabel 渲染用量段：↑输入 ↓输出，接口返回缓存数据时再加 green 色缓存率。

@@ -88,14 +88,17 @@ type approvalState struct {
 type Model struct {
 	side          sidebarState // 左侧会话侧栏
 	keysCard      bool         // ? 快捷键速查卡，见 keys.go
-	picker        pickerState  // /sessions 会话选择列表
-	exportConfirm string       // /export 覆盖已有文件前待确认的路径
-	git           gitState     // /commit 进行中
-	rewind        rewindState  // Esc Esc 回退
-	img           imageState   // Ctrl+V / @ 图片，见 images.go
+	help          helpState    // /help 独立帮助页，Esc 关闭
+	settings      settingsState
+	picker        pickerState // /sessions 会话选择列表
+	exportConfirm string      // /export 覆盖已有文件前待确认的路径
+	git           gitState    // /commit 进行中
+	rewind        rewindState // Esc Esc 回退
+	img           imageState  // Ctrl+V / @ 图片，见 images.go
 	sub           subagentState
 	ag            *agent.Agent
 	modelName     string
+	options       Options
 
 	width  int
 	height int
@@ -124,13 +127,14 @@ type Model struct {
 	// 左侧会话侧栏：一期接口预留，按 [ ] 暂为 noop
 	sidebarReserved bool
 
-	approval  *approvalState
-	login     *wizard      // /login 打开的向导；非 nil 时占满界面并吃键
-	mention   mentionState // @ 引用文件补全缓存
-	userCmds  userCmdState // 自定义斜杠命令缓存
-	themeOrig string       // /theme 预览前的主题，空表示没在预览
-	palette   paletteState
-	models    modelListState
+	approval       *approvalState
+	login          *wizard      // /login 打开的向导；非 nil 时占满界面并吃键
+	mention        mentionState // @ 引用文件补全缓存
+	userCmds       userCmdState // 自定义斜杠命令缓存
+	themeOrig      string       // /theme 预览前的主题，空表示没在预览
+	palette        paletteState
+	models         modelListState
+	thinkingLevels thinkingListState
 
 	todoPanel bool // Ctrl+T 展开任务清单
 
@@ -166,7 +170,7 @@ func (m *Model) scheduleRefresh() tea.Cmd {
 }
 
 // New 创建 TUI 模型。
-func New(ag *agent.Agent, modelName string) *Model {
+func New(ag *agent.Agent, modelName string, options ...Options) *Model {
 	ta := textarea.New()
 	ta.Placeholder = "输入消息，Enter 发送…"
 	ta.Prompt = "› "
@@ -205,6 +209,7 @@ func New(ag *agent.Agent, modelName string) *Model {
 	m := &Model{
 		ag:             ag,
 		modelName:      modelName,
+		options:        Options{AutoCompactPercent: autoCompactPct, CompactKeepTurns: compactKeepTurns},
 		input:          ta,
 		spinner:        sp,
 		viewport:       vp,
@@ -214,6 +219,15 @@ func New(ag *agent.Agent, modelName string) *Model {
 			content: "已就绪。输入消息开始对话，输入 /help 查看命令。",
 			done:    true,
 		}},
+	}
+	if len(options) > 0 {
+		m.options = options[0]
+		if m.options.AutoCompactPercent < 0 || m.options.AutoCompactPercent > 100 {
+			m.options.AutoCompactPercent = autoCompactPct
+		}
+		if m.options.CompactKeepTurns < 1 {
+			m.options.CompactKeepTurns = compactKeepTurns
+		}
 	}
 	if ag.AgentsMDLoaded() {
 		m.messages = append(m.messages, chatMessage{role: roleNotice, content: "已加载 AGENTS.md", done: true})
@@ -238,7 +252,7 @@ func SetResumeOnStart(v bool) { resumeOnStart = v }
 
 func (m *Model) resumeLastSession() {
 	if m.store == nil {
-		m.notice("会话存储不可用，无法恢复。")
+		m.notice(m.sessionStorageNotice())
 		return
 	}
 	list, err := m.store.List()
@@ -259,6 +273,10 @@ func SetStartupNotices(notes []string) { startupNotices = notes }
 // initSessionStore 打开默认会话目录并创建空会话；失败时静默降级（不持久化）。
 // 默认不加载最近会话；-c/--resume 时恢复最近一次。
 func (m *Model) initSessionStore() {
+	if m.options.DisableSessionStorage {
+		m.syncSnapshotDir()
+		return
+	}
 	dir, err := session.DefaultDir()
 	if err != nil {
 		return
@@ -287,7 +305,8 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		m.width, m.height = msg.Width, msg.Height
 		m.ready = true
 		m.layout()
-		m.refreshViewport(true)
+		m.refreshViewport(!m.help.open)
+		m.layoutHelp()
 		m.refreshDrawer()
 		return m, nil
 
@@ -296,8 +315,15 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case clipImageMsg:
 		return m, m.onClipImage(msg)
+	case tea.PasteMsg:
+		if m.help.open {
+			return m, nil
+		}
 
 	case tea.KeyPressMsg:
+		if m.help.open {
+			return m, m.helpKey(msg)
+		}
 		if m.keysCard { // 速查卡打开时任意键关闭
 			m.keysCard = false
 			m.layout()
@@ -321,6 +347,11 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m.handleKey(msg)
 
 	case tea.MouseMsg:
+		if m.help.open {
+			var cmd tea.Cmd
+			m.help.viewport, cmd = m.help.viewport.Update(msg)
+			return m, cmd
+		}
 		if m.drawerOpen && m.drawerFocus {
 			var cmd tea.Cmd
 			m.drawerViewport, cmd = m.drawerViewport.Update(msg)
@@ -350,7 +381,7 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		return m, nil
 
 	case approvalRequestMsg:
-		ringBell()
+		m.ringBell()
 		m.approval = &approvalState{
 			toolName: msg.toolName,
 			display:  msg.display,
@@ -362,6 +393,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	case modelsMsg:
 		m.handleModelsMsg(msg)
+		return m, nil
+	case thinkingCapabilitiesMsg:
+		m.handleThinkingCapabilities(msg)
+		return m, nil
+	case subagentThinkingMsg:
+		m.handleSubagentThinking(msg)
 		return m, nil
 
 	case compactDoneMsg:
@@ -384,6 +421,12 @@ func (m *Model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.input, cmd = m.input.Update(msg)
 	m.fitInput()
 	m.syncPalette()
+	if _, ok := m.thinkingMode(); ok {
+		cmd = tea.Batch(cmd, m.fetchThinkingCmd())
+	}
+	if m.subagentsMode() {
+		cmd = tea.Batch(cmd, m.subagentsFetchCmd())
+	}
 	return m, cmd
 }
 
@@ -542,6 +585,12 @@ func (m *Model) handleKey(msg tea.KeyPressMsg) (tea.Model, tea.Cmd) {
 	m.input, cmd = m.input.Update(msg)
 	m.fitInput()
 	m.syncPalette()
+	if _, ok := m.thinkingMode(); ok {
+		cmd = tea.Batch(cmd, m.fetchThinkingCmd())
+	}
+	if m.subagentsMode() {
+		cmd = tea.Batch(cmd, m.subagentsFetchCmd())
+	}
 	return m, cmd
 }
 
@@ -658,7 +707,7 @@ func (m *Model) handleStreamEvent(msg streamEventMsg) (tea.Model, tea.Cmd) {
 		m.refreshViewport(false)
 		m.refreshDrawer()
 		if msg.err == nil {
-			ringBell()
+			m.ringBell()
 			if m.needAutoCompact() {
 				return m, m.startCompact(true)
 			}
@@ -812,6 +861,16 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		}
 		m.switchModel(fields[1])
 
+	case "/thinking":
+		if len(fields) == 2 && fields[1] == "refresh" {
+			m.invalidateThinking()
+			return m.fetchThinkingCmd()
+		}
+		m.changeThinking(fields[1:])
+		if len(fields) == 1 {
+			return m.fetchThinkingCmd()
+		}
+
 	case "/undo":
 		m.undo()
 
@@ -828,10 +887,9 @@ func (m *Model) runCommand(text string) tea.Cmd {
 		m.forkSession()
 
 	case "/help":
-		m.messages = append(m.messages, chatMessage{
-			role: roleNotice, content: helpText + "\n\n" + keymapText(), done: true,
-		})
-		m.refreshViewport(true)
+		m.openHelp()
+	case "/settings":
+		return m.runSettings(fields[1:])
 
 	case "/theme":
 		if len(fields) < 2 {
@@ -903,7 +961,7 @@ func (m *Model) notice(content string) {
 
 // saveCurrentSession 把 Agent 历史写入当前会话文件；空会话不落盘。
 func (m *Model) saveCurrentSession() {
-	if m.store == nil || m.sess == nil {
+	if m.options.DisableSessionStorage || m.store == nil || m.sess == nil {
 		return
 	}
 	m.sess.Messages = m.ag.History()
@@ -930,10 +988,10 @@ func (m *Model) beginNewSession(notice string) {
 	m.costUSD = 0
 	if m.store != nil {
 		m.sess = m.store.New(m.modelName, m.ag.Workspace())
-		m.syncSnapshotDir()
 	} else {
 		m.sess = nil
 	}
+	m.syncSnapshotDir()
 	m.messages = []chatMessage{{role: roleNotice, content: notice, done: true}}
 	m.refreshViewport(true)
 	m.refreshDrawer()
@@ -942,7 +1000,7 @@ func (m *Model) beginNewSession(notice string) {
 
 func (m *Model) loadSession(id string) {
 	if m.store == nil {
-		m.notice("会话存储不可用。")
+		m.notice(m.sessionStorageNotice())
 		return
 	}
 	sess, err := m.store.Load(id)

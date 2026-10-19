@@ -1,8 +1,10 @@
 package session
 
 import (
+	"encoding/json"
 	"errors"
 	"os"
+	"reflect"
 	"testing"
 	"time"
 
@@ -22,7 +24,7 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	sess := s.New("deepseek-flash", "/ws")
 	sess.Messages = []llm.Message{
 		{Role: llm.RoleUser, Content: "帮我看看这个仓库\n第二行"},
-		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "c1"}}},
+		{Role: llm.RoleAssistant, ToolCalls: []llm.ToolCall{{ID: "c1"}}, AnthropicContent: []byte(`[{"type":"thinking","thinking":"plan","signature":"sig"}]`)},
 		{Role: llm.RoleTool, ToolCallID: "c1", Content: "ok"},
 	}
 	if err := s.Save(sess); err != nil {
@@ -34,6 +36,10 @@ func TestSaveLoadRoundTrip(t *testing.T) {
 	}
 	if got.Title != "帮我看看这个仓库" || len(got.Messages) != 3 || got.Messages[2].ToolCallID != "c1" {
 		t.Fatalf("round trip mismatch: %+v", got)
+	}
+	var restored, original any
+	if json.Unmarshal(got.Messages[1].AnthropicContent, &restored) != nil || json.Unmarshal(sess.Messages[1].AnthropicContent, &original) != nil || !reflect.DeepEqual(restored, original) {
+		t.Fatal("session lost signed thinking content")
 	}
 	info, _ := os.Stat(s.path(sess.ID))
 	if info.Mode().Perm() != 0o600 {

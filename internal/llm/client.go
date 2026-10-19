@@ -44,6 +44,8 @@ type Message struct {
 	ReasoningContent string `json:"reasoning_content,omitempty"`
 	// Images 是用户消息附带的图片；非空时 content 序列化为多模态 parts，见 image.go。
 	Images []Image `json:"-"`
+	// AnthropicContent 保留含签名的原始内容块，供工具轮次和恢复会话时回传。
+	AnthropicContent json.RawMessage `json:"anthropic_content,omitempty"`
 }
 
 // ToolDef 描述可供模型调用的工具（OpenAI tools 字段）。
@@ -79,6 +81,11 @@ type ChatRequest struct {
 	Model    string // 非空时覆盖客户端当前模型（子代理用，不改变主模型）
 	// MaxTokens 大于 0 时限制输出 token 数（连接测试只要 1 个）；0 用默认值。
 	MaxTokens int
+	// Thinking 为空或 auto 时使用服务端默认行为。
+	Thinking string
+	// 从模型能力元数据选择协议模式，不通过模型名猜测。
+	thinkingMode    string
+	thinkingOffType string
 }
 
 // ChatResult 是一次流式请求聚合后的助手回合。
@@ -88,7 +95,8 @@ type ChatResult struct {
 	ToolCalls    []ToolCall
 	FinishReason string
 	// Usage 是服务端在流末尾返回的用量；服务端不支持时为 nil。
-	Usage *Usage
+	Usage            *Usage
+	AnthropicContent json.RawMessage
 }
 
 // Usage 是一次请求的 token 用量。

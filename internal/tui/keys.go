@@ -21,7 +21,7 @@ var keyBindings = []keyBinding{
 	{"ctrl+t", "Ctrl+T", "任务清单与子代理结果"},
 	{"ctrl+r", "Ctrl+R", "展开或收起思考过程"},
 	{"shift+tab", "Shift+Tab", "切换权限模式"},
-	{"esc", "Esc", "关闭菜单 · 取消审批 · 取消生成"},
+	{"esc", "Esc", "关闭帮助/菜单 · 取消审批 · 取消生成"},
 	{"esc", "Esc Esc", "回到之前的某条消息重新编辑"},
 	{"ctrl+p,ctrl+n", "Ctrl+P/N", "回退列表里上下移动（同 ↑↓）"},
 	{"ctrl+d", "Ctrl+D", "会话列表里删除会话（按两次确认）"},

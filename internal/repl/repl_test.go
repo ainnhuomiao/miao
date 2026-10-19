@@ -61,6 +61,23 @@ func TestREPLChat(t *testing.T) {
 	}
 }
 
+func TestREPLThinking(t *testing.T) {
+	r, out := newREPL("/thinking\n/thinking high\n/thinking typo\n/thinking\n/exit\n", "hi")
+	c := llm.NewSwappable(&scriptClient{})
+	r.ag = agent.New(c, "sys", nil)
+	if err := r.Run(context.Background()); err != nil {
+		t.Fatal(err)
+	}
+	for _, want := range []string{"当前思考强度：auto", "思考强度已设为 high", "未知思考强度", "当前思考强度：high"} {
+		if !strings.Contains(out.String(), want) {
+			t.Fatalf("missing %q in %s", want, out.String())
+		}
+	}
+	if len(r.ag.History()) != 0 {
+		t.Fatal("thinking commands must not enter the conversation history")
+	}
+}
+
 func TestSummarizeAndTruncate(t *testing.T) {
 	if got := summarize("a\nb", 10); got != "a b" {
 		t.Fatalf("%q", got)

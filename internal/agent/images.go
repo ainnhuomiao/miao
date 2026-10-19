@@ -2,9 +2,28 @@ package agent
 
 import "github.com/ainnhuomiao/miao/internal/llm"
 
+// SetImagesEnabled 控制图片入口；关闭后历史图片也不会发给模型。
+func (a *Agent) SetImagesEnabled(enabled bool) {
+	a.mu.Lock()
+	a.imagesDisabled = !enabled
+	if !enabled {
+		a.pendingImages = nil
+	}
+	a.mu.Unlock()
+}
+
+func (a *Agent) ImagesEnabled() bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return !a.imagesDisabled
+}
+
 // AttachImages 设置下一次 Send 的用户消息要附带的图片（发送后清空）。
 func (a *Agent) AttachImages(imgs []llm.Image) {
 	a.mu.Lock()
+	if a.imagesDisabled {
+		imgs = nil
+	}
 	a.pendingImages = imgs
 	a.mu.Unlock()
 }
@@ -15,9 +34,9 @@ func (a *Agent) takeImagesLocked() []llm.Image {
 	return imgs
 }
 
-// visionFilter：当前模型已知不支持图片时，请求里去掉历史消息中的图片（切换模型后不会报错）。
+// visionFilter 在持有 a.mu 时调用；禁用图片或模型不支持时过滤历史图片。
 func (a *Agent) visionFilter(msgs []llm.Message) []llm.Message {
-	if llm.SupportsVision(a.Model()) {
+	if !a.imagesDisabled && llm.SupportsVision(a.Model()) {
 		return msgs
 	}
 	return llm.StripImages(msgs)
@@ -25,7 +44,7 @@ func (a *Agent) visionFilter(msgs []llm.Message) []llm.Message {
 
 // MentionedImages 返回用户消息里 @引用的工作区图片，见 tools.Registry.MentionedImages。
 func (a *Agent) MentionedImages(text string) ([]llm.Image, []string) {
-	if a == nil || a.tools == nil {
+	if a == nil || a.tools == nil || !a.ImagesEnabled() {
 		return nil, nil
 	}
 	return a.tools.MentionedImages(text)

@@ -2,7 +2,7 @@ package tools
 
 import "context"
 
-// Subset 返回只含指定工具的新注册表（同一工作区、无审批回调）。
+// Subset 返回只含指定且已启用工具的新注册表（同一工作区、无审批回调）。
 // 复制的工具闭包仍引用原注册表做路径约束与审批，因此应在无审批回调的注册表上调用。
 func (r *Registry) Subset(names ...string) *Registry {
 	want := make(map[string]bool, len(names))
@@ -13,7 +13,7 @@ func (r *Registry) Subset(names ...string) *Registry {
 	r.mu.RLock()
 	defer r.mu.RUnlock()
 	for _, n := range r.order {
-		if want[n] {
+		if want[n] && r.allowedLocked(n) {
 			out.order = append(out.order, n)
 			out.tools[n] = r.tools[n]
 		}

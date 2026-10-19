@@ -50,7 +50,7 @@ func TestUserCommandInPaletteAndSend(t *testing.T) {
 		t.Fatalf("发给模型的应是展开后的模板：%+v", h)
 	}
 	m.runCommand("/help")
-	if strings.Contains(m.messages[len(m.messages)-1].content, "不能覆盖内置") {
+	if !m.help.open || strings.Contains(m.View().Content, "不能覆盖内置") {
 		t.Fatal("内置命令优先")
 	}
 }

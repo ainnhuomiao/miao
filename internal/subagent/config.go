@@ -3,10 +3,12 @@ package subagent
 
 import (
 	"encoding/json"
+	"fmt"
 	"os"
-	"path/filepath"
+	"strings"
 
-	"github.com/ainnhuomiao/miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/config"
+	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
 // 并发上限的默认值与范围。
@@ -21,15 +23,26 @@ type Config struct {
 	Enabled bool   `json:"enabled"`
 	Max     int    `json:"max"`
 	Model   string `json:"model"`
+	// Thinking 为空时跟随主代理；auto 表示使用子代理模型的服务端默认。
+	Thinking string `json:"thinking,omitempty"`
 	// AllowWeb 为 true 时子代理额外获得 web_fetch（默认关闭，防止数据外传）。
 	AllowWeb bool `json:"allow_web"`
+	// 0 沿用默认的 5 分钟超时；工具轮次为 0 时不限次数。
+	TimeoutSec    int `json:"timeout_seconds,omitempty"`
+	MaxToolRounds int `json:"max_tool_rounds,omitempty"`
 }
 
 // Defaults 返回默认配置：关闭、并发 3、跟随主模型。
 func Defaults() Config { return Config{Max: DefaultMax} }
 
-// Normalize 把 Max 限制在 1..8；0 视为默认值。
+// Normalize 规范化思考强度别名，把 Max 限制在 1..8；0 视为默认值。
 func (c Config) Normalize() Config {
+	c.Thinking = strings.ToLower(strings.TrimSpace(c.Thinking))
+	if c.Thinking != "" {
+		if level, err := llm.NormalizeThinking(c.Thinking); err == nil {
+			c.Thinking = level
+		}
+	}
 	switch {
 	case c.Max == 0:
 		c.Max = DefaultMax
@@ -43,11 +56,7 @@ func (c Config) Normalize() Config {
 
 // ConfigPath 返回 ~/.miao/config.json（与 /theme 同一个文件）。
 func ConfigPath() (string, error) {
-	dir, err := appdir.ConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "config.json"), nil
+	return config.UserConfigPath()
 }
 
 // LoadConfig 读取 subagents 字段；文件或字段缺失时返回默认值。
@@ -73,30 +82,42 @@ func LoadConfig() (Config, error) {
 	if raw.Subagents != nil {
 		cfg = *raw.Subagents
 	}
-	return cfg.Normalize(), nil
+	cfg = cfg.Normalize()
+	if err := cfg.validate(); err != nil {
+		return Defaults(), err
+	}
+	return cfg, nil
+}
+
+func (c Config) validate() error {
+	if c.TimeoutSec < 0 || int64(c.TimeoutSec) > (1<<63-1)/1_000_000_000 {
+		return fmt.Errorf("subagents.timeout_seconds 必须是可表示的非负秒数")
+	}
+	if c.MaxToolRounds < 0 {
+		return fmt.Errorf("subagents.max_tool_rounds 必须是非负整数")
+	}
+	return validateThinking(c.Thinking)
+}
+
+func validateThinking(level string) error {
+	if level == "" {
+		return nil
+	}
+	_, err := llm.NormalizeThinking(level)
+	return err
 }
 
 // SaveConfig 只改 subagents 字段，保留配置文件里的其它键。
 func SaveConfig(c Config) error {
-	p, err := ConfigPath()
+	if err := c.validate(); err != nil {
+		return err
+	}
+	data, err := json.Marshal(c.Normalize())
 	if err != nil {
 		return err
 	}
-	all := map[string]any{}
-	if data, err := os.ReadFile(p); err == nil {
-		_ = json.Unmarshal(data, &all)
-	}
-	all["subagents"] = c.Normalize()
-	data, err := json.MarshalIndent(all, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return err
-	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, p)
+	return config.UpdateUserConfig(func(all map[string]json.RawMessage) error {
+		all["subagents"] = data
+		return nil
+	})
 }

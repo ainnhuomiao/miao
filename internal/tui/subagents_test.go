@@ -1,10 +1,15 @@
 package tui
 
 import (
+	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"slices"
 	"strings"
 	"testing"
 
 	tea "charm.land/bubbletea/v2"
+	"github.com/charmbracelet/x/ansi"
 
 	"github.com/ainnhuomiao/miao/internal/agent"
 	"github.com/ainnhuomiao/miao/internal/llm"
@@ -83,25 +88,37 @@ func TestSubagentUsageCounted(t *testing.T) {
 	}
 }
 
+func selectSubRow(t *testing.T, m *Model, name string) {
+	t.Helper()
+	for i, row := range m.paletteMatches() {
+		if row.name == name {
+			m.palette.sel = i
+			m.paletteScroll()
+			return
+		}
+	}
+	t.Fatalf("找不到菜单项 %q：%v", name, paletteNames(m))
+}
+
 func TestSubagentsMenuSavesConfig(t *testing.T) {
 	mgr, reg := setupSubMgr(t, subagent.Defaults())
 	m := newTestModel(t, 100, 30, "ok")
 	m.runCommand("/subagents")
-	if !m.paletteOpen() || !strings.Contains(m.paletteView(), "并发上限") {
-		t.Fatalf("应打开设置菜单：%q", m.paletteView())
+	if !m.paletteOpen() || len(m.paletteMatches()) != 5 || !strings.Contains(m.paletteView(), "思考强度") {
+		t.Fatalf("应打开紧凑的设置菜单：%q", m.paletteView())
 	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter}) // 开关
+	if strings.Contains(m.paletteView(), "deepseek-v4-pro") {
+		t.Fatal("模型候选不应出现在一级菜单")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if !mgr.Config().Enabled || !reg.Has("task") {
 		t.Fatal("Enter 应开启并注册 task")
 	}
-	if c, _ := subagent.LoadConfig(); !c.Enabled {
-		t.Fatal("应立即保存")
-	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
+	selectSubRow(t, m, subRowMax)
 	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
 	m.Update(tea.KeyPressMsg{Code: '+', Text: "+"})
 	if mgr.Config().Max != 5 || m.input.Value() != "/subagents " {
-		t.Fatalf("→/+ 应加大上限且不改输入：%d %q", mgr.Config().Max, m.input.Value())
+		t.Fatalf("并发调整不应改输入：%d %q", mgr.Config().Max, m.input.Value())
 	}
 	for i := 0; i < 10; i++ {
 		m.Update(tea.KeyPressMsg{Code: tea.KeyLeft})
@@ -109,38 +126,118 @@ func TestSubagentsMenuSavesConfig(t *testing.T) {
 	if c, _ := subagent.LoadConfig(); c.Max != 1 {
 		t.Fatalf("应夹到 1 并保存：%+v", c)
 	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyDown}) // 允许联网
-	if !strings.Contains(m.paletteView(), "允许联网") || mgr.SubTools().Has("web_fetch") {
-		t.Fatal("默认应关闭联网")
-	}
+	selectSubRow(t, m, subRowWeb)
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if c, _ := subagent.LoadConfig(); !c.AllowWeb || !mgr.SubTools().Has("web_fetch") {
-		t.Fatalf("Enter 应开启联网并保存：%+v", c)
+		t.Fatal("应开启联网并保存")
 	}
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if mgr.Config().AllowWeb || mgr.SubTools().Has("web_fetch") {
 		t.Fatal("再次 Enter 应关闭联网")
 	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyDown})
-	m.Update(tea.KeyPressMsg{Code: tea.KeyDown}) // 第一个具体模型
+
+	selectSubRow(t, m, subRowModel)
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if mgr.Config().Model != "test-model" {
-		t.Fatalf("应选择模型：%+v", mgr.Config())
+	if page, _ := m.subagentsPage(); page != "model" {
+		t.Fatal("应进入模型二级菜单")
 	}
-	m.Update(tea.KeyPressMsg{Code: tea.KeyUp})
+	selectSubRow(t, m, "test-model")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if mgr.Config().Model != "test-model" || m.input.Value() != subagentsPrefix {
+		t.Fatalf("应保存模型并返回一级菜单：%+v %q", mgr.Config(), m.input.Value())
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	selectSubRow(t, m, subRowFollow)
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
 	if mgr.Config().Model != "" {
 		t.Fatal("跟随主模型应清空 model")
 	}
-	m.palette.sel = 0
+
+	selectSubRow(t, m, subRowThinking)
 	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
-	if mgr.Config().Enabled {
-		t.Fatal("再次 Enter 应关闭")
+	if page, _ := m.subagentsPage(); page != "thinking" {
+		t.Fatal("应进入思考强度二级菜单")
 	}
-	if !reg.Has("task") {
-		t.Fatal("关闭后仍应保留 task 定义")
+	selectSubRow(t, m, "auto")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if cfg, _ := subagent.LoadConfig(); cfg.Thinking != "auto" {
+		t.Fatal("应独立保存 auto（服务端默认）")
 	}
-	if !strings.Contains(helpText, "/subagents") {
-		t.Fatal("/help 应列出 /subagents")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	selectSubRow(t, m, subRowFollowThinking)
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if mgr.Config().Thinking != "" {
+		t.Fatal("跟随主代理应清空 thinking")
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEscape})
+	if page, _ := m.subagentsPage(); page != "" || !m.paletteOpen() {
+		t.Fatal("Esc 应返回一级而不是关闭菜单")
+	}
+	selectSubRow(t, m, subRowEnabled)
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if mgr.Config().Enabled || !reg.Has("task") {
+		t.Fatal("关闭后仍保留 task 定义")
+	}
+}
+
+func TestSubagentSubmenusQuerySelectedModelWithoutChangingMain(t *testing.T) {
+	mgr, _ := setupSubMgr(t, subagent.Defaults())
+	t.Setenv("MIAO_MODELS", "main-model,child-model-mini,child-model")
+	var queried string
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		queried = r.URL.Path
+		fmt.Fprint(w, `{"id":"child-model","capabilities":{"thinking":{"supported":true,"types":{"adaptive":{"supported":true},"disabled":{"supported":false}}},"effort":{"supported":true,"low":{"supported":true},"high":{"supported":false},"max":{"supported":false}}}}`)
+	}))
+	defer srv.Close()
+	c := llm.NewSwappable(llm.NewAnthropic("test", srv.URL, "main-model"))
+	if err := c.SetThinking("high"); err != nil {
+		t.Fatal(err)
+	}
+	m := New(agent.New(c, "test", nil), "main-model")
+	m.Update(tea.WindowSizeMsg{Width: 100, Height: 30})
+	m.openSubagentsMenu()
+	selectSubRow(t, m, subRowModel)
+	m.Update(tea.KeyPressMsg{Code: tea.KeyRight})
+	typeText(m, "child-model")
+	if names := paletteNames(m); len(names) != 2 || names[0] != "child-model" {
+		t.Fatalf("模型列表应支持筛选且完整名称优先：%v", names)
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyTab})
+	if m.input.Value() != "/subagents model child-model" {
+		t.Fatalf("模型应支持 Tab 补全：%q", m.input.Value())
+	}
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if mgr.Config().Model != "child-model" {
+		t.Fatal("子代理模型未保存")
+	}
+	selectSubRow(t, m, subRowThinking)
+	_, cmd := m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	runCmd(m, cmd)
+	if queried != "/v1/models/child-model" {
+		t.Fatalf("应查询子代理所选模型：%q", queried)
+	}
+	if names := paletteNames(m); !slices.Contains(names, "low") || slices.Contains(names, "high") || slices.Contains(names, "max") {
+		t.Fatalf("应使用子代理模型自己的能力：%v", names)
+	}
+	selectSubRow(t, m, "low")
+	m.Update(tea.KeyPressMsg{Code: tea.KeyEnter})
+	if saved, err := subagent.LoadConfig(); err != nil || saved.Thinking != "low" || saved.Model != "child-model" {
+		t.Fatalf("应保存独立模型和强度：%+v %v", saved, err)
+	}
+	if c.Model() != "main-model" || c.Thinking() != "high" {
+		t.Fatal("子代理设置不应改动主代理配置")
+	}
+
+	for _, width := range []int{60, 80, 140} {
+		m.Update(tea.WindowSizeMsg{Width: width, Height: 30})
+		for _, page := range []string{"", "model", "thinking"} {
+			m.openSubagentsPage(page, "")
+			for _, line := range strings.Split(m.paletteView(), "\n") {
+				if ansi.StringWidth(line) > width {
+					t.Fatalf("%s 菜单超过终端宽度 %d：%q", page, width, line)
+				}
+			}
+		}
 	}
 }

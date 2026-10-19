@@ -25,7 +25,7 @@ type pickerState struct {
 
 func (m *Model) openSessionPicker() {
 	if m.store == nil {
-		m.notice("会话存储不可用。")
+		m.notice(m.sessionStorageNotice())
 		return
 	}
 	list, err := m.store.List()

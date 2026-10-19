@@ -29,12 +29,13 @@ const SystemPrompt = `你是 miao 的只读研究子代理，由主代理派来�
 
 // Runner 驱动一个子代理的独立循环。
 type Runner struct {
-	Client llm.Client
-	Model  string
-	Tools  *tools.Registry
+	Client        llm.Client
+	Model         string
+	Thinking      string
+	MaxToolRounds int // 0 不限制；限制工具执行轮数，允许上限后的最终回答
+	Tools         *tools.Registry
 	// System 是系统提示词；空时用 SystemPrompt。
-	System   string
-	MaxSteps int
+	System string
 	// OnActivity 报告当前动作（如「搜索 foo」）；可为 nil。
 	OnActivity func(string)
 	// OnUsage 在每次模型请求后报告本次用量；可为 nil。
@@ -48,7 +49,7 @@ type Outcome struct {
 	Usage  llm.Usage
 }
 
-// Run 以全新上下文执行 prompt，返回最终回答。
+// Run 以全新上下文执行 prompt，直到回答完成、达到可选的工具轮次上限或 ctx 结束。
 func (r *Runner) Run(ctx context.Context, prompt string) (Outcome, error) {
 	var out Outcome
 	activity := func(s string) {
@@ -66,7 +67,7 @@ func (r *Runner) Run(ctx context.Context, prompt string) (Outcome, error) {
 			return out, err
 		}
 		activity("思考中")
-		res, err := r.Client.StreamChat(ctx, llm.ChatRequest{Model: r.Model, Messages: msgs, Tools: defs}, nil)
+		res, err := r.Client.StreamChat(ctx, llm.ChatRequest{Model: r.Model, Thinking: r.Thinking, Messages: msgs, Tools: defs}, nil)
 		if err != nil {
 			return out, err
 		}
@@ -83,11 +84,11 @@ func (r *Runner) Run(ctx context.Context, prompt string) (Outcome, error) {
 			out.Answer = res.Content
 			return out, nil
 		}
-		if out.Steps >= r.MaxSteps {
-			return out, fmt.Errorf("子代理超过 %d 轮工具调用上限", r.MaxSteps)
+		if r.MaxToolRounds > 0 && out.Steps >= r.MaxToolRounds {
+			return out, fmt.Errorf("子代理工具调用超过上限 %d 轮", r.MaxToolRounds)
 		}
 		out.Steps++
-		msgs = append(msgs, llm.Message{Role: llm.RoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls})
+		msgs = append(msgs, llm.Message{Role: llm.RoleAssistant, Content: res.Content, ToolCalls: res.ToolCalls, ReasoningContent: res.Reasoning, AnthropicContent: res.AnthropicContent})
 		for _, tc := range res.ToolCalls {
 			activity(describeCall(tc.Function.Name, tc.Function.Arguments))
 			result := r.Tools.Call(ctx, tc.Function.Name, tc.Function.Arguments)

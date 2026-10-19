@@ -18,10 +18,11 @@ type snapshot struct {
 }
 
 type snapState struct {
-	mu    sync.Mutex
-	dir   string // 快照目录；为空时只存内存
-	stack []snapshot
-	mem   map[string][]byte // dir 为空时的内存快照
+	mu       sync.Mutex
+	dir      string // 快照目录；为空时只存内存
+	stack    []snapshot
+	mem      map[string][]byte // dir 为空时的内存快照
+	disabled bool
 }
 
 // 用独立表挂在 Registry 上，避免改动 Registry 结构体（并行工具会并发访问，需加锁）。
@@ -40,8 +41,25 @@ func (r *Registry) SetSnapshotDir(dir string) {
 	s.dir, s.stack, s.mem = dir, nil, map[string][]byte{}
 }
 
+// SetSnapshotsEnabled 控制文件撤销快照。关闭后释放内存栈，后续编辑不保存快照。
+func (r *Registry) SetSnapshotsEnabled(enabled bool) {
+	s := r.snaps()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	s.disabled = !enabled
+	if !enabled {
+		s.stack, s.mem = nil, map[string][]byte{}
+	}
+}
+
 // saveSnapshot 在写入 full 之前调用，记录原文件内容。
 func (r *Registry) saveSnapshot(full string) error {
+	s := r.snaps()
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.disabled {
+		return nil
+	}
 	rel, _ := filepath.Rel(r.workspace, full)
 	sn := snapshot{rel: rel}
 	data, err := os.ReadFile(full)
@@ -51,9 +69,6 @@ func (r *Registry) saveSnapshot(full string) error {
 	} else if !os.IsNotExist(err) {
 		return err
 	}
-	s := r.snaps()
-	s.mu.Lock()
-	defer s.mu.Unlock()
 	if sn.existed {
 		key := strconv.FormatInt(time.Now().UnixNano(), 36)
 		if s.dir != "" {

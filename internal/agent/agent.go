@@ -93,12 +93,14 @@ type Agent struct {
 
 	perm          permissions
 	maxToolRounds int
+	parallelTools int
 
 	hooks       *hooks.Runner  // 用户配置的 hook，可为 nil
 	rawApprover tools.Approver // 未经权限包装的审批回调（项目 hook 信任确认用）
 
-	pendingImages []llm.Image // 下一条用户消息附带的图片，见 images.go
-	fallbackModel string
+	pendingImages  []llm.Image // 下一条用户消息附带的图片，见 images.go
+	imagesDisabled bool
+	fallbackModel  string
 
 	pendingModeNote string // 模式切换说明，下次 Send 开头写入历史（新的覆盖旧的）
 	prepareToolsFn  func()
@@ -107,7 +109,7 @@ type Agent struct {
 
 // New 创建 Agent。registry 可为 nil（无工具）。
 func New(client llm.Client, system string, registry *tools.Registry) *Agent {
-	return &Agent{client: client, system: system, tools: registry, maxToolRounds: DefaultMaxToolRounds}
+	return &Agent{client: client, system: system, tools: registry, maxToolRounds: DefaultMaxToolRounds, parallelTools: maxParallelTools}
 }
 
 // SetPrepareTools 在第一次请求前调用（例如等 MCP 最多一两秒），然后冻结本会话工具列表。
@@ -156,6 +158,13 @@ func (a *Agent) SetMaxToolRounds(n int) {
 	a.mu.Unlock()
 }
 
+// SetParallelTools 设置同批只读工具的最大并发数；1 表示全部串行。
+func (a *Agent) SetParallelTools(n int) {
+	a.mu.Lock()
+	a.parallelTools = max(1, n)
+	a.mu.Unlock()
+}
+
 // Send 发送用户输入，驱动模型与工具循环。
 // 失败或取消时回滚本轮写入的历史，避免半轮对话残留。
 func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler) error {
@@ -182,6 +191,7 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 		Images:  a.takeImagesLocked(),
 	})
 	limit := a.maxToolRounds
+	parallelTools := a.parallelTools
 	if limit < 1 {
 		limit = DefaultMaxToolRounds
 	}
@@ -220,6 +230,7 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 			Content:          result.Content,
 			ToolCalls:        result.ToolCalls,
 			ReasoningContent: result.Reasoning,
+			AnthropicContent: result.AnthropicContent,
 		}
 		a.mu.Lock()
 		a.history = append(a.history, assistant)
@@ -246,7 +257,7 @@ func (a *Agent) Send(ctx context.Context, userInput string, onEvent EventHandler
 			return fmt.Errorf("模型请求工具调用，但未注册任何工具")
 		}
 
-		toolMsgs, err := runToolCalls(ctx, result.ToolCalls, a.callTool, onEvent)
+		toolMsgs, err := runToolCalls(ctx, result.ToolCalls, a.callTool, onEvent, parallelTools)
 		if err != nil {
 			rollback()
 			return err

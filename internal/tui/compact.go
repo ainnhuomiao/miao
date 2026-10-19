@@ -14,7 +14,7 @@ import (
 // compactKeepTurns 是压缩时保留原文的最近轮数。
 const compactKeepTurns = 2
 
-// autoCompactPct 是自动压缩阈值（上下文用量百分比）。
+// autoCompactPct 是默认的自动压缩阈值（上下文用量百分比）。
 const autoCompactPct = 80
 
 type compactDoneMsg struct {
@@ -23,10 +23,13 @@ type compactDoneMsg struct {
 	auto bool
 }
 
-// needAutoCompact 判断本轮结束后是否该自动压缩：窗口已知且用量 ≥ 80%。
+// needAutoCompact 判断本轮结束后是否达到配置的自动压缩阈值。
 func (m *Model) needAutoCompact() bool {
+	if m.options.AutoCompactPercent <= 0 {
+		return false
+	}
 	total := contextWindow(m.modelName)
-	return total > 0 && m.ctxTokens*100/total >= autoCompactPct
+	return total > 0 && m.ctxTokens*100/total >= m.options.AutoCompactPercent
 }
 
 // startCompact 在后台压缩上下文；工具行显示「✻ 压缩上下文…」，Esc 可取消。
@@ -43,11 +46,12 @@ func (m *Model) startCompact(auto bool) tea.Cmd {
 	skipBelow := 0
 	if auto {
 		if w := contextWindow(m.modelName); w > 0 {
-			skipBelow = w * autoCompactPct / 100
+			skipBelow = w * m.options.AutoCompactPercent / 100
 		}
 	}
+	keepTurns := m.options.CompactKeepTurns
 	run := func() tea.Msg {
-		res, err := ag.Compact(ctx, compactKeepTurns, skipBelow)
+		res, err := ag.Compact(ctx, keepTurns, skipBelow)
 		return compactDoneMsg{res: res, err: err, auto: auto}
 	}
 	return tea.Batch(run, m.spinner.Tick)
@@ -69,7 +73,7 @@ func (m *Model) handleCompactDone(msg compactDoneMsg) (tea.Model, tea.Cmd) {
 		m.ctxTokens = msg.res.After
 		prefix := "已压缩"
 		if msg.auto {
-			prefix = "上下文已用 80%，自动压缩"
+			prefix = fmt.Sprintf("上下文已用 %d%%，自动压缩", m.options.AutoCompactPercent)
 		}
 		if !msg.res.Summarized && msg.res.Trimmed > 0 {
 			m.notice(fmt.Sprintf("已折叠早期工具输出 %s → %s", formatTokens(before), formatTokens(msg.res.After)))

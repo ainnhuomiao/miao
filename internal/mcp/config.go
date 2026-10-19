@@ -16,12 +16,14 @@ import (
 
 // ServerConfig 是 mcp.json 中一个服务器的配置（兼容 Claude Desktop / Cursor 格式）。
 type ServerConfig struct {
-	Name     string            `json:"-"`
-	Command  string            `json:"command"`
-	Args     []string          `json:"args"`
-	Env      map[string]string `json:"env"`
-	URL      string            `json:"url"`
-	Disabled bool              `json:"disabled"`
+	Name              string            `json:"-"`
+	Command           string            `json:"command"`
+	Args              []string          `json:"args"`
+	Env               map[string]string `json:"env"`
+	URL               string            `json:"url"`
+	Disabled          bool              `json:"disabled"`
+	ConnectTimeoutSec int               `json:"connect_timeout_seconds,omitempty"`
+	CallTimeoutSec    int               `json:"call_timeout_seconds,omitempty"`
 }
 
 type fileConfig struct {
@@ -64,6 +66,14 @@ func ParseConfig(data []byte) ([]ServerConfig, error) {
 	out := make([]ServerConfig, 0, len(fc.MCPServers))
 	for name, sc := range fc.MCPServers {
 		sc.Name = name
+		for _, field := range []struct {
+			name  string
+			value int
+		}{{"connect_timeout_seconds", sc.ConnectTimeoutSec}, {"call_timeout_seconds", sc.CallTimeoutSec}} {
+			if field.value < 0 || int64(field.value) > (1<<63-1)/1_000_000_000 {
+				return nil, fmt.Errorf("MCP 服务器 %s 的 %s 必须是可表示的非负秒数", name, field.name)
+			}
+		}
 		out = append(out, sc)
 	}
 	sort.Slice(out, func(i, j int) bool { return out[i].Name < out[j].Name })

@@ -206,7 +206,7 @@ func (m *Model) forkSession() {
 		return
 	}
 	if m.store == nil || m.sess == nil {
-		m.notice("会话存储不可用。")
+		m.notice(m.sessionStorageNotice())
 		return
 	}
 	hist := m.ag.History()

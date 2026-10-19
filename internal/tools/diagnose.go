@@ -16,6 +16,23 @@ import (
 // goVetSkippedNotice 是未信任仓库跳过自动 go vet 时显示的灰色提示。
 const goVetSkippedNotice = "未信任的仓库：已跳过编辑后的自动 go vet（会编译仓库代码）。确认仓库可信后，在 .miao/config.json 存在的前提下输入 /trust-project 启用。"
 
+// SetDiagnosticsEnabled 控制编辑后诊断；关闭时不收集文件，也不产生跳过提示。
+func (r *Registry) SetDiagnosticsEnabled(enabled bool) {
+	r.diagMu.Lock()
+	defer r.diagMu.Unlock()
+	r.diagnosticsEnabled = &enabled
+	if !enabled {
+		r.dirty, r.diagNotice = nil, ""
+	}
+}
+
+func (r *Registry) diagnosticsEnabledLocked() bool {
+	if r.diagnosticsEnabled != nil {
+		return *r.diagnosticsEnabled
+	}
+	return strings.TrimSpace(config.Getenv("DIAGNOSE")) != "0"
+}
+
 // TakeDiagnoseNotice 取走诊断被跳过的提示（没有则返回空串）。
 func (r *Registry) TakeDiagnoseNotice() string {
 	r.diagMu.Lock()
@@ -32,6 +49,9 @@ func (r *Registry) noteEdited(rel string) {
 	}
 	r.diagMu.Lock()
 	defer r.diagMu.Unlock()
+	if !r.diagnosticsEnabledLocked() {
+		return
+	}
 	if r.dirty == nil {
 		r.dirty = map[string]struct{}{}
 	}
@@ -41,6 +61,11 @@ func (r *Registry) noteEdited(rel string) {
 // FlushDiagnose 对本轮写过的包各跑一次诊断（go vet / tsc），避免每次编辑都同步等 15 秒。
 func (r *Registry) FlushDiagnose(ctx context.Context) string {
 	r.diagMu.Lock()
+	if !r.diagnosticsEnabledLocked() {
+		r.dirty, r.diagNotice = nil, ""
+		r.diagMu.Unlock()
+		return ""
+	}
 	files := make([]string, 0, len(r.dirty))
 	for f := range r.dirty {
 		files = append(files, f)
@@ -77,7 +102,7 @@ func (r *Registry) FlushDiagnose(ctx context.Context) string {
 				continue
 			}
 			seenGo[key] = true
-			b.WriteString(diagnoseFile(ctx, r.workspace, rel))
+			b.WriteString(runDiagnoseFile(ctx, r.workspace, rel))
 		case ".ts", ".tsx", ".js", ".jsx":
 			if tsRel == "" {
 				tsRel = rel
@@ -85,7 +110,7 @@ func (r *Registry) FlushDiagnose(ctx context.Context) string {
 		}
 	}
 	if tsRel != "" {
-		b.WriteString(diagnoseFile(ctx, r.workspace, tsRel))
+		b.WriteString(runDiagnoseFile(ctx, r.workspace, tsRel))
 	}
 	return b.String()
 }
@@ -94,6 +119,10 @@ func diagnoseFile(ctx context.Context, workspace, rel string) string {
 	if strings.TrimSpace(strings.ToLower(config.Getenv("DIAGNOSE"))) == "0" {
 		return ""
 	}
+	return runDiagnoseFile(ctx, workspace, rel)
+}
+
+func runDiagnoseFile(ctx context.Context, workspace, rel string) string {
 	ext := strings.ToLower(filepath.Ext(rel))
 	var name string
 	var args []string

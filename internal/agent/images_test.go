@@ -44,3 +44,25 @@ func TestSendAttachesImagesAndFiltersBlindModel(t *testing.T) {
 		t.Fatal("附图只用一次")
 	}
 }
+
+func TestDisabledImagesFilterPendingAndRestoredHistory(t *testing.T) {
+	t.Setenv("MIAO_VISION", "1")
+	c := &captureClient{model: "gpt-4o"}
+	a := New(c, "sys", nil)
+	image := llm.Image{MIME: "image/png", Name: "private.png", Data: []byte("private")}
+	a.SetHistory([]llm.Message{{Role: llm.RoleUser, Content: "old", Images: []llm.Image{image}}})
+	a.AttachImages([]llm.Image{image})
+	a.SetImagesEnabled(false)
+	a.AttachImages([]llm.Image{image})
+	if err := a.Send(context.Background(), "new", nil); err != nil {
+		t.Fatal(err)
+	}
+	for _, msg := range c.reqs[0].Messages {
+		if len(msg.Images) != 0 {
+			t.Fatal("disabled images must never be sent, even with MIAO_VISION=1")
+		}
+	}
+	if len(a.History()[0].Images) != 1 {
+		t.Fatal("filtering must preserve original restored history")
+	}
+}

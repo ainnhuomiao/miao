@@ -22,7 +22,13 @@ func (a *Agent) Model() string {
 // 客户端不支持切换时为 noop（测试用假客户端）。
 func (a *Agent) SetModel(name string) {
 	if s, ok := a.client.(llm.ModelSwitcher); ok {
+		old := s.Model()
 		s.SetModel(name)
+		if old != name {
+			a.mu.Lock()
+			a.clearAnthropicContentLocked()
+			a.mu.Unlock()
+		}
 	}
 }
 

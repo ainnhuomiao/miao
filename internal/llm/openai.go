@@ -92,14 +92,39 @@ func (c *OpenAIClient) streamChatOnce(ctx context.Context, req ChatRequest, onDe
 	if !PassReasoningContent(model) {
 		msgs = stripReasoning(msgs)
 	}
-	payload, err := json.Marshal(chatRequest{
+	// Anthropic 专用内容只用于该协议，不能泄漏到 OpenAI 请求。
+	msgs = append([]Message(nil), msgs...)
+	for i := range msgs {
+		msgs[i].AnthropicContent = nil
+	}
+	body := chatRequest{
 		Model:         model,
 		Messages:      msgs,
 		Tools:         req.Tools,
 		Stream:        true,
 		StreamOptions: &streamOptions{IncludeUsage: true},
 		MaxTokens:     req.MaxTokens,
-	})
+	}
+	effort, err := NormalizeThinking(req.Thinking)
+	if err != nil {
+		return ChatResult{}, err
+	}
+	if effort != "auto" {
+		body.ReasoningEffort = effort
+		if strings.Contains(strings.ToLower(model), "deepseek") {
+			body.Thinking = &thinkingConfig{Type: "enabled"}
+			switch effort {
+			case "none":
+				body.Thinking.Type = "disabled"
+				body.ReasoningEffort = ""
+			case "minimal":
+				body.ReasoningEffort = "low"
+			case "medium", "xhigh":
+				body.ReasoningEffort = "high"
+			}
+		}
+	}
+	payload, err := json.Marshal(body)
 	if err != nil {
 		return ChatResult{}, fmt.Errorf("编码请求失败: %w", err)
 	}
@@ -309,12 +334,14 @@ func parseAPIError(resp *http.Response) error {
 }
 
 type chatRequest struct {
-	Model         string         `json:"model"`
-	Messages      []Message      `json:"messages"`
-	Tools         []ToolDef      `json:"tools,omitempty"`
-	Stream        bool           `json:"stream"`
-	StreamOptions *streamOptions `json:"stream_options,omitempty"`
-	MaxTokens     int            `json:"max_tokens,omitempty"`
+	ReasoningEffort string          `json:"reasoning_effort,omitempty"`
+	Thinking        *thinkingConfig `json:"thinking,omitempty"`
+	Model           string          `json:"model"`
+	Messages        []Message       `json:"messages"`
+	Tools           []ToolDef       `json:"tools,omitempty"`
+	Stream          bool            `json:"stream"`
+	StreamOptions   *streamOptions  `json:"stream_options,omitempty"`
+	MaxTokens       int             `json:"max_tokens,omitempty"`
 }
 
 type streamOptions struct {

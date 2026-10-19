@@ -12,15 +12,27 @@ import (
 	"github.com/ainnhuomiao/miao/internal/mcp"
 )
 
+// Options 是 TUI 的可配置运行行为。未传 Options 时保持原有默认值。
+type Options struct {
+	AutoCompactPercent    int // 0 关闭自动压缩，1..100 为触发阈值
+	CompactKeepTurns      int // 小于 1 时保留默认的最近 2 轮
+	DisableSessionStorage bool
+	DisableProjectMemory  bool
+	DisableCustomCommands bool
+	DisableShell          bool
+	DisableBell           bool
+	DisableSnapshots      bool
+}
+
 // Run 启动 TUI，直到用户退出。
-func Run(ag *agent.Agent, modelName string) error {
+func Run(ag *agent.Agent, modelName string, options ...Options) error {
 	initMarkdown()
 	termDark = mdDark
 	fillOut = os.Stdout
 	setTheme("auto")
 	loadSavedTheme()
 	defer resetFill()
-	m := New(ag, modelName)
+	m := New(ag, modelName, options...)
 	// 备用屏和鼠标模式在 v2 里由 View() 的字段声明。
 	p := tea.NewProgram(m,
 		tea.WithFPS(30), // 与流式合并刷新的 33ms 对齐，降低空闲 CPU

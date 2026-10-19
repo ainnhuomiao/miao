@@ -5,13 +5,12 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"path/filepath"
 	"strings"
 
 	"charm.land/lipgloss/v2"
 	catppuccin "github.com/catppuccin/go"
 
-	"github.com/ainnhuomiao/miao/internal/appdir"
+	"github.com/ainnhuomiao/miao/internal/config"
 )
 
 // theme 是一套主题：界面代码只引用这些配色槽，不直接写颜色名。
@@ -219,11 +218,7 @@ func themeSwatch(t theme) string {
 // ---- 持久化：~/.miao/config.json 里的 "theme" 字段 ----
 
 func configPath() (string, error) {
-	dir, err := appdir.ConfigDir()
-	if err != nil {
-		return "", err
-	}
-	return filepath.Join(dir, "config.json"), nil
+	return config.UserConfigPath()
 }
 
 // loadSavedTheme 启动时应用保存的主题；文件缺失或主题无效时保持 auto。
@@ -254,25 +249,12 @@ func saveTheme(name string) error { return saveConfigKey("theme", name) }
 
 // saveConfigKey 只改一个键，保留配置文件里的其它键。
 func saveConfigKey(key string, val any) error {
-	p, err := configPath()
+	data, err := json.Marshal(val)
 	if err != nil {
 		return err
 	}
-	cfg := map[string]any{}
-	if data, err := os.ReadFile(p); err == nil {
-		_ = json.Unmarshal(data, &cfg)
-	}
-	cfg[key] = val
-	data, err := json.MarshalIndent(cfg, "", "  ")
-	if err != nil {
-		return err
-	}
-	if err := os.MkdirAll(filepath.Dir(p), 0o700); err != nil {
-		return err
-	}
-	tmp := p + ".tmp"
-	if err := os.WriteFile(tmp, append(data, '\n'), 0o644); err != nil {
-		return err
-	}
-	return os.Rename(tmp, p)
+	return config.UpdateUserConfig(func(all map[string]json.RawMessage) error {
+		all[key] = data
+		return nil
+	})
 }

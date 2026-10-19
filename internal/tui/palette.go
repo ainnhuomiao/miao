@@ -29,7 +29,27 @@ type paletteState struct {
 }
 
 func (m *Model) paletteCommands() []paletteCmd {
-	return append(m.builtinPalette(), m.userPalette()...)
+	commands := m.builtinPalette()
+	visible := commands[:0]
+	for _, command := range commands {
+		if m.featureCommandDisabled(command.name) {
+			continue
+		}
+		visible = append(visible, command)
+	}
+	return append(visible, m.userPalette()...)
+}
+
+func (m *Model) featureCommandDisabled(name string) bool {
+	switch name {
+	case "/sessions", "/fork":
+		return m.options.DisableSessionStorage
+	case "/init":
+		return m.options.DisableProjectMemory
+	case "/undo":
+		return m.options.DisableSnapshots
+	}
+	return false
 }
 
 // builtinPalette 是内置命令；自定义命令见 userPalette。
@@ -55,8 +75,10 @@ func (m *Model) builtinPalette() []paletteCmd {
 		{name: "/commit", desc: "让模型写提交信息，确认后提交本会话改过的文件"},
 		{name: "/fork", desc: "把当前对话复制成新会话（原会话保留）"},
 		{name: "/model", desc: "切换模型（当前：" + m.modelName + "）", needArg: true},
+		{name: "/thinking", desc: "查询/切换模型思考强度（当前：" + m.ag.Thinking() + "）", needArg: true},
+		{name: "/settings", desc: "调整功能开关（保存后重启生效）", needArg: true},
 		{name: "/theme", desc: "切换主题（当前：" + m.savedTheme() + "）", needArg: true},
-		{name: "/subagents", desc: "子代理设置：开关、并发上限、模型", needArg: true},
+		{name: "/subagents", desc: "子代理设置：模型、思考强度、并发与联网", needArg: true},
 		{name: "/mcp", desc: "查看 MCP 服务器状态与工具"},
 		{name: "/hooks", desc: "查看已配置的 hook"},
 		{name: "/reasoning", desc: "思考过程：展开/收起（当前：" + reasoning + "）"},
@@ -71,6 +93,12 @@ func (m *Model) paletteOpen() bool {
 	}
 	v := m.input.Value()
 	if _, ok := m.atMode(); ok {
+		return !m.palette.esc || v != m.palette.hidden
+	}
+	if _, ok := m.thinkingMode(); ok {
+		return !m.palette.esc || v != m.palette.hidden
+	}
+	if _, ok := m.settingsMode(); ok {
 		return !m.palette.esc || v != m.palette.hidden
 	}
 	if m.subagentsMode() {
@@ -90,6 +118,12 @@ func (m *Model) paletteOpen() bool {
 
 // paletteMatches 按前缀优先、子序列其次筛选命令。
 func (m *Model) paletteMatches() []paletteCmd {
+	if query, ok := m.settingsMode(); ok {
+		return m.settingsMatches(query)
+	}
+	if q, ok := m.thinkingMode(); ok {
+		return m.thinkingMatches(q)
+	}
 	if q, ok := m.atMode(); ok {
 		return m.atMatches(q)
 	}
@@ -184,6 +218,9 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		return false, nil
 	}
 	matches := m.paletteMatches()
+	if ok, cmd := m.handleSettingsKey(msg, matches); ok {
+		return true, cmd
+	}
 	if ok, cmd := m.handleSubagentsKey(msg, matches); ok {
 		return true, cmd
 	}
@@ -227,6 +264,9 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			if c.name == "/model" {
 				return true, m.fetchModelsCmd()
 			}
+			if c.name == "/thinking" {
+				return true, m.fetchThinkingCmd()
+			}
 		}
 		return true, nil
 	}
@@ -243,14 +283,25 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 			m.syncPalette()
 			return true, nil
 		}
+		_, inThinking := m.thinkingMode()
 		_, inModel := m.modelMode()
 		if m.streaming {
+			if inThinking {
+				m.notice("正在生成回复，暂不能切换思考强度。")
+			}
 			if inModel {
 				m.notice("正在生成回复，暂不能切换模型。")
 			}
 			return true, nil
 		}
 		c := matches[m.palette.sel]
+		if inThinking {
+			m.input.Reset()
+			m.fitInput()
+			m.changeThinking([]string{c.name})
+			m.syncPalette()
+			return true, nil
+		}
 		if inModel {
 			m.input.Reset()
 			m.fitInput()
@@ -261,6 +312,10 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 		if c.name == "/model" {
 			m.paletteComplete(c)
 			return true, m.fetchModelsCmd()
+		}
+		if c.name == "/thinking" {
+			m.paletteComplete(c)
+			return true, m.fetchThinkingCmd()
 		}
 		if c.needArg {
 			m.paletteComplete(c)
@@ -275,6 +330,20 @@ func (m *Model) handlePaletteKey(msg tea.KeyPressMsg) (bool, tea.Cmd) {
 }
 
 func (m *Model) paletteComplete(c paletteCmd) {
+	if _, ok := m.settingsMode(); ok {
+		m.input.SetValue("/settings " + c.name)
+		m.input.CursorEnd()
+		m.fitInput()
+		m.syncPalette()
+		return
+	}
+	if _, ok := m.thinkingMode(); ok {
+		m.input.SetValue("/thinking " + c.name)
+		m.input.CursorEnd()
+		m.fitInput()
+		m.syncPalette()
+		return
+	}
 	if _, ok := m.themeMode(); ok {
 		m.input.SetValue("/theme " + c.name)
 		m.input.CursorEnd()
@@ -307,12 +376,28 @@ func (m *Model) paletteView() string {
 			empty = "  没有匹配的文件"
 		} else if _, ok := m.modelMode(); ok {
 			empty = "  没有匹配的模型（Enter 直接切换到输入的名字）"
+		} else if _, ok := m.thinkingMode(); ok {
+			empty = "  没有已确认的匹配档位（Enter 可手动设置）"
+		} else if m.subagentsMode() {
+			empty = "  没有匹配的子代理设置"
+			if page, _ := m.subagentsPage(); page != "" {
+				empty = "  没有匹配的选项（Enter 手动设置，Esc 返回）"
+			}
+		} else if _, ok := m.settingsMode(); ok {
+			empty = "  没有匹配的功能设置"
+			if m.settings.err != nil {
+				empty = "  无法读取设置，请运行 miao config check"
+			}
 		}
 		return pad.Render(mutedStyle.Render(truncateWidth(empty, w)))
 	}
 	nameW := 0
 	all := m.paletteCommands()
-	if _, ok := m.modelMode(); ok {
+	if _, ok := m.settingsMode(); ok {
+		all = matches
+	} else if _, ok := m.modelMode(); ok {
+		all = matches
+	} else if _, ok := m.thinkingMode(); ok {
 		all = matches
 	} else if _, ok := m.themeMode(); ok || m.subagentsMode() {
 		all = matches

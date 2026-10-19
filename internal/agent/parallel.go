@@ -11,7 +11,7 @@ import (
 	"github.com/ainnhuomiao/miao/internal/tools"
 )
 
-// maxParallelTools 是同一批只读工具的最大并发数。
+// maxParallelTools 是同一批只读工具的默认最大并发数。
 const maxParallelTools = 8
 
 // interruptedResult 是被取消（Esc 中断）的工具调用的占位结果。
@@ -54,7 +54,11 @@ func safeCall(ctx context.Context, call toolCaller, name, args string) (res tool
 // runToolCalls 按顺序执行 tool_calls：连续的只读调用组成一批并发执行，其余逐个串行。
 // 返回的 tool 消息与 calls 顺序一一对应。onEvent 的调用被互斥保护，不会并发进入。
 // onEvent 返回错误时停止后续调用并返回该错误（已返回的消息仍覆盖全部 id）。
-func runToolCalls(ctx context.Context, calls []llm.ToolCall, call toolCaller, onEvent EventHandler) ([]llm.Message, error) {
+func runToolCalls(ctx context.Context, calls []llm.ToolCall, call toolCaller, onEvent EventHandler, parallelism ...int) ([]llm.Message, error) {
+	limit := maxParallelTools
+	if len(parallelism) > 0 && parallelism[0] > 0 {
+		limit = parallelism[0]
+	}
 	out := make([]llm.Message, len(calls))
 	var evMu sync.Mutex
 	var evErr error
@@ -117,7 +121,7 @@ func runToolCalls(ctx context.Context, calls []llm.ToolCall, call toolCaller, on
 		for k := i; k < j; k++ {
 			startEv(k)
 		}
-		sem := make(chan struct{}, maxParallelTools)
+		sem := make(chan struct{}, min(limit, j-i))
 		var wg sync.WaitGroup
 		for k := i; k < j; k++ {
 			wg.Add(1)

@@ -84,6 +84,7 @@ func (a *Agent) Compact(ctx context.Context, keepTurns, skipBelow int) (CompactR
 	)
 	next = append(next, kept...)
 	a.history = next
+	a.clearAnthropicContentLocked()
 	a.mu.Unlock()
 	return CompactResult{
 		Before:     before,
@@ -156,6 +157,9 @@ func (a *Agent) TrimOldToolResults(keepTurns, maxRunes int) int {
 		}
 		a.history[i].Content = string(r[:maxRunes]) + fmt.Sprintf("\n…（已折叠，原 %d 字）", len(r))
 		n++
+	}
+	if n > 0 {
+		a.clearAnthropicContentLocked()
 	}
 	return n
 }

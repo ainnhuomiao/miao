@@ -17,8 +17,8 @@ import (
 	"github.com/ainnhuomiao/miao/internal/llm"
 )
 
-func ringBell() {
-	if strings.HasSuffix(os.Args[0], ".test") {
+func (m *Model) ringBell() {
+	if m.options.DisableBell || strings.HasSuffix(os.Args[0], ".test") {
 		return
 	}
 	_, _ = fmt.Fprint(os.Stderr, "\a")
@@ -82,6 +82,10 @@ func (m *Model) showCost() {
 }
 
 func (m *Model) initAgentsMD() {
+	if m.options.DisableProjectMemory {
+		m.notice("项目记忆已关闭。可在配置中设置 project_memory_enabled 为 true 后重启启用。")
+		return
+	}
 	ws := m.ag.Workspace()
 	content, err := agent.GenerateAgentsMD(ws)
 	if err != nil {
@@ -128,6 +132,10 @@ type bangDoneMsg struct {
 }
 
 func (m *Model) runBang(cmd string) tea.Cmd {
+	if m.options.DisableShell {
+		m.notice("! 命令已关闭。可在配置中设置 shell_enabled 为 true 后重启启用。")
+		return nil
+	}
 	cmd = strings.TrimSpace(cmd)
 	if cmd == "" {
 		m.notice("用法：!<命令>  例如 !git status")

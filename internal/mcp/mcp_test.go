@@ -46,6 +46,9 @@ func fakeServer() {
 		fmt.Fprintln(os.Stderr, "recv", msg.Method)
 		switch msg.Method {
 		case "initialize":
+			if os.Getenv("MCP_TEST_SLOW_INIT") == "1" {
+				time.Sleep(150 * time.Millisecond)
+			}
 			reply(msg.ID, map[string]any{"protocolVersion": ProtocolVersion, "capabilities": map[string]any{"tools": map[string]any{}}, "serverInfo": map[string]any{"name": "fake"}})
 		case "notifications/cancelled":
 			cancelled.Add(1)
@@ -76,9 +79,13 @@ func fakeServer() {
 			switch p.Name {
 			case "echo":
 				var a struct {
-					Text string `json:"text"`
+					Text  string `json:"text"`
+					Delay bool   `json:"delay"`
 				}
 				_ = json.Unmarshal(p.Arguments, &a)
+				if a.Delay {
+					time.Sleep(150 * time.Millisecond)
+				}
 				reply(msg.ID, map[string]any{"content": []any{
 					map[string]any{"type": "text", "text": "echo:" + a.Text},
 					map[string]any{"type": "image", "mimeType": "image/png", "data": "AAAA"},

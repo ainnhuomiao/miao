@@ -112,6 +112,7 @@ func (m *Model) switchModel(name string) {
 
 // applyModel 更新 Agent、顶栏模型名与当前会话记录；上下文窗口由 contextWindow(modelName) 重新查表。
 func (m *Model) applyModel(name string) {
+	m.invalidateThinking()
 	m.ag.SetModel(name)
 	m.modelName = name
 	if m.sess != nil {

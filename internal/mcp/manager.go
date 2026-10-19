@@ -154,7 +154,11 @@ func (m *Manager) connect(reg *tools.Registry, s *server) {
 		m.fail(s, err)
 		return
 	}
-	ctx, cancel := context.WithTimeout(context.Background(), ConnectTimeout)
+	connectTimeout := ConnectTimeout
+	if s.cfg.ConnectTimeoutSec > 0 {
+		connectTimeout = time.Duration(s.cfg.ConnectTimeoutSec) * time.Second
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), connectTimeout)
 	defer cancel()
 	var list []Tool
 	err = c.Initialize(ctx)
@@ -164,7 +168,7 @@ func (m *Manager) connect(reg *tools.Registry, s *server) {
 	if err != nil {
 		c.Close()
 		if ctx.Err() != nil {
-			err = fmt.Errorf("连接超时（%s）", ConnectTimeout)
+			err = fmt.Errorf("连接超时（%s）", connectTimeout)
 		}
 		m.fail(s, err)
 		return
@@ -179,10 +183,14 @@ func (m *Manager) connect(reg *tools.Registry, s *server) {
 	sort.Slice(list, func(i, j int) bool { return list[i].Name < list[j].Name })
 	var names []string
 	var defs []tools.Tool
+	callTimeout := CallTimeout
+	if s.cfg.CallTimeoutSec > 0 {
+		callTimeout = time.Duration(s.cfg.CallTimeoutSec) * time.Second
+	}
 	for _, t := range list {
 		name := toolName(s.cfg.Name, t.Name, m.taken)
 		names = append(names, name)
-		defs = append(defs, m.makeTool(reg, s.cfg.Name, name, t, c))
+		defs = append(defs, m.makeTool(reg, s.cfg.Name, name, t, c, callTimeout))
 	}
 	s.status.State = StateConnected
 	s.status.Tools = names
@@ -193,7 +201,7 @@ func (m *Manager) connect(reg *tools.Registry, s *server) {
 	m.notify(fmt.Sprintf("已连接 MCP：%s（%d 个工具）", s.cfg.Name, len(names)))
 }
 
-func (m *Manager) makeTool(reg *tools.Registry, serverName, name string, t Tool, c *Client) tools.Tool {
+func (m *Manager) makeTool(reg *tools.Registry, serverName, name string, t Tool, c *Client, callTimeout time.Duration) tools.Tool {
 	schema := t.InputSchema
 	if len(bytes.TrimSpace(schema)) == 0 || string(bytes.TrimSpace(schema)) == "null" {
 		schema = json.RawMessage(`{"type":"object"}`)
@@ -218,12 +226,12 @@ func (m *Manager) makeTool(reg *tools.Registry, serverName, name string, t Tool,
 			if !allow {
 				return tools.Result{Content: "用户拒绝执行 MCP 工具: " + name, IsError: true}
 			}
-			cctx, cancel := context.WithTimeout(ctx, CallTimeout)
+			cctx, cancel := context.WithTimeout(ctx, callTimeout)
 			defer cancel()
 			raw, err := c.CallTool(cctx, origName, args)
 			if err != nil {
 				if cctx.Err() == context.DeadlineExceeded && ctx.Err() == nil {
-					return tools.Result{Content: fmt.Sprintf("MCP 工具 %s 超时（%s）", name, CallTimeout), IsError: true}
+					return tools.Result{Content: fmt.Sprintf("MCP 工具 %s 超时（%s）", name, callTimeout), IsError: true}
 				}
 				return tools.Result{Content: "MCP 调用失败: " + err.Error(), IsError: true}
 			}

@@ -204,6 +204,33 @@ func (r *REPL) handleCommand(input string) (quit bool, err error) {
 		r.ag.Reset()
 		fmt.Fprintln(r.out, "对话历史已清空。")
 		return false, nil
+	case "/thinking":
+		if len(fields) == 1 || len(fields) == 2 && fields[1] == "refresh" {
+			ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+			info, err := r.ag.QueryThinkingCapabilities(ctx)
+			cancel()
+			if !info.Supports(r.ag.Thinking()) {
+				if err := r.ag.SetThinking("auto"); err != nil {
+					return false, err
+				}
+			}
+			fmt.Fprintf(r.out, "当前思考强度：%s。%s\n", r.ag.Thinking(), info.Summary())
+			if err != nil {
+				r.printWarn("能力接口查询失败，可用 /thinking refresh 重试。")
+			}
+			return false, nil
+		}
+		if len(fields) != 2 {
+			return false, fmt.Errorf("用法：/thinking <级别> 或 /thinking refresh。%s", r.ag.ThinkingCapabilities().Summary())
+		}
+		if err := r.ag.SetThinking(fields[1]); err != nil {
+			return false, err
+		}
+		fmt.Fprintf(r.out, "思考强度已设为 %s，将用于后续请求。\n", r.ag.Thinking())
+		if !r.ag.ThinkingCapabilities().Known {
+			r.printWarn("此模型未提供档位元数据，手动设置尚未验证。")
+		}
+		return false, nil
 	case "/history":
 		r.printHistory()
 		return false, nil
@@ -222,6 +249,7 @@ func (r *REPL) printHelp() {
 	fmt.Fprint(r.out, `可用命令:
   /help     显示这份帮助
   /clear    清空对话历史
+  /thinking 查询或设置模型思考强度（/thinking refresh 重新查询）
   /history  查看当前对话历史
   /exit     退出程序（也可以按 Ctrl+C）
 

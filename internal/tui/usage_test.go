@@ -95,4 +95,7 @@ func TestHintViewNarrowKeepsModelAndStatus(t *testing.T) {
 	if strings.Contains(got, "缓存") {
 		t.Fatalf("窄屏应先藏 token 和缓存: %q", got)
 	}
+	if !strings.Contains(got, "auto") {
+		t.Fatalf("窄屏应保留当前思考强度: %q", got)
+	}
 }

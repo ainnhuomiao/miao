@@ -35,6 +35,7 @@ type Registry struct {
 	tools     map[string]Tool
 	order     []string
 	enabled   map[string]bool // 非 nil 时只暴露这些工具（--allowed-tools）
+	disabled  map[string]bool // 明确禁用的工具；动态注册也不能绕过
 	approver  Approver
 	webPolicy WebPolicy     // web_fetch 免审批/重定向放行规则，见 web_policy.go
 	frozen    []llm.ToolDef // 非 nil 后 Definitions 不再随 MCP / 开关变化
@@ -42,8 +43,9 @@ type Registry struct {
 	diagMu sync.Mutex
 	dirty  map[string]struct{} // 本轮写过的相对路径，FlushDiagnose 时按包诊断
 	// diagNotice 是诊断被跳过时给界面的一次性提示；diagHinted 保证每个会话只提示一次。
-	diagNotice string
-	diagHinted bool
+	diagNotice         string
+	diagHinted         bool
+	diagnosticsEnabled *bool // nil 沿用 MIAO_DIAGNOSE；启动配置可显式覆盖
 }
 
 // NewRegistry 创建工具注册表。workspace 必须是绝对路径。
@@ -78,11 +80,11 @@ func (r *Registry) Register(t Tool) {
 	r.tools[name] = t
 }
 
-// RestrictTo 之后只向模型暴露指定工具；空列表表示不限制。
+// RestrictTo 之后只向模型暴露指定工具；nil 表示不限制，空数组禁用全部工具。
 func (r *Registry) RestrictTo(names []string) {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	if len(names) == 0 {
+	if names == nil {
 		r.enabled = nil
 		return
 	}
@@ -96,7 +98,26 @@ func (r *Registry) RestrictTo(names []string) {
 }
 
 func (r *Registry) allowedLocked(name string) bool {
-	return r.enabled == nil || r.enabled[name]
+	return !r.disabled[name] && (r.enabled == nil || r.enabled[name])
+}
+
+// ToolEnabled 报告工具名是否通过允许/拒绝列表，不检查是否已完成注册。
+func (r *Registry) ToolEnabled(name string) bool {
+	r.mu.RLock()
+	defer r.mu.RUnlock()
+	return r.allowedLocked(name)
+}
+
+// SetDisabledTools 设置工具拒绝列表，优先于 RestrictTo 的允许列表。
+func (r *Registry) SetDisabledTools(names []string) {
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.disabled = make(map[string]bool, len(names))
+	for _, name := range names {
+		if name = strings.TrimSpace(name); name != "" {
+			r.disabled[name] = true
+		}
+	}
 }
 
 // Freeze 把当前工具列表固定下来，之后的 Register/Unregister 不再影响 Definitions。

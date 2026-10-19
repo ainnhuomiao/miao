@@ -36,6 +36,10 @@ func runCmd(m *Model, cmd tea.Cmd) {
 		}
 	case modelsMsg:
 		m.Update(msg)
+	case thinkingCapabilitiesMsg:
+		m.Update(msg)
+	case subagentThinkingMsg:
+		m.Update(msg)
 	}
 }
 

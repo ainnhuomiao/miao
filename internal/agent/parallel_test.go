@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"sync"
+	"sync/atomic"
 	"testing"
 	"time"
 
@@ -142,5 +143,59 @@ func TestEventErrorStops(t *testing.T) {
 	_, err := runToolCalls(context.Background(), calls, caller, func(e Event) error { return context.Canceled })
 	if err == nil || ran > 1 {
 		t.Fatalf("err=%v ran=%d", err, ran)
+	}
+}
+
+func TestConfiguredParallelism(t *testing.T) {
+	for _, limit := range []int{1, 2, 12} {
+		t.Run(fmt.Sprint(limit), func(t *testing.T) {
+			const count = 12
+			calls := make([]llm.ToolCall, count)
+			for i := range calls {
+				calls[i] = mkCall(fmt.Sprint(i), "read_file")
+			}
+			var running, peak atomic.Int32
+			started := make(chan struct{}, count)
+			release := make(chan struct{}, count)
+			caller := func(ctx context.Context, _, _ string) tools.Result {
+				current := running.Add(1)
+				for previous := peak.Load(); current > previous; previous = peak.Load() {
+					if peak.CompareAndSwap(previous, current) {
+						break
+					}
+				}
+				started <- struct{}{}
+				select {
+				case <-release:
+				case <-ctx.Done():
+				}
+				running.Add(-1)
+				return tools.Result{Content: "ok"}
+			}
+			ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+			defer cancel()
+			done := make(chan error, 1)
+			go func() {
+				_, err := runToolCalls(ctx, calls, caller, noopEvents, limit)
+				done <- err
+			}()
+			for completed := 0; completed < count; {
+				wave := min(limit, count-completed)
+				for i := 0; i < wave; i++ {
+					select {
+					case <-started:
+					case <-ctx.Done():
+						t.Fatal("configured parallel batch failed to start")
+					}
+				}
+				for i := 0; i < wave; i++ {
+					release <- struct{}{}
+				}
+				completed += wave
+			}
+			if err := <-done; err != nil || int(peak.Load()) != limit {
+				t.Fatalf("parallelism=%d, want %d, err=%v", peak.Load(), limit, err)
+			}
+		})
 	}
 }
