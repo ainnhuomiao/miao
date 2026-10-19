@@ -14,10 +14,23 @@
       ];
       forAllSystems = f: nixpkgs.lib.genAttrs systems (system: f nixpkgs.legacyPackages.${system});
       version = "0.1.0-${self.shortRev or self.dirtyShortRev or "dev"}";
+      # 当前锁定的 nixpkgs 仍为 Go 1.26.8；补齐标准库安全更新。
+      goFor =
+        pkgs:
+        if pkgs.lib.versionAtLeast pkgs.go.version "1.26.9" then
+          pkgs.go
+        else
+          pkgs.go.overrideAttrs {
+            version = "1.26.9";
+            src = pkgs.fetchurl {
+              url = "https://go.dev/dl/go1.26.9.src.tar.gz";
+              hash = "sha256-lzXX3Ntls10/pXfwQGRzfAO4nPGitx5uaf4vPG+f1Mo=";
+            };
+          };
     in
     {
       packages = forAllSystems (pkgs: {
-        miao = pkgs.buildGoModule {
+        miao = (pkgs.buildGoModule.override { go = goFor pkgs; }) {
           pname = "miao";
           inherit version;
           src = self;
@@ -52,7 +65,7 @@
         # gcc 给 go test -race 用
         default = pkgs.mkShell {
           packages = with pkgs; [
-            go
+            (goFor pkgs)
             gopls
             gnumake
             gcc

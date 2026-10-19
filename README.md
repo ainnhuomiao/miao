@@ -43,7 +43,7 @@ nix run github:ainnhuomiao/miao   # 直接运行
 nix run .                        # 在克隆下来的仓库里运行
 ```
 
-用 Go（1.26 及以上）：
+用 Go（1.26.9 及以上）：
 
 ```bash
 go install github.com/ainnhuomiao/miao/cmd/miao@latest

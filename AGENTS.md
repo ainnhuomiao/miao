@@ -6,7 +6,7 @@
 
 ## Build, Test, and Development Commands
 
-Use Go 1.26 or newer, matching `go.mod` and CI. `nix develop` provides the development tools.
+Use Go 1.26.9 or newer, matching `go.mod` and CI. `nix develop` provides the development tools.
 
 - `make run`: launch the terminal app locally; configure credentials with `miao init` or `MIAO_API_KEY`.
 - `make build`: compile `bin/miao`.
