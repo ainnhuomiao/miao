@@ -9,7 +9,10 @@ build:
 	go build -trimpath -o $(BINARY) ./cmd/miao
 
 fmt:
-	go fmt ./...
+	gofmt -w cmd internal
+
+fmt-check:
+	@out=$$(gofmt -l cmd internal); if [ -n "$$out" ]; then echo "未 gofmt：$$out"; exit 1; fi
 
 vet:
 	go vet ./...
@@ -17,20 +20,14 @@ vet:
 test:
 	go test ./...
 
-fmt-check:
-	@out=$$(gofmt -l cmd internal); if [ -n "$$out" ]; then echo "以下文件未 gofmt："; echo "$$out"; exit 1; fi
-
-# -race 需要 cgo：有 gcc 直接跑，没有就进 nix-shell 跑
 race:
-	@if command -v gcc >/dev/null 2>&1; then CGO_ENABLED=1 go test -race ./...; \
-	else nix-shell -p gcc go --run 'CGO_ENABLED=1 go test -race ./...'; fi
+	CGO_ENABLED=1 go test -race ./...
 
 lint:
 	@if command -v golangci-lint >/dev/null 2>&1; then golangci-lint run; \
-	else echo "未安装 golangci-lint，跳过（CI 会跑）"; fi
+	else echo "未安装 golangci-lint，可用 nix develop 提供"; fi
 
-# 提交前跑：格式、编译、vet、测试、竞态测试；不会改动任何文件
 check: fmt-check build vet test race lint
 
 clean:
-	rm -rf bin
+	rm -f $(BINARY)

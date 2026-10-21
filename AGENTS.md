@@ -1,33 +1,35 @@
-# Repository Guidelines
+# 学习项目维护规则
 
-## Project Structure & Module Organization
+本仓库用于从零学习 Go 和 Agent。用户的理解优先于功能数量。
 
-`miao` is a Go terminal AI coding assistant. `cmd/miao/` contains the executable entry point and setup/diagnostic commands. Implementation lives in `internal/`: `agent/` orchestrates conversations, `llm/` implements provider clients, `tools/` handles workspace operations and command policy, and `tui/`, `repl/`, and `headless/` provide interaction modes. Configuration, sessions, MCP, hooks, and subagents have separate packages. Tests sit beside source files; TUI rendering fixtures live in `internal/tui/testdata/render/`. Supporting documentation is in `docs/`; compiled binaries go into ignored `bin/`.
+## 问题、目标与范围
 
-## Build, Test, and Development Commands
+当前只实现终端文字对话、流式输出和内存历史。用户能读懂并独立修改代码才算成功。
+不要自动加入工具、TUI、会话持久化、MCP、hooks、子代理、并发或配置框架。下一阶段由用户明确选择。
 
-Use Go 1.26.9 or newer, matching `go.mod` and CI. `nix develop` provides the development tools.
+## 架构与状态
 
-- `make run`: launch the terminal app locally; configure credentials with `miao init` or `MIAO_API_KEY`.
-- `make build`: compile `bin/miao`.
-- `make fmt`: format Go sources; `make fmt-check` checks without rewriting.
-- `make test`: run all Go tests.
-- `make race`: run tests with the race detector; requires CGO and GCC, with a Nix fallback.
-- `make vet` / `make lint`: run static checks. Lint uses golangci-lint v2 and skips locally if unavailable.
-- `make check`: run formatting checks, build, vet, tests, race detection, and lint before submitting.
+- `cmd/miao/main.go`：环境变量、终端输入、命令和显示。
+- `internal/agent/agent.go`：唯一的对话历史及本轮成功提交。
+- `internal/llm/client.go`：Chat Completions 的 HTTP/JSON/SSE。
+- 依赖方向：入口 → agent → llm。llm 不依赖终端，不保存历史。
+- 同一 Agent 按顺序使用；不添加全局可变状态或无需求的抽象。
 
-## Coding Style & Naming Conventions
+## 接口、语义与注释
 
-Use `gofmt` formatting and tab indentation. Keep package names lowercase, exported identifiers in PascalCase, and unexported identifiers in camelCase. Follow existing descriptive snake_case filenames, such as `command_safety.go`. Keep logic in the relevant internal package. Handle errors explicitly; `.golangci.yml` enables errcheck, govet, ineffassign, staticcheck, and unused.
+新代码必须有面向 Go 初学者的中文注释，说明语法、目的、输入输出、错误和状态变化。同步更新代码导读。
+保留系统消息在首位；成功后成对加入用户消息和完整回答；失败不改变已完成历史。
+不要把流式部分输出、截断或断流当成完整成功；不要悄悄自动重试。
 
-## Testing Guidelines
+## 约束与验证
 
-Use Go's standard `testing` package, `*_test.go` files, and `TestXxx` functions. Prefer table-driven regression cases, `t.TempDir()`, and fake clients for isolated tests. Run focused tests with `go test ./internal/tools -run TestApprovalBypassPoCs`. No numeric coverage threshold is configured. For intentional rendering changes, regenerate fixtures with `go test ./internal/tui -run TestRenderGolden -update-golden` and review the output.
+Go 1.26.9+；当前只用标准库。不要提交 .env、密钥或私人会话，不输出 API Key 或原始错误响应体。
+`make fmt` 格式化；`make check` 跑格式检查、构建、vet、测试、race 和 lint。
+测试使用假客户端和内存响应，不需要真实密钥或模型服务。
+依赖变化必须同步 flake.nix 的 vendorHash，并跑 Nix 检查；无第三方依赖时使用 null。
 
-## Commit & Pull Request Guidelines
+## 过程与责任
 
-History uses `type(scope): summary`, including `fix(security): ...`, `feat(tui): ...`, and `docs: ...`; Chinese summaries are common. Keep commits focused. PRs should explain the behavior change, link relevant issues, list validation performed, and include terminal screenshots for visible TUI changes. Update documentation when behavior changes.
-
-## Security & Configuration
-
-Never commit `.env`, credentials, or session exports. Preserve workspace boundaries, symlink protections, command approvals, and child-process secret filtering; add regression tests when changing these controls. Dependency changes must also update `flake.nix`'s `vendorHash` and pass Nix CI checks.
+一次修改一个可解释的行为，配对应测试，保持可运行，使用 `type(scope): summary` 的小提交。
+代码改动要说明验收和回滚。AI 可完成用户授权的小改动及验证；权限、工具、密钥存储、数据迁移和发布能力必须由用户明确提出并由人审核。
+保留 Git 历史，不覆盖私人文件，不自行提交、推送或发布。
