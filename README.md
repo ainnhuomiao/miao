@@ -1,7 +1,7 @@
 # miao · 从零学习 Go 和 Agent
 
 这是一个只有 **3 个生产 Go 文件、0 个第三方依赖**的终端对话程序。
-代码有中文注释。建议从 [代码导读](docs/READING_GUIDE.md) 开始，再按 [学习路线](docs/ROADMAP.md) 逐步扩展。
+代码有中文注释。建议从 [代码导读](docs/READING_GUIDE.md) 开始，配合 [零基础学习资料](docs/RESOURCES.md)，再按 [学习路线](docs/ROADMAP.md) 逐步扩展。
 
 ## 1. 问题：这一版解决什么
 
